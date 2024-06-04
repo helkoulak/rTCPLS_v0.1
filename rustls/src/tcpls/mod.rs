@@ -3,6 +3,7 @@
 
 /// This module contains optional APIs for implementing TCPLS.
 use std::{io, u32, vec};
+use std::cmp::max;
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr, ToSocketAddrs};
 use std::ops::DerefMut;
@@ -226,8 +227,9 @@ impl TcplsSession {
         Ok(buffered)
     }
 
-    /// Flush bytes of a certain stream of a set of streams on specified byte-oriented sink.
-    pub fn send_on_connection(&mut self, conn_id: Option<u64>, wr: Option<&mut dyn io::Write>, flushables: Option<SimpleIdHashSet>) -> Result<usize, Error> {
+    /// Flush bytes of a certain stream or of a set of streams on specified byte-oriented sink.
+    /// Application can limit the number of bytes to send using variable 'bytes_to_send'
+    pub fn send_on_connection(&mut self, conn_id: Option<u64>, wr: Option<&mut dyn io::Write>, flushables: Option<SimpleIdHashSet>, bytes_to_send: usize) -> Result<usize, Error> {
         let tls_conn = self.tls_conn.as_mut().unwrap();
 
         //Flush streams selected by the app or flush all
@@ -255,7 +257,7 @@ impl TcplsSession {
                 None => return Err(Error::BufNotFound),
             };
 
-            let mut len = stream.send.len();
+            let mut len = max(stream.send.len(), bytes_to_send)  ;
             let mut sent = 0;
            /* let mut complete_sent = false;*/
 

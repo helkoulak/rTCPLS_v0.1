@@ -82,7 +82,7 @@ impl TlsClient {
                     id_set.insert(8);
                     id_set.insert(9);
                 }
-                self.tcpls_session.send_on_connection(Some(token.0 as u64), None, Some(id_set), 0).expect("Sending on connection failed");
+                self.tcpls_session.send_on_connection(Some(token.0 as u64), None, Some(id_set)).expect("Sending on connection failed");
                 self.sending_ids.insert(token.0 as u64);
             }
 
@@ -160,7 +160,7 @@ impl TlsClient {
         }
         if self.tcpls_session.tcp_connections.contains_key(&id) {
 
-            self.tcpls_session.send_on_connection(Some(id), None, None, 0).expect("Send on connection failed");
+            self.tcpls_session.send_on_connection(Some(id), None, None).expect("Send on connection failed");
         }
 
 

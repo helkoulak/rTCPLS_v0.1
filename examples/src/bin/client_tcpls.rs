@@ -49,15 +49,15 @@ impl TlsClient {
                 //Send three byte arrays on three streams
                 let mut id_set = SimpleIdHashSet::default();
 
-                self.send_data(vec![0u8; 20].as_slice(), 0).expect("");
-                self.send_data(vec![1u8; 20].as_slice(), 1).expect("");
-                self.send_data(vec![2u8; 20].as_slice(), 2).expect("");
+                self.send_data(vec![0u8; 64000].as_slice(), 0).expect("");
+                self.send_data(vec![1u8; 64000].as_slice(), 1).expect("");
+                self.send_data(vec![2u8; 64000].as_slice(), 2).expect("");
 
                 id_set.insert(0);
                 id_set.insert(1);
                 id_set.insert(2);
 
-                self.tcpls_session.send_on_connection(Some(token.0 as u64), None, Some(id_set)).expect("Sending on connection failed");
+                self.tcpls_session.send_on_connection(Some(token.0 as u64), None, Some(id_set), 0).expect("Sending on connection failed");
             }
         }
 
@@ -121,7 +121,7 @@ impl TlsClient {
     }
 
     fn do_write(&mut self, token: &Token) {
-        self.tcpls_session.send_on_connection(Some(token.0 as u64), None, None).unwrap();
+        self.tcpls_session.send_on_connection(Some(token.0 as u64), None, None, 0).unwrap();
     }
 
     /// Registers self as a 'listener' in mio::Registry
