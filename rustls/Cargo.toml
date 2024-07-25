@@ -77,6 +77,12 @@ path = "benches/srv_clnt_single.rs"
 harness = false
 required-features = ["ring"]
 
+[[bench]]
+name = "srv_clnt_single_unordered"
+path = "benches/srv_clnt_single_unordered.rs"
+harness = false
+required-features = ["ring"]
+
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
 features = ["read_buf", "ring"]

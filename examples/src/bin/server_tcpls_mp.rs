@@ -12,6 +12,7 @@ extern crate serde_derive;
 extern crate core;
 
 use docopt::Docopt;
+use log::LevelFilter;
 use mio::net::{TcpListener, TcpStream};
 use mio::Token;
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
@@ -49,13 +50,13 @@ struct TlsServer {
     sent_http_response: bool,
     tcpls_session: TcplsSession,
     total_received: usize,
-
+    poll: mio::Poll,
 }
 
 impl TlsServer {
-    fn new(listeners: SimpleIdHashMap<TcpListener>, cfg: Arc<rustls::ServerConfig>) -> Self {
+    fn new(cfg: Arc<rustls::ServerConfig>) -> Self {
         Self {
-            listeners,
+            listeners: SimpleIdHashMap::default(),
 
             next_id: 0,
             tls_config: cfg,
@@ -66,10 +67,11 @@ impl TlsServer {
             closed: false,
             tcpls_session: TcplsSession::new(true),
             total_received: 0,
+            poll: mio::Poll::new().unwrap(),
         }
     }
 
-    fn accept(&mut self, registry: &mio::Registry, recv_map: &RecvBufMap, listener: Token) -> Result<(), io::Error> {
+    fn accept(&mut self, recv_map: &RecvBufMap, listener: Token) -> Result<(), io::Error> {
         loop {
             match self.tcpls_session.server_accept_connection(self.listeners.get_mut(&(listener.0 as u64)).unwrap(), self.tls_config.clone()) {
                 Ok(conn_id) => {
@@ -77,7 +79,7 @@ impl TlsServer {
 
                     let token = Token(conn_id as usize);
 
-                   self.register(registry, recv_map, token)
+                    self.register(recv_map, token)
                 }
                 Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
                 Err(err) => {
@@ -91,15 +93,15 @@ impl TlsServer {
         }
     }
 
-    fn conn_event(&mut self, registry: &mio::Registry, event: &mio::event::Event, recv_map: &mut RecvBufMap) {
-        self.handle_event(registry, event, recv_map);
+    fn conn_event(&mut self, event: &mio::event::Event, recv_map: &mut RecvBufMap) {
+        self.handle_event(event, recv_map);
 
         /*if self.is_closed() {
                 self.connections.remove(&token);
             }*/
     }
 
-    fn handle_event(&mut self, registry: &mio::Registry, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
+    fn handle_event(&mut self, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
         // If we're readable: read some TLS.  Then
         // see if that yielded new plaintext.  Then
         // see if the backend is readable too.
@@ -108,7 +110,7 @@ impl TlsServer {
             self.do_read(recv_map, token.0 as u64);
 
 
-           // self.try_back_read();
+            // self.try_back_read();
         }
 
         if ev.is_writable() {
@@ -125,9 +127,9 @@ impl TlsServer {
                 .shutdown(net::Shutdown::Both);
             self.close_back();
             self.closed = true;
-            self.deregister(registry, token.0 as u64);
+            self.deregister(token.0 as u64);
         } else {
-            self.reregister(registry, recv_map, token);
+            self.reregister(recv_map, token);
         }
     }
 
@@ -160,7 +162,7 @@ impl TlsServer {
             stream.empty_stream();
             recv_map.remove_readable(id);
         }
-        println!("Total received on connection {:?} is {:?} bytes \n", conn_id,  self.tcpls_session.tcp_connections.get_mut(&conn_id).unwrap().nbr_bytes_received)
+
     }
 
     fn calculate_sha256_hash(&mut self, data: &[u8]) -> digest::Digest {
@@ -276,20 +278,20 @@ impl TlsServer {
         }
     }
 
-    fn register(&mut self, registry: &mio::Registry, app_buf: &RecvBufMap, token: Token) {
+    fn register(&mut self, app_buf: &RecvBufMap, token: Token) {
         let event_set = self.event_set(app_buf, token.0 as u64 );
 
         let mut socket = self.tcpls_session.get_socket(token.0 as u64);
 
-       match registry
+        match self.poll.registry()
             .register(socket, token, event_set) {
-           Ok(()) => (),
-           Err(ref err) if err.kind() == io::ErrorKind::AlreadyExists => return (),
-           Err(_err) => { panic!("encountered error while registering source") }
-       }
+            Ok(()) => (),
+            Err(ref err) if err.kind() == io::ErrorKind::AlreadyExists => return (),
+            Err(_err) => { panic!("encountered error while registering source") }
+        }
 
         if self.back.is_some() {
-            registry
+            self.poll.registry()
                 .register(
                     self.back.as_mut().unwrap(),
                     Token(4000),
@@ -299,22 +301,22 @@ impl TlsServer {
         }
     }
 
-    fn reregister(&mut self, registry: &mio::Registry, app_buf: &RecvBufMap, token: Token) {
+    fn reregister(&mut self, app_buf: &RecvBufMap, token: Token) {
         let event_set = self.event_set(app_buf, token.0 as u64);
 
         let socket = self.tcpls_session.get_socket(token.0 as u64);
-        registry
+        self.poll.registry()
             .reregister(socket, token, event_set)
             .unwrap();
     }
 
-    fn deregister(&mut self, registry: &mio::Registry, id: u64) {
-        registry
+    fn deregister(&mut self, id: u64) {
+        self.poll.registry()
             .deregister(&mut self.tcpls_session.tcp_connections.get_mut(&id).unwrap().socket)
             .unwrap();
 
         if self.back.is_some() {
-            registry
+            self.poll.registry()
                 .deregister(self.back.as_mut().unwrap())
                 .unwrap();
         }
@@ -651,8 +653,9 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
-        env_logger::Builder::new()
-            .parse_filters("trace")
+        env_logger::builder()
+            .filter_level(LevelFilter::Trace)   // Set global log level to Trace
+            .filter_module("mio", LevelFilter::Info) // Set specific level for mio
             .init();
     }
 
@@ -665,32 +668,27 @@ fn main() {
     let mut listener2 = server_create_listener("0.0.0.0:8444", None);
     let mut listener3 = server_create_listener("0.0.0.0:8445", None);
 
-    let mut poll = mio::Poll::new().unwrap();
+    let mut tcpls_server = TlsServer::new(config);
 
-    poll.registry()
+    tcpls_server.poll.registry()
         .register(&mut listener1, LISTENER1, mio::Interest::READABLE)
         .unwrap();
 
-    poll.registry()
+    tcpls_server.poll.registry()
         .register(&mut listener2, LISTENER2, mio::Interest::READABLE)
         .unwrap();
 
-    poll.registry()
+    tcpls_server.poll.registry()
         .register(&mut listener3, LISTENER3, mio::Interest::READABLE)
         .unwrap();
 
-    let mut listneres = SimpleIdHashMap::default();
-    listneres.insert(LISTENER1.0 as u64, listener1);
-    listneres.insert(LISTENER2.0 as u64, listener2);
-    listneres.insert(LISTENER3.0 as u64, listener3);
-
-
-
-    let mut tcpls_server = TlsServer::new(listneres, config);
+    tcpls_server.listeners.insert(LISTENER1.0 as u64, listener1);
+    tcpls_server.listeners.insert(LISTENER2.0 as u64, listener2);
+    tcpls_server.listeners.insert(LISTENER3.0 as u64, listener3);
 
     let mut events = mio::Events::with_capacity(256);
     loop {
-        match poll.poll(&mut events, None){
+        match tcpls_server.poll.poll(&mut events, None){
             Ok(_) => {}
             // Polling can be interrupted (e.g. by a debugger) - retry if so.
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
@@ -703,11 +701,11 @@ fn main() {
             match event.token() {
                 LISTENER1 | LISTENER2 | LISTENER3 => {
                     tcpls_server
-                        .accept(poll.registry(), &recv_map, event.token())
+                        .accept(&recv_map, event.token())
                         .expect("error accepting socket");
                 }
                 _ => {
-                    tcpls_server.conn_event(poll.registry(), event, &mut recv_map);
+                    tcpls_server.conn_event(event, &mut recv_map);
                     if !tcpls_server.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking(){
                         tcpls_server.verify_received(&mut recv_map, event.token().0 as u64);
                     }

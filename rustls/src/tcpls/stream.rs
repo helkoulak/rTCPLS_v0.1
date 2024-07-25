@@ -91,6 +91,11 @@ impl Stream {
     pub fn is_flushable(&self) -> bool {
         !self.send.is_empty()
     }
+
+    #[inline]
+    pub fn reset_stream(&mut self) {
+        self.send.reset();
+    }
     #[inline]
     pub fn build_header(&mut self, len: u16) -> TcplsHeader {
         let header = TcplsHeader {
@@ -376,6 +381,12 @@ impl StreamMap {
             len += stream.1.send.len();
         }
         len
+    }
+
+    pub fn reset_stream(&mut self, id: u32) {
+        self.remove_flushable(id as u64);
+        self.insert_writable(id as u64);
+        self.get_mut(id as u16).unwrap().reset_stream()
     }
 }
 

@@ -10,6 +10,7 @@ use std::ops::{Deref, DerefMut};
 use std::str;
 use std::sync::Arc;
 use docopt::Docopt;
+use log::LevelFilter;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use ring::digest;
@@ -49,15 +50,19 @@ impl TlsClient {
                 //Send three byte arrays on three streams
                 let mut id_set = SimpleIdHashSet::default();
 
-                self.send_data(vec![0u8; 64000].as_slice(), 0).expect("");
-                self.send_data(vec![1u8; 64000].as_slice(), 1).expect("");
-                self.send_data(vec![2u8; 64000].as_slice(), 2).expect("");
+                self.send_data(vec![0u8; 60000].as_slice(), 0).expect("");
+                self.send_data(vec![1u8; 60000].as_slice(), 1).expect("");
+                self.send_data(vec![2u8; 60000].as_slice(), 2).expect("");
 
                 id_set.insert(0);
                 id_set.insert(1);
                 id_set.insert(2);
 
-                self.tcpls_session.send_on_connection(Some(token.0 as u64), None, Some(id_set), 0).expect("Sending on connection failed");
+
+                let mut conn_ids = Vec::new();
+                conn_ids.push(token.0 as u64);
+
+                self.tcpls_session.send_on_connection(Some(conn_ids), None, Some(id_set)).expect("Sending on connection failed");
             }
         }
 
@@ -121,7 +126,9 @@ impl TlsClient {
     }
 
     fn do_write(&mut self, token: &Token) {
-        self.tcpls_session.send_on_connection(Some(token.0 as u64), None, None, 0).unwrap();
+        let mut conn_ids = Vec::new();
+        conn_ids.push(token.0 as u64);
+        self.tcpls_session.send_on_connection(Some(conn_ids), None, None).unwrap();
     }
 
     /// Registers self as a 'listener' in mio::Registry
@@ -490,7 +497,10 @@ fn main() {
         .unwrap_or_else(|e| e.exit());
 
     if args.flag_verbose {
-        env_logger::Builder::new().parse_filters("trace").init();
+        env_logger::builder()
+            .filter_level(LevelFilter::Trace)   // Set global log level to Trace
+            .filter_module("mio", LevelFilter::Info) // Set specific level for mio
+            .init();
     }
 
     let mut recv_map = RecvBufMap::new();

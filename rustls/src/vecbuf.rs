@@ -6,6 +6,7 @@ use core::cmp;
 use std::io;
 #[cfg(feature = "std")]
 use std::io::Read;
+use std::vec;
 
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
@@ -114,6 +115,13 @@ impl ChunkVecBuffer {
         self.chunks.pop_front()
     }
 
+    pub(crate) fn reset(&mut self) {
+        self.chunks.clear();
+        self.limit = None;
+        self.previous_offset = 0;
+        self.current_offset = 0;
+    }
+
 
     #[cfg(read_buf)]
     /// Read data out of this object, writing it into `cursor`.
@@ -215,6 +223,24 @@ impl ChunkVecBuffer {
         self.consume_chunk(sent, chunk);
 
         Ok(sent)
+    }
+
+    pub(crate) fn get_chunk(&mut self) -> Option<Vec<u8>> {
+        if self.is_empty() {
+            return None ;
+        } else {
+            Some(self.chunks.pop_front().unwrap())
+        }
+    }
+
+    #[inline]
+    pub(crate) fn pop_front(&mut self) -> Option<Vec<u8>> {
+       self.chunks.pop_front()
+    }
+
+    #[inline]
+    pub(crate) fn push_front(&mut self, buf: Vec<u8>) {
+        self.chunks.push_front(buf)
     }
 
 }

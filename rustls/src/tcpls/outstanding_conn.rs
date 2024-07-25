@@ -63,4 +63,12 @@ impl OutstandingConnMap {
         self.map.get(&id).unwrap().used == 0
     }
 
+    pub fn has_otustanding_requests(&self) -> bool {
+        let mut has_outstanding_requests = false;
+        for conn in &self.map{
+            has_outstanding_requests |= !conn.1.request_sent;
+        }
+        has_outstanding_requests
+    }
+
 }

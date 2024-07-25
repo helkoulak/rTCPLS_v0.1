@@ -7,7 +7,7 @@ use std::cmp::max;
 use std::io::{Read, Write};
 use std::net::{Shutdown, SocketAddr, ToSocketAddrs};
 use std::ops::DerefMut;
-use std::prelude::rust_2021::{ToString, Vec};
+use std::prelude::rust_2021::{Box, ToString, Vec};
 use std::sync::Arc;
 use log::trace;
 
@@ -227,62 +227,57 @@ impl TcplsSession {
         Ok(buffered)
     }
 
-    /// Flush bytes of a certain stream or of a set of streams on specified byte-oriented sink.
-    /// Application can limit the number of bytes to send using variable 'bytes_to_send'
-    pub fn send_on_connection(&mut self, conn_id: Option<u64>, wr: Option<&mut dyn io::Write>, flushables: Option<SimpleIdHashSet>, bytes_to_send: usize) -> Result<usize, Error> {
+    /// Flush bytes of a certain stream of a set of streams on specified byte-oriented sink.
+    pub fn send_on_connection(&mut self, conn_ids: Option<Vec<u64>>, mut wr: Option<SimpleIdHashMap<Box<&mut dyn io::Write>>>, flushables: Option<SimpleIdHashSet>) -> Result<usize, Error> {
         let tls_conn = self.tls_conn.as_mut().unwrap();
 
         //Flush streams selected by the app or flush all
-        let stream_iter = match flushables {
+        let stream_ids = match flushables {
             Some(set) => StreamIter::from(&set),
             None => tls_conn.record_layer.streams.flushable(),
         };
 
         let mut done = 0;
-        let socket = match wr {
-            Some(socket) => socket,
-            None => &mut self
-                .tcp_connections
-                .get_mut(&(conn_id.unwrap_or_else(||panic!("No connection id provided"))))
-                .unwrap()
-                .socket,
-        };
 
-        for id in stream_iter {
 
-            let stream = match tls_conn.record_layer.streams.get_mut(id as u16) {
-                Some(stream) => {
-                    stream
-                },
+        for id in stream_ids {
+            match tls_conn.record_layer.streams.get_mut(id as u16) {
+                Some(_stream) => {},
                 None => return Err(Error::BufNotFound),
             };
 
-            let mut len = max(stream.send.len(), bytes_to_send)  ;
+
+            let mut len = tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.len();
             let mut sent = 0;
-           /* let mut complete_sent = false;*/
 
             while len > 0 {
+                for conn_id in conn_ids.as_ref().unwrap() {
+                    let socket: &mut dyn Write = match wr {
+                        Some(ref mut socks) => socks.get_mut(conn_id).unwrap().deref_mut(),
+                        None => &mut self.tcp_connections.get_mut(&(*conn_id)).unwrap().socket,
+                    };
+                    let chunk = match tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.get_chunk(){
+                        Some(ch) => ch,
+                        None => {
+                            len = 0;
+                            break
+                        },
+                    };
+                    sent = match socket.write(chunk.as_slice()){
+                        Ok(sent) if sent > 0 => sent,
+                        Ok(0) => return Ok(done),
+                        _error => return Err(Error::General("Data sending on socket failed".to_string())),
+                    };
 
-                sent = match stream.send.write_chunk_to(socket) {
-                    Ok(sent) => sent,
-                    _error => return Err(Error::General("Data sending on socket failed".to_string())),
+                    len -= sent;
+                    done += sent;
 
-                };
 
-                len -= sent;
-                done += sent;
-                //stream.send.consume_chunk(sent, chunk);
-                // In case the chunk was partially sent, by the next call
-                // to send on the same connection this stream should be chosen as first
-                if sent == 0 {
-                    return Ok(done);
                 }
-
             }
 
             if len == 0 {
-                tls_conn.record_layer.streams.remove_flushable(id);
-                tls_conn.record_layer.streams.insert_writable(id);
+                tls_conn.record_layer.streams.reset_stream(id as u32);
             }
         }
 
