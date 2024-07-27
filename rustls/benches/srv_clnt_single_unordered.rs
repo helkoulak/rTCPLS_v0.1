@@ -130,6 +130,9 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    //Encrypt data and buffer it in send buffer
                                    tcpls_client.stream_send(1, sendbuf.as_slice(), false).expect("Buffering in send buffer failed");
 
+                                   //Change the order of buffered records
+                                   tcpls_client.tls_conn.as_mut().unwrap().shuffle_records(1, 20);
+
                                    let mut stream_to_flush = SimpleIdHashSet::default();
                                    stream_to_flush.insert(1);
                                    // Create app receive buffer

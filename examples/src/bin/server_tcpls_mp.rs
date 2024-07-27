@@ -212,7 +212,7 @@ impl TlsServer {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let io_state = match self.tcpls_session.process_received(app_buffers, id as u32) {
+        let io_state = match self.tcpls_session.process_received(app_buffers) {
             Ok(io_state) => io_state,
             Err(err) => {
                 println!("TLS error: {:?}", err);

@@ -4,7 +4,7 @@ use core::slice::SliceIndex;
 use std::collections::{BTreeMap, hash_map};
 #[cfg(feature = "std")]
 use std::io;
-use std::{println, vec};
+use std::vec;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
@@ -36,7 +36,7 @@ pub struct MessageDeframer {
     joining_hs: Option<HandshakePayloadMeta>,
 
     /// Info of records delivered
-    pub(crate) record_info: BTreeMap<u64, RangeBufInfo>,
+    pub(crate) record_info: SimpleIdHashMap<BTreeMap<u64, RangeBufInfo>>,
 
     /// Range of offsets of processed data in deframer buffer.
     pub(crate) processed_range: Range<u64>,
@@ -46,6 +46,8 @@ pub struct MessageDeframer {
 
     ///Range of joined Handshake message in the deframer buffer
     pub(crate)  joined_messages: Vec<Range<usize>>,
+
+    pub(crate) current_conn_id: u64,
 
 }
 
@@ -272,6 +274,8 @@ impl MessageDeframer {
         let tag_len = record_layer.get_tag_length();
         let mut hdr_decoded = TcplsHeader::default();
         let mut end = 0;
+        let conn_id = self.current_conn_id;
+
 
 
         // We loop over records we've received but not processed yet.
@@ -279,11 +283,13 @@ impl MessageDeframer {
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
 
-            start = match self.record_info.is_empty() {
-                true => 0,
-                false => match self.out_of_order {
+            start = match self.record_info.contains_key(&conn_id) &&
+                self.record_info.get(&conn_id)
+                    .map_or(true, |m| !m.is_empty()) {
+                false => 0,
+                true => match self.out_of_order {
                     true => {
-                        for (offset, info) in self.record_info.iter() {
+                        for (offset, info) in self.record_info.get(&conn_id).unwrap().iter() {
                             if app_buffers.get(info.id).unwrap().next_recv_pkt_num == info.chunk_num && !info.processed {
                                 end = *offset as usize;
                                 break
@@ -295,8 +301,8 @@ impl MessageDeframer {
                         end
                     }
                     false => {
-                        end = *self.record_info.last_key_value().unwrap().0 as usize
-                            + self.record_info.last_key_value().unwrap().1.len;
+                        end = *self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().0 as usize
+                            + self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().1.len;
                         end
                     },
                 },
@@ -329,7 +335,9 @@ impl MessageDeframer {
             // Return CCS messages and early plaintext alerts immediately without decrypting.
             end = start + rd.used();
             //Create an info object for the received record
-            self.record_info.insert(start as u64, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start));
+            self.record_info.entry(conn_id)
+                .or_insert_with(BTreeMap::new)
+                .insert(start as u64,  RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start));
 
             let version_is_tls13 = matches!(negotiated_version, Some(ProtocolVersion::TLSv1_3));
             let allowed_plaintext = match m.typ {
@@ -365,7 +373,7 @@ impl MessageDeframer {
                     version,
                     payload: buffer.take(raw_payload_slice),
                 };
-                self.record_info
+                self.record_info.get_mut(&conn_id).unwrap()
                     .get_mut(&(start as u64))
                     .unwrap().processed = true;
                 return Ok(Some(Deframed {
@@ -386,7 +394,7 @@ impl MessageDeframer {
                         &record_layer.decrypt_header(sample, &m.payload[..TCPLS_HEADER_SIZE]).expect("decrypting header failed")
                     );
                 //Update record info if header is present
-                self.record_info
+                self.record_info.get_mut(&conn_id).unwrap()
                     .insert(start as u64, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start)
                     );
                 
@@ -424,7 +432,7 @@ impl MessageDeframer {
                     ));
                 }
                 Ok(None) => {
-                    self.record_info
+                    self.record_info.get_mut(&conn_id).unwrap()
                         .get_mut(&(start as u64))
                         .unwrap().processed = true;
 
@@ -451,7 +459,7 @@ impl MessageDeframer {
                 if typ == ContentType::ApplicationData {
                     app_buffers.insert_readable(record_layer.get_stream_id() as u64);
                 }
-                self.record_info
+                self.record_info.get_mut(&conn_id).unwrap()
                     .get_mut(&(start as u64))
                     .unwrap().processed = true;
                 buffer.queue_discard(0);
@@ -662,9 +670,14 @@ impl MessageDeframer {
     /// Contiguous data range grows to the left or right depending on adjacent processed records.
     /// Range will only be saved in self.processed_range if range >= DISCARD_THRESHOLD.
     pub fn calculate_discard_range(&mut self) {
+        let conn_id = self.current_conn_id;
+        if !self.record_info.contains_key(&conn_id){
+            return;
+        }
         let mut contiguous = true;
+
         while contiguous {
-            for (offset, info) in self.record_info.iter() {
+            for (offset, info) in self.record_info.get(&conn_id).unwrap().iter() {
                 let entry_start = *offset;
                 let entry_end = *offset + info.len as u64;
                 if info.processed {
@@ -691,9 +704,10 @@ impl MessageDeframer {
     pub fn rearrange_record_info(&mut self) {
         let mut new_record_info: BTreeMap<u64, RangeBufInfo > = BTreeMap::new();
         let mut next_start = 0;
+        let conn_id = self.current_conn_id;
 
         // Build a new record_info BTreeMap excluding the discarded range
-        for entry in self.record_info.iter()
+        for entry in self.record_info.get(&conn_id).unwrap().iter()
             .filter(|&(key, info)| *key < self.processed_range.start || *key >= self.processed_range.end) {
             if *entry.0 == self.processed_range.end {
                 new_record_info.insert(self.processed_range.start, RangeBufInfo{
@@ -727,21 +741,18 @@ impl MessageDeframer {
         //Keep ranges that are outside the processed range
         self.joined_messages.retain(|x| x.start < self.processed_range.start as usize ||
             x.end > self.processed_range.end as usize );
-        /*for i in 0..self.joined_messages.len() {
-            if self.joined_messages[i].start >= self.processed_range.start as usize &&
-                self.joined_messages[i].end <= self.processed_range.end as usize {
-                self.joined_messages.remove(i);
-            }
-        }*/
-        self.record_info = new_record_info;
+
+        self.record_info.insert(conn_id, new_record_info);
         self.processed_range.start = 0;
         self.processed_range.end   = 0;
     }
 
     pub fn mark_as_processed(&mut self){
+        let conn_id = self.current_conn_id;
         if !self.joined_messages.is_empty() {
             for range in &self.joined_messages {
-                for (offset, info) in self.record_info.iter_mut().skip_while(|(offset, _)| (**offset as usize) < range.start) {
+                for (offset, info) in self.record_info
+                    .get_mut(&conn_id).unwrap().iter_mut().skip_while(|(offset, _)| (**offset as usize) < range.start) {
                     if *offset == range.end as u64 {
                         break
                     }
@@ -1253,6 +1264,16 @@ impl MessageDeframerMap {
             },
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
+    }
+    /// Return ids of deframer buffers that have data received from socket
+    pub(crate) fn get_keys(&self) -> Vec<u64> {
+        let mut keys: Vec<u64> = Vec::new();
+        for d in &self.deframers{
+            if d.1.used > 0 {
+                keys.push(d.1.id)
+            }
+        }
+        keys
     }
 
 

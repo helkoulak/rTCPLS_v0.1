@@ -1,11 +1,11 @@
 
+use alloc::vec::Vec;
 use alloc::boxed::Box;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "std")]
 use std::io;
-
 use crate::common_state::{CommonState, Context, IoState, PlainBufsMap, State};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
@@ -85,6 +85,13 @@ mod connection {
             match self {
                 Self::Client(conn) => conn.process_new_packets(app_buffers),
                 Self::Server(conn) => conn.process_new_packets(app_buffers),
+            }
+        }
+
+        pub fn get_deframer_ids(&mut self) -> Vec<u64> {
+            match self {
+                Self::Client(conn) => conn.get_deframer_ids(),
+                Self::Server(conn) => conn.get_deframer_ids(),
             }
         }
 
@@ -415,6 +422,11 @@ impl<Data> ConnectionCommon<Data> {
         self.core
             .process_new_packets(self.deframers_map.get_or_create_def_vec_buff(self.conn_in_use as u64),
                                  &mut self.sendable_plaintext, app_buffers)
+    }
+    /// Get ids of deframer buffers that have data received from socket
+    #[inline]
+    pub fn get_deframer_ids(&self) -> Vec<u64> {
+        self.deframers_map.get_keys()
     }
 
     /// Derives key material from the agreed connection secrets.
@@ -821,6 +833,7 @@ impl<Data> ConnectionCore<Data> {
 
         let mut discard = 0;
         loop {
+            self.message_deframer.current_conn_id = self.common_state.conn_in_use as u64;
             let mut borrowed_buffer = deframer_buffer.borrow();
             borrowed_buffer.queue_discard(discard);
 

@@ -874,6 +874,13 @@ pub struct IoState {
 }
 
 impl IoState {
+    pub fn new() -> Self {
+        IoState {
+            tls_bytes_to_write: 0,
+            plaintext_bytes_to_read: 0,
+            peer_has_closed: false,
+        }
+    }
     /// How many bytes could be written by [`Connection::write_tls`] if called
     /// right now.  A non-zero value implies [`CommonState::wants_write`].
     ///

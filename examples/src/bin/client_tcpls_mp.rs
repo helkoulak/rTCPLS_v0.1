@@ -69,6 +69,7 @@ impl TlsClient {
                     self.send_data(vec![1u8; 64000].as_slice(), 0).expect("");
                     self.send_data(vec![2u8; 64000].as_slice(), 1).expect("");
                     self.send_data(vec![3u8; 64000].as_slice(), 2).expect("");
+                    // self.send_data(vec![3u8; 64000].as_slice(), 2).expect("");
 
                     let mut conn_ids = Vec::new();
                     conn_ids.push(0);
@@ -127,7 +128,7 @@ impl TlsClient {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let io_state = match self.tcpls_session.process_received(app_buffers, id as u32) {
+        let io_state = match self.tcpls_session.process_received(app_buffers) {
             Ok(io_state) => io_state,
             Err(err) => {
                 println!("TLS error: {:?}", err);
@@ -605,7 +606,14 @@ fn main() {
     client.register(&recv_map, CONNECTION1);
 
     loop {
-        client.poll.poll(&mut events, None).unwrap();
+        match client.poll.poll(&mut events, None){
+            Ok(_) => {}
+            // Polling can be interrupted (e.g. by a debugger) - retry if so.
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                panic!("poll failed: {:?}", e)
+            }
+        }
 
         for ev in events.iter() {
             client.handle_event(ev, &mut recv_map);
