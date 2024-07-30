@@ -535,7 +535,7 @@ impl BenchStepper for ClientSideStepper<'_> {
 
         loop {
             send_handshake_message(&mut client, self.io.writer, self.io.handshake_buf).await?;
-            if !client.is_handshaking() && !client.wants_write() {
+            if !client.is_handshaking() && !client.wants_write(None) {
                 break;
             }
             read_handshake_message(&mut client, self.io.reader, self.io.handshake_buf).await?;

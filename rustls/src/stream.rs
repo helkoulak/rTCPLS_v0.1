@@ -41,7 +41,7 @@ where
         if self.conn.is_handshaking() {
             self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?;
         }
-        if self.conn.wants_write() {
+        if self.conn.wants_write(None) {
             self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?;
         }
 
@@ -132,7 +132,7 @@ where
         self.complete_prior_io()?;
 
         self.conn.writer().flush()?;
-        if self.conn.wants_write() {
+        if self.conn.wants_write(None) {
 
             self.conn.complete_io(self.sock, None)?;
         }

@@ -1596,7 +1596,7 @@ fn receive_out_of_order_tls_records_multiple_streams() {
 
     //Send all data
     loop {
-        match tcpls_client.send_on_connection(Some(0), Some(&mut pipe), None) {
+        match tcpls_client.send_on_connection(Some(0), None) {
             Ok(sent) => if sent == 0 {break},
             Err(err) => {}, // Process what has been received if buffer is full
         }
@@ -1665,7 +1665,7 @@ fn send_fragmented_records_on_two_connections() {
     // The receiving side will read a maximum of 4096 bytes in one shot. This will force fragmentation of records while sending.
     // Send part of the data on one tcp connection
     loop {
-        sent += tcpls_client.send_on_connection(Some(0), Some(&mut pipe), None).unwrap();
+        sent += tcpls_client.send_on_connection(Some(0), None).unwrap();
         pipe.sess.process_new_packets(&mut recv_svr).unwrap();
         if sent >= 30000 {break}
     }
@@ -1675,7 +1675,7 @@ fn send_fragmented_records_on_two_connections() {
     //Send the rest of data on the second connection
 
     loop {
-        sent = tcpls_client.send_on_connection(Some(0), Some(&mut pipe2), None).unwrap();
+        sent = tcpls_client.send_on_connection(Some(0), None).unwrap();
         pipe2.sess.process_new_packets(&mut recv_svr).unwrap();
         if sent == 0 {break}
     }
@@ -2420,7 +2420,7 @@ fn client_complete_io_for_handshake() {
         .unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert!(!client.is_handshaking());
-    assert!(!client.wants_write());
+    assert!(!client.wants_write(None));
 }
 
 #[test]
@@ -2433,7 +2433,7 @@ fn buffered_client_complete_io_for_handshake() {
         .unwrap();
     assert!(rdlen > 0 && wrlen > 0);
     assert!(!client.is_handshaking());
-    assert!(!client.wants_write());
+    assert!(!client.wants_write(None));
 }
 
 #[test]
@@ -2542,7 +2542,7 @@ fn server_complete_io_for_handshake() {
             .unwrap();
         assert!(rdlen > 0 && wrlen > 0);
         assert!(!server.is_handshaking());
-        assert!(!server.wants_write());
+        assert!(!server.wants_write(None));
     }
 }
 
@@ -3007,7 +3007,7 @@ fn server_complete_io_for_handshake_ending_with_alert() {
     let mut pipe = OtherSession::new_fails(&mut client);
     let rc = server.complete_io(&mut pipe, None);
     assert!(rc.is_err(), "server io failed due to handshake failure");
-    assert!(!server.wants_write(), "but server did send its alert");
+    assert!(!server.wants_write(None), "but server did send its alert");
     assert_eq!(
         format!("{:?}", pipe.last_error),
         "Some(AlertReceived(HandshakeFailure))",
@@ -5105,7 +5105,7 @@ fn test_client_does_not_offer_sha1() {
             let client_config = make_client_config_with_versions(*kt, &[version]);
             let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, make_server_config(*kt));
 
-            assert!(client.wants_write());
+            assert!(client.wants_write(None));
             let mut buf = [0u8; 262144];
             let sz = client
                 .write_tls(&mut buf.as_mut(), 0)
@@ -5960,7 +5960,7 @@ fn test_acceptor() {
     let server = accepted
         .into_connection(server_config)
         .unwrap();
-    assert!(server.wants_write());
+    assert!(server.wants_write(None));
 
     // Reusing an acceptor is not allowed
     assert_eq!(

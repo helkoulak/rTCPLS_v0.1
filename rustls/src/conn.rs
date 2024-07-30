@@ -609,7 +609,7 @@ impl<Data> ConnectionCommon<Data> {
 
             let until_handshaked = self.is_handshaking();
 
-            while self.wants_write() {
+            while self.wants_write(None) {
                 wrlen += self.write_tls(io, DEFAULT_STREAM_ID)?;
             }
             io.flush()?;
@@ -656,7 +656,7 @@ impl<Data> ConnectionCommon<Data> {
             // if we're doing IO until handshaked, and we believe we've finished handshaking,
             // but process_new_packets() has queued TLS data to send, loop around again to write
             // the queued messages.
-            if until_handshaked && !self.is_handshaking() && self.wants_write() {
+            if until_handshaked && !self.is_handshaking() && self.wants_write(None) {
                 continue;
             }
 

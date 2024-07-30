@@ -185,7 +185,7 @@ impl TlsClient {
         };
         let wr = match self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().contains_key(&id) {
             true => self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.wants_write(id),
-            false => self.tcpls_session.tls_conn.as_mut().unwrap().wants_write(),
+            false => self.tcpls_session.tls_conn.as_mut().unwrap().wants_write(None),
         };
 
         if rd && wr {

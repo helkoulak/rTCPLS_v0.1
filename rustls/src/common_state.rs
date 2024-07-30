@@ -110,11 +110,15 @@ impl CommonState {
         self.conn_in_use = conn_id;
     }
 
-    /// Returns true if the caller should call [`Connection::write_tls`] as soon as possible.
+    /// Returns true if the caller should call [`send_on_connection`] as soon as possible.
     ///
-    /// [`Connection::write_tls`]: crate::Connection::write_tls
-    pub fn wants_write(&self) -> bool {
-        !self.record_layer.streams.all_empty()
+    /// [`send_on_connection`]: crate::tcpls::s
+    pub fn wants_write(&self, id: Option<u32>) -> bool {
+        match id {
+            Some(id) => !self.record_layer.streams.get(id as u16).unwrap().send.is_empty(),
+            None => !self.record_layer.streams.all_empty(),
+        }
+
     }
 
     /// Returns true if the connection is currently performing the TLS handshake.

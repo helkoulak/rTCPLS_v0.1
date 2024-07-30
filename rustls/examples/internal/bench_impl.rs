@@ -67,7 +67,7 @@ where
     loop {
         let mut sz = 0;
 
-        while left.wants_write() {
+        while left.wants_write(None) {
             let written = left
                 .write_tls(&mut tls_buf[sz..].as_mut(), 0)
                 .unwrap();

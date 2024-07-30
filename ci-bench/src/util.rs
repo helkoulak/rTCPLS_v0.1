@@ -422,7 +422,7 @@ pub mod transport {
     ) -> anyhow::Result<()> {
         // Write all bytes the connection wants to send to an intermediate buffer
         let mut written = 0;
-        while conn.wants_write() {
+        while conn.wants_write(None) {
             if written >= buf.len() {
                 anyhow::bail!(
                     "Not enough space in buffer for outgoing message (buf len = {})",
@@ -554,7 +554,7 @@ pub mod transport {
             server.writer().write_all(&send_buf)?;
 
             // Empty the server's buffer, so we can re-fill it in the next iteration
-            while server.wants_write() {
+            while server.wants_write(None) {
                 let written = server.write_tls(&mut send_buf.as_mut())?;
                 writer
                     .write_all(&send_buf[..written])

@@ -299,7 +299,7 @@ impl TlsServer {
     /// based on wants_read/wants_write.
     fn event_set(&self, app_buf: &RecvBufMap) -> mio::Interest {
         let rd = self.tcpls_session.tls_conn.as_ref().unwrap().wants_read(app_buf);
-        let wr = self.tcpls_session.tls_conn.as_ref().unwrap().wants_write();
+        let wr = self.tcpls_session.tls_conn.as_ref().unwrap().wants_write(None);
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE

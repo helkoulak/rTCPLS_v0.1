@@ -151,7 +151,7 @@ impl TlsClient {
     /// IO readiness events.
     fn event_set(&mut self, app_buf: &RecvBufMap) -> mio::Interest {
         let rd = self.tcpls_session.tls_conn.as_mut().unwrap().wants_read(app_buf);
-        let wr = self.tcpls_session.tls_conn.as_mut().unwrap().wants_write();
+        let wr = self.tcpls_session.tls_conn.as_mut().unwrap().wants_write(None);
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE

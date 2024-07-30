@@ -161,7 +161,7 @@ pub fn transfer(
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
-    while left.wants_write() {
+    while left.wants_write(None) {
         let sz = {
             let into_buf: &mut dyn io::Write = &mut &mut buf[..];
 
@@ -206,7 +206,7 @@ where
     let mut buf = [0u8; 262144];
     let mut total = 0;
 
-    while left.wants_write() {
+    while left.wants_write(None) {
         let sz = {
             let into_buf: &mut dyn io::Write = &mut &mut buf[..];
 

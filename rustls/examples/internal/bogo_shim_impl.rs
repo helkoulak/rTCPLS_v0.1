@@ -787,7 +787,7 @@ fn handle_err(err: Error) -> ! {
 }
 
 fn flush(sess: &mut Connection, conn: &mut net::TcpStream) {
-    while sess.wants_write() {
+    while sess.wants_write(None) {
         if let Err(err) = sess.write_tls(conn, 0) {
             println!("IO error: {:?}", err);
             process::exit(0);
