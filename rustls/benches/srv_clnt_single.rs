@@ -43,6 +43,22 @@ impl<C, S> OtherSession<C, S>
         os.fail_ok = true;
         os
     }
+    fn write_all(&mut self, mut buf: &[u8]) -> usize {
+        let mut sent = 0;
+        while !buf.is_empty() {
+            match self.write(buf) {
+                Ok(0) => {
+                    sent = 0;
+                }
+                Ok(n) => {
+                    buf = &buf[n..];
+                    sent += n;
+                },
+                Err(e) => panic!("Something wrong"),
+            }
+        }
+        sent
+    }
 }
 
 impl<C, S> io::Read for OtherSession<C, S>
@@ -129,16 +145,15 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
                                    //Encrypt data and buffer it in send buffer
                                    tcpls_client.stream_send(1, sendbuf.as_slice(), false).expect("Buffering in send buffer failed");
+                                   let mut pipe = OtherSession::new(server);
+                                   let mut sent: usize = 0;
 
-                                   let mut stream_to_flush = SimpleIdHashSet::default();
-                                   stream_to_flush.insert(1);
+                                   while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(1)) {
+                                       sent += tcpls_client.tls_conn.as_mut().unwrap().write_tls(&mut pipe, 1).unwrap();
+                                   };
+
                                    // Create app receive buffer
                                    recv_svr.get_or_create(1, Some(11 * 1024 * 1024));
-                                   let mut pipe = OtherSession::new(server);
-                                   let mut sent = 0;
-                                   while tcpls_client.tls_conn.as_ref().unwrap().wants_write() {
-                                       sent += tcpls_client.send_on_connection(None, Some(&mut pipe), Some(stream_to_flush.clone())).unwrap();
-                                   }
                                    (pipe, recv_svr)
                                },
 
