@@ -75,7 +75,7 @@ impl TlsClient {
                     conn_ids.push(0);
                     conn_ids.push(1);
                     conn_ids.push(2);
-                    self.tcpls_session.send_on_connection(Some(conn_ids), None, None).expect("Sending on connection failed");
+                    self.tcpls_session.send_on_connection(conn_ids, None).expect("Sending on connection failed");
                     self.sending_ids.insert(0);
                     self.sending_ids.insert(1);
                     self.sending_ids.insert(2);
@@ -151,7 +151,7 @@ impl TlsClient {
 
             let mut conn_ids = Vec::new();
             conn_ids.push(id);
-            self.tcpls_session.send_on_connection(Some(conn_ids), None, None).expect("Send on connection failed");
+            self.tcpls_session.send_on_connection(conn_ids, None).expect("Send on connection failed");
         }
 
     }

@@ -248,7 +248,7 @@ impl TlsServer {
     fn tcpls_write(&mut self, token: &Token) -> Result<usize, Error> {
         let mut conn_ids = Vec::new();
         conn_ids.push(token.0 as u64);
-        self.tcpls_session.send_on_connection(Some(conn_ids), None, None)
+        self.tcpls_session.send_on_connection(conn_ids, None)
     }
 
     fn do_tls_write_and_handle_error(&mut self, token: &Token) {

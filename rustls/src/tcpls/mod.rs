@@ -228,11 +228,15 @@ impl TcplsSession {
     }
 
     /// Flush bytes of a certain stream of a set of streams on specified byte-oriented sink.
-    pub fn send_on_connection(&mut self, conn_ids: Option<Vec<u64>>, mut wr: Option<SimpleIdHashMap<Box<&mut dyn io::Write>>>, flushables: Option<SimpleIdHashSet>) -> Result<usize, Error> {
+    pub fn send_on_connection(&mut self, conn_ids: Vec<u64>, flushable_streams: Option<SimpleIdHashSet>) -> Result<usize, Error> {
         let tls_conn = self.tls_conn.as_mut().unwrap();
 
+        if conn_ids.is_empty(){
+            return Err(Error::General("No connection ids provided".to_string()));
+        }
+
         //Flush streams selected by the app or flush all
-        let stream_ids = match flushables {
+        let stream_ids = match flushable_streams {
             Some(set) => StreamIter::from(&set),
             None => tls_conn.record_layer.streams.flushable(),
         };
@@ -251,11 +255,8 @@ impl TcplsSession {
             let mut sent = 0;
 
             while len > 0 {
-                for conn_id in conn_ids.as_ref().unwrap() {
-                    let socket: &mut dyn Write = match wr {
-                        Some(ref mut socks) => socks.get_mut(conn_id).unwrap().deref_mut(),
-                        None => &mut self.tcp_connections.get_mut(&(*conn_id)).unwrap().socket,
-                    };
+                for conn_id in &conn_ids {
+                    let socket = &mut self.tcp_connections.get_mut(conn_id).unwrap().socket;
                     let chunk = match tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.get_chunk(){
                         Some(ch) => ch,
                         None => {

@@ -62,7 +62,7 @@ impl TlsClient {
                 let mut conn_ids = Vec::new();
                 conn_ids.push(token.0 as u64);
 
-                self.tcpls_session.send_on_connection(Some(conn_ids), None, Some(id_set)).expect("Sending on connection failed");
+                self.tcpls_session.send_on_connection(conn_ids, Some(id_set)).expect("Sending on connection failed");
             }
         }
 
@@ -128,7 +128,7 @@ impl TlsClient {
     fn do_write(&mut self, token: &Token) {
         let mut conn_ids = Vec::new();
         conn_ids.push(token.0 as u64);
-        self.tcpls_session.send_on_connection(Some(conn_ids), None, None).unwrap();
+        self.tcpls_session.send_on_connection(conn_ids, None).unwrap();
     }
 
     /// Registers self as a 'listener' in mio::Registry
