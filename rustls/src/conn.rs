@@ -62,6 +62,10 @@ mod connection {
             self.record_layer.streams.get_or_create(id).unwrap().send.write_to(wr)
         }
 
+        pub fn write_chunk(&mut self, wr: &mut dyn io::Write, id: u16) -> Result<(), io::Error> {
+            self.record_layer.streams.get_or_create(id).unwrap().send.write_chunk_to(wr)
+        }
+
         /// Returns an object that allows reading plaintext.
         pub fn reader(&mut self) -> Reader {
             match self {

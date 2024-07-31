@@ -208,21 +208,10 @@ impl ChunkVecBuffer {
     }
 
     #[inline]
-    pub(crate) fn write_chunk_to(&mut self, wr: &mut dyn io::Write) -> io::Result<usize> {
-        if self.is_empty() {
-            return Ok(0);
-        }
-
-        let mut sent = 0;
+    pub(crate) fn write_chunk_to(&mut self, wr: &mut dyn Write) -> io::Result<()> {
         let chunk = self.chunks.pop_front().unwrap();
-        let chunk_len = chunk.len();
-
-        sent = wr
-            .write(chunk.as_slice())
-            .unwrap();
-        self.consume_chunk(sent, chunk);
-
-        Ok(sent)
+        wr.write_all(chunk.as_slice()).unwrap();
+        Ok(())
     }
 
     pub(crate) fn get_chunk(&mut self) -> Option<Vec<u8>> {
