@@ -1596,7 +1596,7 @@ fn receive_out_of_order_tls_records_multiple_streams() {
 
     //Send all data
     loop {
-        match tcpls_client.send_on_connection(Some(0), None) {
+        match tcpls_client.send_on_connection(vec![0], None) {
             Ok(sent) => if sent == 0 {break},
             Err(err) => {}, // Process what has been received if buffer is full
         }
@@ -1665,7 +1665,7 @@ fn send_fragmented_records_on_two_connections() {
     // The receiving side will read a maximum of 4096 bytes in one shot. This will force fragmentation of records while sending.
     // Send part of the data on one tcp connection
     loop {
-        sent += tcpls_client.send_on_connection(Some(0), None).unwrap();
+        sent += tcpls_client.send_on_connection(vec![0], None).unwrap();
         pipe.sess.process_new_packets(&mut recv_svr).unwrap();
         if sent >= 30000 {break}
     }
@@ -1675,7 +1675,7 @@ fn send_fragmented_records_on_two_connections() {
     //Send the rest of data on the second connection
 
     loop {
-        sent = tcpls_client.send_on_connection(Some(0), None).unwrap();
+        sent = tcpls_client.send_on_connection(vec![0], None).unwrap();
         pipe2.sess.process_new_packets(&mut recv_svr).unwrap();
         if sent == 0 {break}
     }
