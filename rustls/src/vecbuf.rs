@@ -208,7 +208,7 @@ impl ChunkVecBuffer {
     }
 
     #[inline]
-    pub(crate) fn write_chunk_to(&mut self, wr: &mut dyn Write) -> io::Result<()> {
+    pub(crate) fn write_chunk_to(&mut self, wr: &mut dyn io::Write) -> io::Result<()> {
         let chunk = self.chunks.pop_front().unwrap();
         wr.write_all(chunk.as_slice()).unwrap();
         Ok(())
