@@ -78,8 +78,8 @@ harness = false
 required-features = ["ring"]
 
 [[bench]]
-name = "srv_clnt_single_mp"
-path = "benches/srv_clnt_single_mp.rs"
+name = "srv_clnt_mp"
+path = "benches/srv_clnt_mp.rs"
 harness = false
 required-features = ["ring"]
 
