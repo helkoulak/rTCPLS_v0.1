@@ -337,7 +337,7 @@ impl MessageDeframer {
             //Create an info object for the received record
             self.record_info.entry(conn_id)
                 .or_insert_with(BTreeMap::new)
-                .insert(start as u64,  RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start));
+                .insert(start as u64,  RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, false));
 
             let version_is_tls13 = matches!(negotiated_version, Some(ProtocolVersion::TLSv1_3));
             let allowed_plaintext = match m.typ {
@@ -385,7 +385,10 @@ impl MessageDeframer {
             }
 
             // Consider header protection in case dec/enc state is active
-            if record_layer.is_decrypting() && m.payload.len() > TCPLS_HEADER_SIZE {
+            if record_layer.is_decrypting() && m.payload.len() > TCPLS_HEADER_SIZE &&
+                !self.record_info.get_mut(&conn_id).unwrap()
+                .get(&(start as u64)).unwrap().header_decoded {
+
                 // Take the LSBs of calculated tag as input sample for hash function
                 let sample = m.payload.rchunks(tag_len).next().unwrap();
                 // Decode tcpls header and choose recv_buf accordingly
@@ -395,7 +398,7 @@ impl MessageDeframer {
                     );
                 //Update record info if header is present
                 self.record_info.get_mut(&conn_id).unwrap()
-                    .insert(start as u64, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start)
+                    .insert(start as u64, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, true)
                     );
                 
                 if app_buffers.get_or_create(hdr_decoded.stream_id as u64, None).next_recv_pkt_num != hdr_decoded.chunk_num {
@@ -715,6 +718,7 @@ impl MessageDeframer {
                     len: entry.1.len,
                     id: entry.1.id,
                     processed: entry.1.processed,
+                    header_decoded: entry.1.header_decoded,
                 });
                 next_start = self.processed_range.start + entry.1.len as u64;
                 continue
@@ -726,6 +730,7 @@ impl MessageDeframer {
                     len: entry.1.len,
                     id: entry.1.id,
                     processed: entry.1.processed,
+                    header_decoded: entry.1.header_decoded,
                 });
                 next_start += entry.1.len as u64;
                 continue
@@ -735,6 +740,7 @@ impl MessageDeframer {
                 len: entry.1.len,
                 id: entry.1.id,
                 processed: entry.1.processed,
+                header_decoded: entry.1.header_decoded,
             });
         }
 
@@ -1157,15 +1163,18 @@ pub(crate) struct RangeBufInfo {
 
     /// If record already processed
     pub(crate) processed: bool,
+
+    pub(crate) header_decoded: bool,
 }
 
 impl RangeBufInfo {
-    pub(crate) fn from(chunk_num: u32, id: u16, len: usize) -> RangeBufInfo {
+    pub(crate) fn from(chunk_num: u32, id: u16, len: usize, header_decoded: bool) -> RangeBufInfo {
         RangeBufInfo {
             id,
             chunk_num,
             len,
             processed: false,
+            header_decoded,
         }
     }
 }
