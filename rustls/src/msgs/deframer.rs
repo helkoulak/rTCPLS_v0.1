@@ -719,50 +719,63 @@ impl MessageDeframer {
     }
 
     pub fn rearrange_record_info(&mut self) {
-        let mut new_record_info: BTreeMap<u64, RangeBufInfo > = BTreeMap::new();
-        let mut next_start = 0;
         let conn_id = self.current_conn_id;
 
-        // Build a new record_info BTreeMap excluding the discarded range
-        for entry in self.record_info.get(&conn_id).unwrap().iter()
-            .filter(|&(key, info)| *key < self.processed_range.start || *key >= self.processed_range.end) {
-            if *entry.0 == self.processed_range.end {
-                new_record_info.insert(self.processed_range.start, RangeBufInfo{
-                    chunk_num: entry.1.chunk_num,
-                    len: entry.1.len,
-                    id: entry.1.id,
-                    processed: entry.1.processed,
-                    header_decoded: entry.1.header_decoded,
-                });
-                next_start = self.processed_range.start + entry.1.len as u64;
-                continue
+        if let Some(record_map) = self.record_info.get_mut(&conn_id) {
+            let mut next_start = 0;
+            let mut keys_to_remove = Vec::new();
+            let mut entries_to_reinsert = Vec::new();
+
+            for (&key, info) in record_map.iter_mut() {
+                if key < self.processed_range.start || key >= self.processed_range.end {
+                    if key == self.processed_range.end {
+                        entries_to_reinsert.push((
+                            self.processed_range.start,
+                            RangeBufInfo {
+                                chunk_num: info.chunk_num,
+                                len: info.len,
+                                id: info.id,
+                                processed: info.processed,
+                                header_decoded: info.header_decoded,
+                            },
+                        ));
+                        keys_to_remove.push(key);
+                        next_start = self.processed_range.start + info.len as u64;
+                    } else if key > self.processed_range.end {
+                        entries_to_reinsert.push((
+                            next_start,
+                            RangeBufInfo {
+                                chunk_num: info.chunk_num,
+                                len: info.len,
+                                id: info.id,
+                                processed: info.processed,
+                                header_decoded: info.header_decoded,
+                            },
+                        ));
+                        keys_to_remove.push(key);
+                        next_start += info.len as u64;
+                    }
+                } else {
+                    keys_to_remove.push(key);
+                }
             }
 
-            if *entry.0 > self.processed_range.end {
-                new_record_info.insert(next_start, RangeBufInfo{
-                    chunk_num: entry.1.chunk_num,
-                    len: entry.1.len,
-                    id: entry.1.id,
-                    processed: entry.1.processed,
-                    header_decoded: entry.1.header_decoded,
-                });
-                next_start += entry.1.len as u64;
-                continue
+
+            for key in keys_to_remove {
+                record_map.remove(&key);
             }
-            new_record_info.insert(*entry.0, RangeBufInfo{
-                chunk_num: entry.1.chunk_num,
-                len: entry.1.len,
-                id: entry.1.id,
-                processed: entry.1.processed,
-                header_decoded: entry.1.header_decoded,
-            });
+
+
+            for (new_key, new_info) in entries_to_reinsert {
+                record_map.insert(new_key, new_info);
+            }
         }
+
 
         //Keep ranges that are outside the processed range
         self.joined_messages.retain(|x| x.start < self.processed_range.start as usize ||
             x.end > self.processed_range.end as usize );
 
-        self.record_info.insert(conn_id, new_record_info);
         self.processed_range.start = 0;
         self.processed_range.end   = 0;
     }
