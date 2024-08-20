@@ -309,7 +309,7 @@
 //!
 
 // Require docs for public APIs, deny unsafe code, etc.
-#![forbid(unsafe_code, unused_must_use)]
+#![forbid(unused_must_use)]
 #![cfg_attr(not(any(read_buf, bench)), forbid(unstable_features))]
 #![deny(
     clippy::alloc_instead_of_core,

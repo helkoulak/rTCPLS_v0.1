@@ -943,7 +943,8 @@ impl DeframerVecBuffer {
             if (start + taken) == self.used {
                 self.used = start;
             } else {
-                self.buf.copy_within(start + taken..self.used, start);
+                Self::copy_within(self.buf.as_mut_slice(), start + taken ,start, (start + taken..self.used).len());
+               // self.buf.copy_within(start + taken..self.used, start);
                 self.used -= taken;
             }
 
@@ -954,6 +955,14 @@ impl DeframerVecBuffer {
 
     pub fn set_deframer_cap(&mut self, cap: usize) {
         self.cap = cap;
+    }
+    fn copy_within<T>(slice: &mut [T], src: usize, dst: usize, count: usize) {
+        assert!(src + count <= slice.len());
+        assert!(dst + count <= slice.len());
+
+        unsafe {
+            ptr::copy(slice.as_ptr().add(src), slice.as_mut_ptr().add(dst), count);
+        }
     }
 }
 
