@@ -155,7 +155,6 @@ impl RecordLayer {
         let read_seq = self.read_seq_map.get_or_create(self.stream_in_use as u64).read_seq;
         let want_close_before_decrypt = read_seq == SEQ_SOFT_LIMIT;
 
-        recv_buf.next_recv_pkt_num += 1;
         let encrypted_len = encr.payload.len();
         match self
             .message_decrypter

@@ -447,7 +447,14 @@ impl MessageDeframer {
 
                     continue;
                 }
-                Err(e) => return Err(e),
+                Err(e) => match e {
+                    Error::General(ref msg) if msg == "Buffer too short" => {
+                        continue;
+                    },
+                    _ => {
+                        return Err(e)
+                    },
+                },
             };
 
 

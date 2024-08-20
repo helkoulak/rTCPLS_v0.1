@@ -1,10 +1,10 @@
 use alloc::boxed::Box;
+use std::prelude::rust_2018::ToString;
 use std::vec;
 
 use ring::rand::SecureRandom;
 
-use crate::{crypto, PeerMisbehaved};
-use crate::crypto::cipher::{AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, make_tls13_aad, make_tls13_aad_tcpls, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
+use crate::crypto::cipher::{make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
@@ -13,11 +13,12 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 use crate::recvbuf::RecvBuf;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
-use crate::tcpls::frame::{Frame, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE, TcplsHeader};
+use crate::tcpls::frame::{Frame, TcplsHeader, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE};
 use crate::tls13::Tls13CipherSuite;
+use crate::{crypto, PeerMisbehaved};
 
-use super::ring_like::{aead, hkdf, hmac};
 use super::ring_like::hkdf::KeyType;
+use super::ring_like::{aead, hkdf, hmac};
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -366,7 +367,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         // output buffer must be at least as big as the input buffer
         if recv_buf.capacity() < payload.len() {
-            return Err(Error::BufferTooShort);
+            return Err(Error::General("Buffer too short".to_string()));
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq, stream_id).0);
@@ -403,6 +404,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         recv_buf.total_decrypted += payload_len_no_type;
         recv_buf.offset += payload_len_no_type as u64;
         recv_buf.last_data_type_decrypted = msg.typ.into();
+        recv_buf.next_recv_pkt_num += 1;
         Ok(InboundOpaqueMessage::new(msg.typ, ProtocolVersion::TLSv1_3, match msg.typ {
             ContentType::ApplicationData => {
                 recv_buf.get_mut_consumed()
