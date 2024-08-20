@@ -839,6 +839,8 @@ impl<Data> ConnectionCore<Data> {
         loop {
             self.message_deframer.current_conn_id = self.common_state.conn_in_use as u64;
             let mut borrowed_buffer = deframer_buffer.borrow();
+            self.message_deframer.discard_threshold = borrowed_buffer.calculate_discard_threshold();
+            self.message_deframer.used = borrowed_buffer.get_used();
             borrowed_buffer.queue_discard(discard);
 
             let res = self.deframe(Some(&*state), &mut borrowed_buffer, Some(app_buffers));

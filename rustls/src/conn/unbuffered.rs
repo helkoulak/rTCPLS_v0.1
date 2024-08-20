@@ -11,7 +11,7 @@ use crate::client::ClientConnectionData;
 use crate::msgs::deframer::DeframerSliceBuffer;
 use crate::server::ServerConnectionData;
 use crate::Error;
-
+use crate::msgs::message::MAX_WIRE_SIZE;
 use crate::tcpls::stream::DEFAULT_STREAM_ID;
 
 impl UnbufferedConnectionCommon<ClientConnectionData> {
@@ -47,7 +47,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
         mut check: impl FnMut(&mut Self) -> Option<T>,
         execute: impl FnOnce(&'c mut Self, &'i mut [u8], T) -> ConnectionState<'c, 'i, Data>,
     ) -> UnbufferedStatus<'c, 'i, Data> {
-        let mut buffer = DeframerSliceBuffer::new(incoming_tls, 0);
+        let mut buffer = DeframerSliceBuffer::new(incoming_tls, 0, MAX_WIRE_SIZE);
 
         let (discard, state) = loop {
             if let Some(value) = check(self) {

@@ -4,12 +4,12 @@ use core::slice::SliceIndex;
 use std::collections::{BTreeMap, hash_map};
 #[cfg(feature = "std")]
 use std::io;
-use std::vec;
-
+use std::{println, ptr, vec};
+use std::prelude::rust_2018::ToString;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError};
+use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_PAYLOAD};
 #[cfg(feature = "std")]
 use crate::msgs::message::MAX_WIRE_SIZE;
 use crate::record_layer::{Decrypted, RecordLayer};
@@ -48,6 +48,10 @@ pub struct MessageDeframer {
     pub(crate)  joined_messages: Vec<Range<usize>>,
 
     pub(crate) current_conn_id: u64,
+
+    pub(crate) discard_threshold: usize,
+
+    pub(crate) used: usize,
 
 }
 
@@ -673,6 +677,9 @@ impl MessageDeframer {
     /// Contiguous data range grows to the left or right depending on adjacent processed records.
     /// Range will only be saved in self.processed_range if range >= DISCARD_THRESHOLD.
     pub fn calculate_discard_range(&mut self) {
+        if self.used < self.discard_threshold {
+            return;
+        }
         let conn_id = self.current_conn_id;
         if !self.record_info.contains_key(&conn_id){
             return;
@@ -891,7 +898,7 @@ impl DeframerVecBuffer {
     /// Borrows the initialized contents of this buffer and tracks pending discard operations via
     /// the `discard` reference
     pub fn borrow(&mut self) -> DeframerSliceBuffer {
-        DeframerSliceBuffer::new(&mut self.buf[..self.used], self.used)
+        DeframerSliceBuffer::new(&mut self.buf[..self.used], self.used, self.cap)
     }
 
     /// Discard `taken` bytes from the start of our buffer.
@@ -1024,15 +1031,17 @@ pub struct DeframerSliceBuffer<'a> {
     discard: usize,
     taken: usize,
     used: usize,
+    cap: usize,
 }
 
 impl<'a> DeframerSliceBuffer<'a> {
-    pub fn new(buf: &'a mut [u8], used: usize) -> Self {
+    pub fn new(buf: &'a mut [u8], used: usize, cap: usize) -> Self {
         Self {
             buf,
             discard: 0,
             taken: 0,
             used,
+            cap,
         }
     }
 
@@ -1044,6 +1053,14 @@ impl<'a> DeframerSliceBuffer<'a> {
     /// Returns the number of bytes that need to be discarded
     pub fn pending_discard(&self) -> usize {
         self.discard
+    }
+
+    pub fn calculate_discard_threshold(&self) -> usize {
+        self.cap - MAX_PAYLOAD as usize
+    }
+
+    pub fn get_used(&self) -> usize {
+        self.used
     }
 
     pub fn is_empty(&self) -> bool {
