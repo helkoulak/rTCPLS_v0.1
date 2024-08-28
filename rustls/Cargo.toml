@@ -83,6 +83,12 @@ path = "benches/srv_clnt_mp.rs"
 harness = false
 required-features = ["ring"]
 
+[[bench]]
+name = "siphash_benchmark"
+path = "benches/siphash_benchmark.rs"
+harness = false
+
+
 [package.metadata.docs.rs]
 # all non-default features except fips (cannot build on docs.rs environment)
 features = ["read_buf", "ring"]

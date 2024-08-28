@@ -1,12 +1,12 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::fmt;
-use std::vec;
 use siphasher::sip::SipHasher;
+use std::vec;
 
-use zeroize::Zeroize;
-use ring::rand::{Random, SecureRandom, SystemRandom};
 use crate::crypto::tls13::HkdfExpander;
+use ring::rand::{SecureRandom, SystemRandom};
+use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
@@ -15,7 +15,6 @@ pub use crate::msgs::message::{
     BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
     OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
-use crate::msgs::message::HEADER_SIZE;
 use crate::recvbuf::RecvBuf;
 use crate::suites::ConnectionTrafficSecrets;
 use crate::tcpls::frame::{Frame, TcplsHeader};
@@ -317,7 +316,7 @@ pub fn make_tls12_aad(
 
 
 #[derive(Default)]
-pub(crate) struct HeaderProtector{
+pub struct HeaderProtector{
     key: [u8;16],
     sip_hasher: SipHasher
 }
@@ -329,6 +328,13 @@ impl HeaderProtector {
         expander.expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice()).unwrap();
         let mut key = [0; 16];
         key.copy_from_slice(&derived_key[..16]);
+        Self{
+            key,
+            sip_hasher: SipHasher::new_with_key(&key),
+        }
+    }
+
+    pub fn new_with_key(key: [u8; 16]) -> Self {
         Self{
             key,
             sip_hasher: SipHasher::new_with_key(&key),
@@ -363,7 +369,7 @@ impl HeaderProtector {
 
 
     #[inline]
-    pub(crate) fn decrypt_in_output(
+    pub fn decrypt_in_output(
         &mut self,
         input: &[u8],
         header: &[u8],
