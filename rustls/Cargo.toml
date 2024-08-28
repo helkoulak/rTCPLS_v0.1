@@ -89,6 +89,19 @@ path = "benches/hmac_benchmark.rs"
 harness = false
 required-features = ["ring"]
 
+
+[[bench]]
+name = "aes_benchmark"
+path = "benches/aes_benchmark.rs"
+harness = false
+required-features = ["ring"]
+
+[[bench]]
+name = "tcpls_header_decryption_benchmark"
+path = "benches/tcpls_header_decryption_benchmark.rs"
+harness = false
+required-features = ["ring"]
+
 [[bench]]
 name = "siphash_benchmark"
 path = "benches/siphash_benchmark.rs"
