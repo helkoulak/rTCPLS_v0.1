@@ -84,6 +84,12 @@ harness = false
 required-features = ["ring"]
 
 [[bench]]
+name = "hmac_benchmark"
+path = "benches/hmac_benchmark.rs"
+harness = false
+required-features = ["ring"]
+
+[[bench]]
 name = "siphash_benchmark"
 path = "benches/siphash_benchmark.rs"
 harness = false
