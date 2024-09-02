@@ -322,7 +322,6 @@
     unreachable_pub,
     unused_import_braces,
     unused_extern_crates,
-    unused_qualifications
 )]
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
