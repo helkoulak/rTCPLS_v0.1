@@ -218,7 +218,7 @@ impl TcplsSession {
 
         Ok(conn_id)
     }
-
+    /// Store data in send buffer
     pub fn stream_send(&mut self, str_id: u16, input: &[u8], fin: bool) -> Result<usize, Error> {
 
         self.tls_conn.as_mut().unwrap().write_to = str_id;
@@ -227,7 +227,7 @@ impl TcplsSession {
         Ok(buffered)
     }
 
-    /// Flush bytes of a certain stream of a set of streams on specified byte-oriented sink.
+    /// Flush bytes of a certain stream or a set of streams on specified byte-oriented sink.
     pub fn send_on_connection(&mut self, conn_ids: Vec<u64>, flushable_streams: Option<SimpleIdHashSet>) -> Result<usize, Error> {
         let tls_conn = self.tls_conn.as_mut().unwrap();
 
@@ -264,11 +264,19 @@ impl TcplsSession {
                             break
                         },
                     };
-                    sent = match socket.write(chunk.as_slice()){
-                        Ok(sent) if sent > 0 => sent,
-                        Ok(0) => return Ok(done),
-                        _error => return Err(Error::General("Data sending on socket failed".to_string())),
-                    };
+                    sent = match socket.write(chunk.as_slice()) {
+                            Ok(0) => return Ok(done),
+                            Ok(sent) => sent,
+
+                            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.push_front(chunk);
+                               return Ok(done)
+                            },
+                            error => {
+                                return Err(Error::General("Data sending on socket failed".to_string()))
+                            },
+                        };
+
 
                     len -= sent;
                     done += sent;
@@ -279,6 +287,7 @@ impl TcplsSession {
 
             if len == 0 {
                 tls_conn.record_layer.streams.reset_stream(id as u32);
+                return Ok(done)
             }
         }
 

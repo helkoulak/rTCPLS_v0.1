@@ -27,6 +27,7 @@ struct TlsClient {
     closing: bool,
     clean_closure: bool,
     tcpls_session: TcplsSession,
+    data_buffered: bool,
 
 }
 
@@ -36,33 +37,27 @@ impl TlsClient {
             closing: false,
             clean_closure: false,
             tcpls_session: TcplsSession::new(false),
+            data_buffered: false,
         }
     }
 
     /// Handles events sent to the TlsClient by mio::Poll
     fn handle_event(&mut self, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
         let token = &ev.token();
-
+        let mut num_of_buf:u32 = 10000;
         if ev.is_readable() {
             self.do_read(recv_map, token.0 as u64);
 
-            if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() {
+            if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() && !self.data_buffered {
                 //Send three byte arrays on three streams
                 let mut id_set = SimpleIdHashSet::default();
 
-                self.send_data(vec![0u8; 60000].as_slice(), 0).expect("");
-                self.send_data(vec![1u8; 60000].as_slice(), 1).expect("");
-                self.send_data(vec![2u8; 60000].as_slice(), 2).expect("");
+                for i in 0..num_of_buf {
+                    self.send_data(vec![0u8; 64000].as_slice(), i as u16).expect("");
+                    id_set.insert(i as u64);
+                }
 
-                id_set.insert(0);
-                id_set.insert(1);
-                id_set.insert(2);
-
-
-                let mut conn_ids = Vec::new();
-                conn_ids.push(token.0 as u64);
-
-                self.tcpls_session.send_on_connection(conn_ids, Some(id_set)).expect("Sending on connection failed");
+                self.data_buffered = true;
             }
         }
 
