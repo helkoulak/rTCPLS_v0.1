@@ -266,10 +266,14 @@ impl TcplsSession {
                     };
                     sent = match socket.write(chunk.as_slice()) {
                             Ok(0) => return Ok(done),
-                            Ok(sent) => sent,
+                            Ok(sent) => {
+                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.consume_chunk(sent, chunk);
+                                sent
+                            },
 
                             Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.push_front(chunk);
+                                sent = 0;
+                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.consume_chunk(sent, chunk);
                                return Ok(done)
                             },
                             error => {
@@ -287,7 +291,6 @@ impl TcplsSession {
 
             if len == 0 {
                 tls_conn.record_layer.streams.reset_stream(id as u32);
-                return Ok(done)
             }
         }
 

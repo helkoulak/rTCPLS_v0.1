@@ -33,7 +33,6 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
     use crate::recvbuf::RecvBufMap;
-    use crate::tcpls::stream::DEFAULT_STREAM_ID;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -833,27 +832,22 @@ impl<Data> ConnectionCore<Data> {
                 return Err(e);
             }
         };
-
-
-        let mut discard = 0;
+        self.message_deframer.current_conn_id = self.common_state.conn_in_use as u64;
+        self.message_deframer.discard_threshold = deframer_buffer.calculate_discard_threshold();
         loop {
-            self.message_deframer.current_conn_id = self.common_state.conn_in_use as u64;
             let mut borrowed_buffer = deframer_buffer.borrow();
-            self.message_deframer.discard_threshold = borrowed_buffer.calculate_discard_threshold();
             self.message_deframer.used = borrowed_buffer.get_used();
-            borrowed_buffer.queue_discard(discard);
-
             let res = self.deframe(Some(&*state), &mut borrowed_buffer, Some(app_buffers));
-            discard = borrowed_buffer.pending_discard();
 
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
+                    println!("Error {:?}", e);
                     self.state = Err(e.clone());
                     self.message_deframer.calculate_discard_range();
                     deframer_buffer
-                        .discard(self.message_deframer.processed_range.start as usize,
-                                 (self.message_deframer.processed_range.end - self.message_deframer.processed_range.start) as usize);
+                        .discard(self.message_deframer.discard_range.start,
+                                 self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
                     self.message_deframer.rearrange_record_info();
                     return Err(e);
                 }
@@ -874,10 +868,10 @@ impl<Data> ConnectionCore<Data> {
                 Err(e) => {
                     self.state = Err(e.clone());
                     self.message_deframer.calculate_discard_range();
-                    if !self.message_deframer.processed_range_is_empty() {
+                    if !self.message_deframer.discard_range_is_empty() {
                         deframer_buffer
-                            .discard(self.message_deframer.processed_range.start as usize,
-                                     (self.message_deframer.processed_range.end - self.message_deframer.processed_range.start) as usize);
+                            .discard(self.message_deframer.discard_range.start,
+                                     self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
                         self.message_deframer.rearrange_record_info();
                     }
 
@@ -887,10 +881,10 @@ impl<Data> ConnectionCore<Data> {
         }
 
         self.message_deframer.calculate_discard_range();
-        if !self.message_deframer.processed_range_is_empty() {
+        if !self.message_deframer.discard_range_is_empty() {
             deframer_buffer
-                .discard(self.message_deframer.processed_range.start as usize,
-                         (self.message_deframer.processed_range.end - self.message_deframer.processed_range.start) as usize);
+                .discard(self.message_deframer.discard_range.start,
+                         self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
             self.message_deframer.rearrange_record_info();
         }
 

@@ -9,7 +9,7 @@ use std::prelude::rust_2018::ToString;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_PAYLOAD};
+use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
 #[cfg(feature = "std")]
 use crate::msgs::message::MAX_WIRE_SIZE;
 use crate::record_layer::{Decrypted, RecordLayer};
@@ -36,10 +36,12 @@ pub struct MessageDeframer {
     joining_hs: Option<HandshakePayloadMeta>,
 
     /// Info of records delivered
-    pub(crate) record_info: SimpleIdHashMap<BTreeMap<u64, RangeBufInfo>>,
+    pub(crate) record_info: SimpleIdHashMap<BTreeMap<usize, RangeBufInfo>>,
 
-    /// Range of offsets of processed data in deframer buffer.
-    pub(crate) processed_range: Range<u64>,
+    pub(crate) processed_ranges: SimpleIdHashMap<Vec<Range<usize>>>,
+
+    /// Range of dicard area in deframer buffer.
+    pub(crate) discard_range: Range<usize>,
 
     ///Indicates if records are received out of order
     pub(crate) out_of_order: bool,
@@ -286,26 +288,26 @@ impl MessageDeframer {
         // For records that decrypt as `Handshake`, we keep the current state of the joined
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
-
             start = match self.record_info.contains_key(&conn_id) &&
                 self.record_info.get(&conn_id)
                     .map_or(true, |m| !m.is_empty()) {
-                false => 0,
+                false =>  self.processed_ranges.get(&conn_id)
+                    .and_then(|ranges| ranges.last()).map(|range| range.end).unwrap_or(0),
                 true => match self.out_of_order {
                     true => {
                         for (offset, info) in self.record_info.get(&conn_id).unwrap().iter() {
                             if app_buffers.get(info.id).unwrap().next_recv_pkt_num == info.chunk_num && !info.processed {
-                                end = *offset as usize;
+                                end = *offset;
                                 break
                             } else {
-                                end = *offset as usize + info.len;
+                                end = *offset + info.len;
                                 continue
                             }
                         }
                         end
                     }
                     false => {
-                        end = *self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().0 as usize
+                        end = *self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().0
                             + self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().1.len;
                         end
                     },
@@ -341,7 +343,7 @@ impl MessageDeframer {
             //Create an info object for the received record
             self.record_info.entry(conn_id)
                 .or_insert_with(BTreeMap::new)
-                .insert(start as u64,  RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, false));
+                .insert(start,  RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, false));
 
             let version_is_tls13 = matches!(negotiated_version, Some(ProtocolVersion::TLSv1_3));
             let allowed_plaintext = match m.typ {
@@ -371,15 +373,17 @@ impl MessageDeframer {
                 } = m;
                 let raw_payload_slice = RawSlice::from(&*payload);
                 // This is unencrypted. We check the contents later.
-                buffer.queue_discard(0);
+               /* buffer.queue_discard(0);*/
                 let message = InboundPlainMessage {
                     typ,
                     version,
                     payload: buffer.take(raw_payload_slice),
                 };
                 self.record_info.get_mut(&conn_id).unwrap()
-                    .get_mut(&(start as u64))
-                    .unwrap().processed = true;
+                    .remove(&start);
+                self.processed_ranges.entry(conn_id)
+                    .or_insert_with(Vec::new)
+                    .push(Range::from(start..end));
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -391,7 +395,7 @@ impl MessageDeframer {
             // Consider header protection in case dec/enc state is active
             if record_layer.is_decrypting() && m.payload.len() > TCPLS_HEADER_SIZE &&
                 !self.record_info.get_mut(&conn_id).unwrap()
-                .get(&(start as u64)).unwrap().header_decoded {
+                .get(&start).unwrap().header_decoded {
 
                 // Take the LSBs of calculated tag as input sample for hash function
                 let sample = m.payload.rchunks(tag_len).next().unwrap();
@@ -402,7 +406,7 @@ impl MessageDeframer {
                     );
                 //Update record info if header is present
                 self.record_info.get_mut(&conn_id).unwrap()
-                    .insert(start as u64, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, true)
+                    .insert(start, RangeBufInfo::from(hdr_decoded.chunk_num, hdr_decoded.stream_id, end - start, true)
                     );
                 
                 if app_buffers.get_or_create(hdr_decoded.stream_id as u64, None).next_recv_pkt_num != hdr_decoded.chunk_num {
@@ -440,10 +444,10 @@ impl MessageDeframer {
                 }
                 Ok(None) => {
                     self.record_info.get_mut(&conn_id).unwrap()
-                        .get_mut(&(start as u64))
-                        .unwrap().processed = true;
-
-                    buffer.queue_discard(0);
+                        .remove(&start);
+                    self.processed_ranges.entry(conn_id)
+                        .or_insert_with(Vec::new)
+                        .push(Range::from(start..end));
 
                     continue;
                 }
@@ -474,9 +478,11 @@ impl MessageDeframer {
                     app_buffers.insert_readable(record_layer.get_stream_id() as u64);
                 }
                 self.record_info.get_mut(&conn_id).unwrap()
-                    .get_mut(&(start as u64))
-                    .unwrap().processed = true;
-                buffer.queue_discard(0);
+                    .remove(&start);
+                self.processed_ranges.entry(conn_id)
+                    .or_insert_with(Vec::new)
+                    .push(Range::from(start..end));
+
                 let message = InboundPlainMessage {
                     typ,
                     version,
@@ -548,19 +554,18 @@ impl MessageDeframer {
         } else {
             // Otherwise, we've yielded the last handshake payload in the buffer, so we can
             // discard all of the bytes that we're previously buffered as handshake data.
-            let end = meta.message.end;
 
             self.joined_messages.push(Range {
                 start: meta.message.start,
                 end: meta.message.end,
             });
 
-            //Mark the range of the joined message as processed for discarding it later
-            self.mark_as_processed();
+            //Delete record_info struct of processed records of joined Handshake messages
+            self.delete_processed();
 
             self.joining_hs = None;
 
-            buffer.queue_discard(0);
+          /*  buffer.queue_discard(0);*/
         }
 
         let message = InboundPlainMessage {
@@ -688,99 +693,99 @@ impl MessageDeframer {
             return;
         }
         let conn_id = self.current_conn_id;
-        if !self.record_info.contains_key(&conn_id){
+        if !self.processed_ranges.contains_key(&conn_id){
             return;
         }
-        let mut contiguous = true;
 
-        while contiguous {
-            for (offset, info) in self.record_info.get(&conn_id).unwrap().iter() {
-                let entry_start = *offset;
-                let entry_end = *offset + info.len as u64;
-                if info.processed {
-                    // Initiate range with first processed entry found and build upon
-                    if self.processed_range.start == 0 && self.processed_range.end == 0 {
-                        self.processed_range.start = entry_start;
-                        self.processed_range.end = entry_end;
-                    }
-                    // expand to the right
-                    if entry_start == self.processed_range.end  {
-                        self.processed_range.end = entry_end;
-                    }
-                    // expand to the left
-                    if entry_end == self.processed_range.start {
-                        self.processed_range.start = entry_start;
-                    }
-                }
+        for range in self.processed_ranges.get(&conn_id).unwrap().iter() {
+            let entry_start = range.start;
+            let entry_end = range.end;
+
+            // Initiate range with first processed entry found and build upon
+            if self.discard_range.start == 0 && self.discard_range.end == 0 {
+                self.discard_range.start = entry_start;
+                self.discard_range.end = entry_end;
             }
-            contiguous = false;
+            // expand to the right
+            if entry_start == self.discard_range.end  {
+                self.discard_range.end = entry_end;
+            }
+            // expand to the left
+            if entry_end == self.discard_range.start {
+                self.discard_range.start = entry_start;
+            }
         }
-
     }
 
     pub fn rearrange_record_info(&mut self) {
         let conn_id = self.current_conn_id;
+        if self.record_info.get_mut(&conn_id).is_some(){
+            if let Some(record_map) = self.record_info.get_mut(&conn_id) {
+                let mut next_start = 0;
+                let mut keys_to_remove = Vec::new();
+                let mut entries_to_reinsert = Vec::new();
 
-        if let Some(record_map) = self.record_info.get_mut(&conn_id) {
-            let mut next_start = 0;
-            let mut keys_to_remove = Vec::new();
-            let mut entries_to_reinsert = Vec::new();
-
-            for (&key, info) in record_map.iter_mut() {
-                if key < self.processed_range.start || key >= self.processed_range.end {
-                    if key == self.processed_range.end {
-                        entries_to_reinsert.push((
-                            self.processed_range.start,
-                            RangeBufInfo {
-                                chunk_num: info.chunk_num,
-                                len: info.len,
-                                id: info.id,
-                                processed: info.processed,
-                                header_decoded: info.header_decoded,
-                            },
-                        ));
+                for (&key, info) in record_map.iter_mut() {
+                    if key < self.discard_range.start || key >= self.discard_range.end {
+                        if key == self.discard_range.end {
+                            entries_to_reinsert.push((
+                                self.discard_range.start,
+                                RangeBufInfo {
+                                    chunk_num: info.chunk_num,
+                                    len: info.len,
+                                    id: info.id,
+                                    processed: info.processed,
+                                    header_decoded: info.header_decoded,
+                                },
+                            ));
+                            keys_to_remove.push(key);
+                            next_start = self.discard_range.start + info.len;
+                        } else if key > self.discard_range.end {
+                            entries_to_reinsert.push((
+                                next_start,
+                                RangeBufInfo {
+                                    chunk_num: info.chunk_num,
+                                    len: info.len,
+                                    id: info.id,
+                                    processed: info.processed,
+                                    header_decoded: info.header_decoded,
+                                },
+                            ));
+                            keys_to_remove.push(key);
+                            next_start += info.len;
+                        }
+                    } else {
                         keys_to_remove.push(key);
-                        next_start = self.processed_range.start + info.len as u64;
-                    } else if key > self.processed_range.end {
-                        entries_to_reinsert.push((
-                            next_start,
-                            RangeBufInfo {
-                                chunk_num: info.chunk_num,
-                                len: info.len,
-                                id: info.id,
-                                processed: info.processed,
-                                header_decoded: info.header_decoded,
-                            },
-                        ));
-                        keys_to_remove.push(key);
-                        next_start += info.len as u64;
                     }
-                } else {
-                    keys_to_remove.push(key);
+                }
+
+
+                for key in keys_to_remove {
+                    record_map.remove(&key);
+                }
+
+
+                for (new_key, new_info) in entries_to_reinsert {
+                    record_map.insert(new_key, new_info);
                 }
             }
 
-
-            for key in keys_to_remove {
-                record_map.remove(&key);
-            }
-
-
-            for (new_key, new_info) in entries_to_reinsert {
-                record_map.insert(new_key, new_info);
-            }
         }
 
 
-        //Keep ranges that are outside the processed range
-        self.joined_messages.retain(|x| x.start < self.processed_range.start as usize ||
-            x.end > self.processed_range.end as usize );
 
-        self.processed_range.start = 0;
-        self.processed_range.end   = 0;
+        //Keep ranges that are outside the processed range
+        self.joined_messages.retain(|x| x.start < self.discard_range.start ||
+            x.end > self.discard_range.end );
+
+        self.processed_ranges.get_mut(&conn_id).unwrap().retain(|x| x.start < self.discard_range.start ||
+            x.end > self.discard_range.end );
+
+        self.discard_range.start = 0;
+        self.discard_range.end   = 0;
     }
 
-    pub fn mark_as_processed(&mut self){
+    /*pub fn mark_as_processed(&mut self){
         let conn_id = self.current_conn_id;
         if !self.joined_messages.is_empty() {
             for range in &self.joined_messages {
@@ -793,14 +798,29 @@ impl MessageDeframer {
                 }
             }
         }
-    }
+    }*/
 
     pub fn currently_joining_hs(&self) -> bool {
         self.joining_hs.is_some()
     }
 
-    pub fn processed_range_is_empty(&self) -> bool {
-        !((self.processed_range.end - self.processed_range.start) > 0)
+    pub fn discard_range_is_empty(&self) -> bool {
+        self.discard_range.is_empty()
+    }
+
+    pub fn delete_processed(&mut self) {
+        let conn_id = self.current_conn_id;
+        if !self.joined_messages.is_empty() {
+            for range in self.joined_messages.iter() {
+                match self.record_info.get_mut(&conn_id).unwrap().remove(&range.start) {
+                    Some(info) => self.processed_ranges.entry(conn_id)
+                        .or_insert_with(Vec::new)
+                        .push(Range::from(range.start..range.end)),
+                    None => continue,
+                };
+
+            }
+        }
     }
 }
 
@@ -901,7 +921,7 @@ pub struct DeframerVecBuffer {
     buf: Vec<u8>,
 
     /// What size prefix of `buf` is used.
-    used: usize,
+    pub used: usize,
 
     ///Maximum number of bytes the buffer can hold
     cap: usize,
@@ -911,7 +931,8 @@ impl DeframerVecBuffer {
     pub fn new(id: u64) -> DeframerVecBuffer {
         DeframerVecBuffer{
             id,
-            cap: MAX_WIRE_SIZE,
+            buf: vec![0u8; MAX_DEFRAMER_CAP],
+            cap: MAX_DEFRAMER_CAP,
             ..Default::default()
         }
     }
@@ -939,7 +960,6 @@ impl DeframerVecBuffer {
              * 0          ^ self.used
              */
 
-            //If last record stored in buffer was processed
             if (start + taken) == self.used {
                 self.used = start;
             } else {
@@ -954,7 +974,7 @@ impl DeframerVecBuffer {
     }
 
     pub fn set_deframer_cap(&mut self, cap: usize) {
-        self.cap = cap;
+        self.buf.resize(cap, 0);
     }
     fn copy_within<T>(slice: &mut [T], src: usize, dst: usize, count: usize) {
         assert!(src + count <= slice.len());
@@ -963,6 +983,9 @@ impl DeframerVecBuffer {
         unsafe {
             ptr::copy(slice.as_ptr().add(src), slice.as_mut_ptr().add(dst), count);
         }
+    }
+    pub fn calculate_discard_threshold(&self) -> usize {
+        self.cap - MAX_PAYLOAD as usize
     }
 }
 
@@ -982,10 +1005,7 @@ impl DeframerVecBuffer {
         // larger buffer size. Once the large message and any following handshake messages in
         // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
         // At this point, the buffer resizing logic below should reduce the buffer size.
-        let allow_max = match is_joining_hs {
-            true => MAX_HANDSHAKE_SIZE as usize,
-            false => self.cap,
-        };
+        let allow_max = self.buf.len();
 
         if self.used >= allow_max {
             return Err("message buffer full");
@@ -996,13 +1016,13 @@ impl DeframerVecBuffer {
         // make sure to reduce the buffer size again (large messages should be rare).
         // Also, reduce the buffer size if there are neither full nor partial messages in it,
         // which usually means that the other side suspended sending data.
-        let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
+      /*  let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
         if need_capacity > self.buf.len() {
             self.buf.resize(need_capacity, 0);
         } else if self.used == 0 || self.buf.len() > allow_max {
             self.buf.resize(need_capacity, 0);
             self.buf.shrink_to(need_capacity);
-        }
+        }*/
 
         Ok(())
     }
@@ -1084,9 +1104,7 @@ impl<'a> DeframerSliceBuffer<'a> {
         self.discard
     }
 
-    pub fn calculate_discard_threshold(&self) -> usize {
-        self.cap - MAX_PAYLOAD as usize
-    }
+
 
     pub fn get_used(&self) -> usize {
         self.used
@@ -1163,10 +1181,7 @@ impl From<&'_ [u8]> for RawSlice {
 
 trait DeframerBuffer<'a, P: AppendPayload<'a>>: FilledDeframerBuffer {
     /// Copies from the `src` buffer into this buffer at the requested index
-    ///
-    /// If `QUIC` is true the data will be copied into the *un*filled section of the buffer
-    ///
-    /// If `QUIC` is false the data will be copied into the filled section of the buffer
+
     fn copy(&mut self, payload: &P, at: usize);
 }
 
