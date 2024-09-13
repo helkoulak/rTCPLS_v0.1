@@ -842,7 +842,6 @@ impl<Data> ConnectionCore<Data> {
             let opt_msg = match res {
                 Ok(opt_msg) => opt_msg,
                 Err(e) => {
-                    println!("Error {:?}", e);
                     self.state = Err(e.clone());
                     self.message_deframer.calculate_discard_range();
                     deframer_buffer
