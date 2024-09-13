@@ -260,7 +260,6 @@ impl TcplsSession {
                     let chunk = match tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.get_chunk(){
                         Some(ch) => ch,
                         None => {
-                            len = 0;
                             break
                         },
                     };
@@ -283,6 +282,7 @@ impl TcplsSession {
 
 
                     len -= sent;
+                    if len == 0 {break}
                     done += sent;
 
 

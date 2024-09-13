@@ -288,31 +288,36 @@ impl MessageDeframer {
         // For records that decrypt as `Handshake`, we keep the current state of the joined
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
-            start = match self.record_info.contains_key(&conn_id) &&
-                self.record_info.get(&conn_id)
-                    .map_or(true, |m| !m.is_empty()) {
-                false =>  self.processed_ranges.get(&conn_id)
-                    .and_then(|ranges| ranges.last()).map(|range| range.end).unwrap_or(0),
-                true => match self.out_of_order {
-                    true => {
-                        for (offset, info) in self.record_info.get(&conn_id).unwrap().iter() {
-                            if app_buffers.get(info.id).unwrap().next_recv_pkt_num == info.chunk_num && !info.processed {
-                                end = *offset;
-                                break
+            loop {
+                let start_offset = end;
+                if let Some(records) = self.record_info.get(&conn_id) {
+                    while let Some(info) = records.get(&end) {
+                        if let Some(buffer) = app_buffers.get(info.id) {
+                            if buffer.next_recv_pkt_num == info.chunk_num && !info.processed {
+                                start = end;
+                                break;
                             } else {
-                                end = *offset + info.len;
-                                continue
+                                end = end + info.len;
                             }
                         }
-                        end
                     }
-                    false => {
-                        end = *self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().0
-                            + self.record_info.get(&conn_id).unwrap().last_key_value().unwrap().1.len;
-                        end
-                    },
-                },
-            };
+                }
+
+                if let Some(ranges) = self.processed_ranges.get(&conn_id) {
+                    while let Some(range) = ranges.iter().find(|r| r.start == end) {
+                        end = range.end;
+                    }
+                }
+
+
+                if self.record_info.get(&conn_id).is_none() && self.processed_ranges.get(&conn_id).is_none() || end == start_offset{
+                    break;
+                }
+
+            }
+
+            start = end;
+
 
 
             // Does our `buf` contain a full message?  It does if it is big enough to
@@ -560,12 +565,12 @@ impl MessageDeframer {
                 end: meta.message.end,
             });
 
-            //Delete record_info struct of processed records of joined Handshake messages
-            self.delete_processed();
+
 
             self.joining_hs = None;
 
-          /*  buffer.queue_discard(0);*/
+            //Delete record_info struct of processed records of joined Handshake messages
+            self.delete_processed();
         }
 
         let message = InboundPlainMessage {
@@ -820,6 +825,9 @@ impl MessageDeframer {
                 };
 
             }
+        }
+        if self.joining_hs.is_none() {
+            self.joined_messages.clear();
         }
     }
 }
