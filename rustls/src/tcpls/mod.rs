@@ -311,20 +311,14 @@ impl TcplsSession {
     pub fn process_received(
         &mut self,
         app_buffers: &mut RecvBufMap,
+        conn_id: usize,
     ) -> Result<IoState, Error> {
         let mut io_state = IoState::new();
-        let def_ids: Vec<u64> = self.tls_conn.as_mut().unwrap().get_deframer_ids();
-        // Loop over deframer buffers that have data received
-        for def_id in def_ids {
-            self.tls_conn.as_mut().unwrap().set_connection_in_use(def_id as u32);
-            io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(app_buffers) {
-                Ok(io_state) => io_state,
-                Err(err) => return Err(err),
-            };
-        }
-
-
-
+        self.tls_conn.as_mut().unwrap().set_connection_in_use(conn_id as u32);
+        io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(app_buffers) {
+            Ok(io_state) => io_state,
+            Err(err) => return Err(err),
+        };
         Ok(io_state)
     }
     pub fn process_join_request(&mut self, id: u64) -> Result<(), Error> {
