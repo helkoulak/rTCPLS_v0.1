@@ -326,12 +326,20 @@ impl TcplsSession {
         let mut io_state = IoState::new();
         let def_ids: Vec<u64> = self.tls_conn.as_mut().unwrap().get_deframer_ids();
         // Loop over deframer buffers that have data received
-        for def_id in def_ids {
-            self.tls_conn.as_mut().unwrap().set_connection_in_use(def_id as u32);
-            io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(app_buffers) {
-                Ok(io_state) => io_state,
-                Err(err) => return Err(err),
-            };
+        loop {
+            for def_id in &def_ids {
+                self.tls_conn.as_mut().unwrap().set_connection_in_use(*def_id as u32);
+                io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(app_buffers) {
+                    Ok(io_state) => io_state,
+                    Err(err) => return Err(err),
+                };
+            }
+            if self.tls_conn.as_mut().unwrap().received_data_processed {
+                self.tls_conn.as_mut().unwrap().received_data_processed = false;
+                continue
+            } else {
+                break
+            }
         }
 
         Ok(io_state)

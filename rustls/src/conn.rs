@@ -853,8 +853,14 @@ impl<Data> ConnectionCore<Data> {
             };
 
             let msg = match opt_msg {
-                Some(msg) => msg,
-                None => break,
+                Some(msg) => {
+                    self.common_state.received_data_processed |= true;
+                    msg
+                },
+                None => {
+                    self.common_state.received_data_processed |= false;
+                    break
+                },
             };
 
             if msg.typ == ContentType::ApplicationData {

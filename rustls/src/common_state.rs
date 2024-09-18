@@ -64,6 +64,8 @@ pub struct CommonState {
 
     queued_key_update_message: Option<Vec<u8>>,
 
+    pub received_data_processed: bool,
+
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
@@ -100,6 +102,7 @@ impl CommonState {
             fin: false,
             queued_key_update_message: None,
 
+            received_data_processed: false,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
