@@ -1,21 +1,21 @@
-use alloc::vec::Vec;
-use core::ops::Range;
-use core::slice::SliceIndex;
-use std::collections::{BTreeMap, hash_map};
-#[cfg(feature = "std")]
-use std::io;
-use std::{println, ptr, vec};
-use std::prelude::rust_2018::ToString;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
-use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
 #[cfg(feature = "std")]
 use crate::msgs::message::MAX_WIRE_SIZE;
+use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
 use crate::record_layer::{Decrypted, RecordLayer};
 use crate::recvbuf::{RecvBuf, RecvBufMap};
-use crate::tcpls::frame::{TCPLS_HEADER_SIZE, TcplsHeader};
+use crate::tcpls::frame::{TcplsHeader, TCPLS_HEADER_SIZE};
 use crate::tcpls::stream::SimpleIdHashMap;
+use alloc::vec::Vec;
+use core::ops::Range;
+use core::slice::SliceIndex;
+use std::collections::{hash_map, BTreeMap};
+#[cfg(feature = "std")]
+use std::io;
+use std::prelude::rust_2018::ToString;
+use std::{ptr, vec};
 
 use super::codec::Codec;
 
@@ -310,7 +310,7 @@ impl MessageDeframer {
                     let mut next: usize = 0;
                     for (offset, info) in records.iter() {
                         if let Some(buffer) = app_buffers.get(info.id) {
-                            if buffer.next_recv_pkt_num == info.chunk_num && !info.processed {
+                            if buffer.next_recv_pkt_num == info.chunk_num {
                                 pos = Some(*offset);
                                 hdr_decrypted.chunk_num = info.chunk_num;
                                 hdr_decrypted.stream_id = info.id;
@@ -395,7 +395,7 @@ impl MessageDeframer {
                     version,
                     payload: buffer.take(raw_payload_slice),
                 };
-
+                self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                 self.processed_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(Range::from(start..end));
@@ -459,8 +459,7 @@ impl MessageDeframer {
                     ));
                 }
                 Ok(None) => {
-                    self.record_info.get_mut(&conn_id).unwrap()
-                        .remove(&start);
+                    self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                     self.processed_ranges.entry(conn_id)
                         .or_insert_with(Vec::new)
                         .push(Range::from(start..end));
@@ -711,111 +710,83 @@ impl MessageDeframer {
         if !self.processed_ranges.contains_key(&conn_id){
             return;
         }
+        let mut initial_discard_range:Range<usize> = Range::default();
+        initial_discard_range.start = self.discard_range.start;
+        initial_discard_range.end = self.discard_range.end;
+        loop {
+            for range in self.processed_ranges.get(&conn_id).unwrap().iter() {
+                let entry_start = range.start;
+                let entry_end = range.end;
 
-        for range in self.processed_ranges.get(&conn_id).unwrap().iter() {
-            let entry_start = range.start;
-            let entry_end = range.end;
+                // Initiate range with first processed entry found and build upon
+                if self.discard_range.start == 0 && self.discard_range.end == 0 {
+                    self.discard_range.start = entry_start;
+                    self.discard_range.end = entry_end;
+                    continue
+                }
+                // expand to the right
+                if entry_start == self.discard_range.end  {
+                    self.discard_range.end = entry_end;
+                    continue
+                }
+                // expand to the left
+                if entry_end == self.discard_range.start {
+                    self.discard_range.start = entry_start;
+                    continue
+                }
+            }
+            if initial_discard_range.start == self.discard_range.start && initial_discard_range.end == self.discard_range.end {
+                break
+            }else {
+                initial_discard_range.start = self.discard_range.start;
+                initial_discard_range.end = self.discard_range.end;
 
-            // Initiate range with first processed entry found and build upon
-            if self.discard_range.start == 0 && self.discard_range.end == 0 {
-                self.discard_range.start = entry_start;
-                self.discard_range.end = entry_end;
-            }
-            // expand to the right
-            if entry_start == self.discard_range.end  {
-                self.discard_range.end = entry_end;
-            }
-            // expand to the left
-            if entry_end == self.discard_range.start {
-                self.discard_range.start = entry_start;
             }
         }
+
     }
 
     pub fn rearrange_record_info(&mut self) {
         let conn_id = self.current_conn_id;
-        if self.record_info.get_mut(&conn_id).is_some(){
-            if let Some(record_map) = self.record_info.get_mut(&conn_id) {
-                let mut next_start = 0;
-                let mut keys_to_remove = Vec::new();
-                let mut entries_to_reinsert = Vec::new();
-
-                for (&key, info) in record_map.iter_mut() {
-                    if key < self.discard_range.start || key >= self.discard_range.end {
-                        if key == self.discard_range.end {
-                            entries_to_reinsert.push((
-                                self.discard_range.start,
-                                RangeBufInfo {
-                                    chunk_num: info.chunk_num,
-                                    plain_len: info.plain_len,
-                                    id: info.id,
-                                    processed: info.processed,
-                                    header_decrypted: info.header_decrypted,
-                                    enc_len: info.enc_len,
-                                },
-                            ));
-                            keys_to_remove.push(key);
-                            next_start = self.discard_range.start + info.plain_len;
-                        } else if key > self.discard_range.end {
-                            entries_to_reinsert.push((
-                                next_start,
-                                RangeBufInfo {
-                                    chunk_num: info.chunk_num,
-                                    plain_len: info.plain_len,
-                                    id: info.id,
-                                    processed: info.processed,
-                                    header_decrypted: info.header_decrypted,
-                                    enc_len: info.enc_len,
-                                },
-                            ));
-                            keys_to_remove.push(key);
-                            next_start += info.plain_len;
-                        }
-                    } else {
-                        keys_to_remove.push(key);
-                    }
-                }
-
-
-                for key in keys_to_remove {
-                    record_map.remove(&key);
-                }
-
-
-                for (new_key, new_info) in entries_to_reinsert {
-                    record_map.insert(new_key, new_info);
-                }
+        let discard_len = self.discard_range.end - self.discard_range.start;
+        let mut record_info_new: BTreeMap<usize, RangeBufInfo> = BTreeMap::default();
+        let mut processed_ranges_new: Vec<Range<usize>> = Vec::new();
+        if let Some(record_map) = self.record_info.get_mut(&conn_id) {
+            for (offset, info) in record_map.iter().filter(|(&offset, _)| offset < self.discard_range.start || offset >= self.discard_range.end) {
+                record_info_new.insert(
+                    match *offset >= self.discard_range.end {
+                        true => { *offset - discard_len },
+                        false => *offset,
+                    },
+                    RangeBufInfo {
+                        chunk_num: info.chunk_num,
+                        plain_len: info.plain_len,
+                        id: info.id,
+                        header_decrypted: info.header_decrypted,
+                        enc_len: info.enc_len,
+                    },
+                );
             }
-
+            *record_map = record_info_new;
         }
 
 
 
-        //Keep ranges that are outside the processed range
-        self.joined_messages.retain(|x| x.start < self.discard_range.start ||
-            x.end > self.discard_range.end );
+        if let Some(ranges) = self.processed_ranges.get_mut(&conn_id) {
+           for range in ranges.iter().filter(|&x| x.end <= self.discard_range.start || x.start >= self.discard_range.end){
+               processed_ranges_new.push(match range.end <= self.discard_range.start {
+                   true => range.start..range.end,
+                   false => range.start - discard_len..range.end - discard_len,
+               })
+           }
+            *ranges = processed_ranges_new
+        }
 
-        self.processed_ranges.get_mut(&conn_id).unwrap().retain(|x| x.start < self.discard_range.start ||
-            x.end > self.discard_range.end );
 
         self.discard_range.start = 0;
         self.discard_range.end   = 0;
     }
 
-    /*pub fn mark_as_processed(&mut self){
-        let conn_id = self.current_conn_id;
-        if !self.joined_messages.is_empty() {
-            for range in &self.joined_messages {
-                for (offset, info) in self.record_info
-                    .get_mut(&conn_id).unwrap().iter_mut().skip_while(|(offset, _)| (**offset as usize) < range.start) {
-                    if *offset == range.end as u64 {
-                        break
-                    }
-                    info.processed = true;
-                }
-            }
-        }
-    }*/
 
     pub fn currently_joining_hs(&self) -> bool {
         self.joining_hs.is_some()
@@ -1248,8 +1219,6 @@ pub(crate) struct RangeBufInfo {
     /// Length of chunk encrypted
     pub(crate) enc_len: usize,
 
-    /// If record already processed
-    pub(crate) processed: bool,
 
     pub(crate) header_decrypted: bool,
 }
@@ -1261,7 +1230,6 @@ impl RangeBufInfo {
             chunk_num,
             plain_len,
             enc_len,
-            processed: false,
             header_decrypted: header_decoded,
         }
     }

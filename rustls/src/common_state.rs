@@ -23,7 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{quic, record_layer};
+use crate::{quic, record_layer, tcpls};
 use crate::recvbuf::RecvBufMap;
 use crate::tcpls::frame::Frame;
 use crate::tcpls::outstanding_conn::OutstandingConnMap;
@@ -680,15 +680,9 @@ impl CommonState {
     }
 
 
-    /// Returns true if the caller should call [`Connection::read_tls`] as soon
+    /// Returns true if the caller should call [`tcpls::TcplsSession::recv_on_connection`] as soon
     /// as possible.
-    ///
-    /// If there is pending plaintext data to read with [`Connection::reader`],
-    /// this returns false.  If your application respects this mechanism,
-    /// only one full TLS message will be buffered by rustls.
-    ///
-    /// [`Connection::reader`]: crate::Connection::reader
-    /// [`Connection::read_tls`]: crate::Connection::read_tls
+
 
     pub fn wants_read(&self, app_buf: &RecvBufMap) -> bool {
         // We want to read more data all the time, except when we have unprocessed plaintext.
