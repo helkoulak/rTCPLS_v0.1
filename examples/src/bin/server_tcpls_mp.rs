@@ -51,6 +51,7 @@ struct TlsServer {
     tcpls_session: TcplsSession,
     total_received: usize,
     poll: mio::Poll,
+    total_streams_received: usize,
 }
 
 impl TlsServer {
@@ -68,6 +69,7 @@ impl TlsServer {
             tcpls_session: TcplsSession::new(true),
             total_received: 0,
             poll: mio::Poll::new().unwrap(),
+            total_streams_received: 0,
         }
     }
 
@@ -161,8 +163,9 @@ impl TlsServer {
                 unprocessed_len);
             stream.empty_stream();
             recv_map.remove_readable(id);
+            self.total_streams_received += 1;
         }
-
+        println!("Total streams received {}", self.total_streams_received);
     }
 
     fn calculate_sha256_hash(&mut self, data: &[u8]) -> digest::Digest {
@@ -190,7 +193,6 @@ impl TlsServer {
             return;
         }
 
-        // Read some TLS data.
         match self.tcpls_session.recv_on_connection(id as u32) {
             Err(err) => {
                 if let io::ErrorKind::WouldBlock = err.kind() {
@@ -664,9 +666,9 @@ fn main() {
 
     let config = make_config(&args, 5);
 
-    let mut listener1 = server_create_listener("0.0.0.0:8443", None);
-    let mut listener2 = server_create_listener("0.0.0.0:8444", None);
-    let mut listener3 = server_create_listener("0.0.0.0:8445", None);
+    let mut listener1 = server_create_listener("0.0.0.0:8443", Some(args.flag_port.unwrap()));
+    let mut listener2 = server_create_listener("0.0.0.0:8444", Some(args.flag_port.unwrap() + 1));
+    let mut listener3 = server_create_listener("0.0.0.0:8445", Some(args.flag_port.unwrap() + 2));
 
     let mut tcpls_server = TlsServer::new(config);
 

@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::{fs, process};
 use std::io;
 use std::io::{BufReader, Read, Write};
 use std::net::ToSocketAddrs;
 use std::ops::{Deref, DerefMut};
 use std::str;
 use std::sync::Arc;
+use std::{fs, process};
 
 use docopt::Docopt;
 use log::LevelFilter;
@@ -15,11 +15,10 @@ use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 
 use ring::digest;
-use rustls::crypto::{CryptoProvider, ring as provider};
+use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::recvbuf::RecvBufMap;
-use rustls::RootCertStore;
-use rustls::tcpls::stream::SimpleIdHashSet;
 use rustls::tcpls::TcplsSession;
+use rustls::RootCertStore;
 
 const CONNECTION1: mio::Token = mio::Token(0);
 const CONNECTION2: mio::Token = mio::Token(1);
@@ -32,7 +31,7 @@ struct TlsClient {
     clean_closure: bool,
     tcpls_session: TcplsSession,
     all_joined: bool,
-    sending_ids: SimpleIdHashSet,
+    data_sent: bool,
     poll: mio::Poll,
 }
 
@@ -43,7 +42,7 @@ impl TlsClient {
             clean_closure: false,
             tcpls_session: TcplsSession::new(false),
             all_joined: false,
-            sending_ids: SimpleIdHashSet::default(),
+            data_sent: false,
             poll: mio::Poll::new().unwrap(),
         }
     }
@@ -64,21 +63,21 @@ impl TlsClient {
                     }
                 }
 
-                if !self.sending_ids.contains(&(token.0 as u64)) &&
-                    self.tcpls_session.tcp_connections.len() == 3 {
+                if self.tcpls_session.tcp_connections.len() == 3 &&
+                    !self.data_sent
+                     {
                     self.send_data(vec![1u8; 64000].as_slice(), 0).expect("");
                     self.send_data(vec![2u8; 64000].as_slice(), 1).expect("");
                     self.send_data(vec![3u8; 64000].as_slice(), 2).expect("");
-                    // self.send_data(vec![3u8; 64000].as_slice(), 2).expect("");
+                    self.send_data(vec![3u8; 64000].as_slice(), 3).expect("");
 
                     let mut conn_ids = Vec::new();
                     conn_ids.push(0);
                     conn_ids.push(1);
                     conn_ids.push(2);
                     self.tcpls_session.send_on_connection(conn_ids, None).expect("Sending on connection failed");
-                    self.sending_ids.insert(0);
-                    self.sending_ids.insert(1);
-                    self.sending_ids.insert(2);
+                    self.data_sent = true;
+
                 }
             }
         }
@@ -269,18 +268,17 @@ impl TlsClient {
 
 
 const USAGE: &str = "
-Connects to the TLS server at hostname:PORT.  The default PORT
+Connects to the TCPLS server at hostname:PORT.  The default PORT
 is 443.  By default, this reads a request from stdin (to EOF)
-before making the connection.  --http replaces this with a
-basic HTTP GET request for /.
+before making the connection.
 
 If --cafile is not supplied, a built-in set of CA certificates
 are used from the webpki-roots crate.
 
 Usage:
-  tlsclient-mio [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
-  tlsclient-mio (--version | -v)
-  tlsclient-mio (--help | -h)
+  client_tcpls_mp [options] [--suite SUITE ...] [--proto PROTO ...] [--protover PROTOVER ...] <hostname>
+  client_tcpls_mp (--version | -v)
+  client_tcpls_mp (--help | -h)
 
 Options:
     -p, --port PORT     Connect to PORT [default: 443].
@@ -401,7 +399,7 @@ mod danger {
     use pki_types::{CertificateDer, ServerName, UnixTime};
 
     use rustls::client::danger::HandshakeSignatureValid;
-    use rustls::crypto::{CryptoProvider, verify_tls12_signature, verify_tls13_signature};
+    use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
     use rustls::DigitallySignedStruct;
 
     #[derive(Debug)]
@@ -570,17 +568,17 @@ fn main() {
 
     let mut recv_map = RecvBufMap::new();
 
-    let dest_add1 = ("0.0.0.0", 8443)
+    let dest_add1 = (args.arg_hostname.as_str(), args.flag_port.unwrap())
         .to_socket_addrs()
         .unwrap()
         .next()
         .unwrap();
-    let dest_add2 = ("0.0.0.0", 8444)
+    let dest_add2 = (args.arg_hostname.as_str(), args.flag_port.unwrap() + 1)
         .to_socket_addrs()
         .unwrap()
         .next()
         .unwrap();
-    let dest_add3 = ("0.0.0.0", 8445)
+    let dest_add3 = (args.arg_hostname.as_str(), args.flag_port.unwrap() + 2)
         .to_socket_addrs()
         .unwrap()
         .next()

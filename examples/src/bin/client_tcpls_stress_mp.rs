@@ -573,17 +573,17 @@ fn main() {
 
     let mut recv_map = RecvBufMap::new();
 
-    let dest_add1 = ("0.0.0.0", 8443)
+    let dest_add1 = (args.arg_hostname.as_str(), args.flag_port.unwrap())
         .to_socket_addrs()
         .unwrap()
         .next()
         .unwrap();
-    let dest_add2 = ("0.0.0.0", 8444)
+    let dest_add2 = (args.arg_hostname.as_str(), args.flag_port.unwrap() + 1)
         .to_socket_addrs()
         .unwrap()
         .next()
         .unwrap();
-    let dest_add3 = ("0.0.0.0", 8445)
+    let dest_add3 = (args.arg_hostname.as_str(), args.flag_port.unwrap() + 2)
         .to_socket_addrs()
         .unwrap()
         .next()

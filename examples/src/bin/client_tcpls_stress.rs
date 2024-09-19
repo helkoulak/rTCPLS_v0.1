@@ -16,6 +16,7 @@ use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use ring::digest;
 use rustls::recvbuf::RecvBufMap;
 use rustls::RootCertStore;
+use rustls::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
 use rustls::tcpls::TcplsSession;
 use rustls::tcpls::stream::SimpleIdHashSet;
 
