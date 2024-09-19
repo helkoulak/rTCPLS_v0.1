@@ -73,8 +73,20 @@ harness = false
 required-features = ["ring"]
 
 [[bench]]
-name = "srv_clnt_single"
-path = "benches/srv_clnt_single.rs"
+name = "srv_clnt_single_stream_single_conn"
+path = "benches/srv_clnt_single_stream_single_conn.rs"
+harness = false
+required-features = ["ring"]
+
+[[bench]]
+name = "srv_clnt_multi_stream_single_conn"
+path = "benches/srv_clnt_multi_stream_single_conn.rs"
+harness = false
+required-features = ["ring"]
+
+[[bench]]
+name = "srv_clnt_multi_stream_multi_connection"
+path = "benches/srv_clnt_multi_stream_multi_connection.rs"
 harness = false
 required-features = ["ring"]
 

@@ -144,7 +144,7 @@ pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
 }
 mod bench_util;
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 200000*MAX_TCPLS_FRAGMENT_LEN;
+    let data_len= 500 * 1024 * 1024;
     let sendbuf1 = vec![1u8; data_len];
     let sendbuf2 = vec![2u8; data_len];
     let mut group = c.benchmark_group("Data_recv");
@@ -158,13 +158,14 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                        make_pair(KeyType::Rsa);
                                    do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
 
-                                   server.set_deframer_cap(0, 220000*16384);
-                                   server.set_deframer_cap(1, 220000*16384);
-                                   server.set_deframer_cap(2, 220000*16384);
+                                   server.set_deframer_cap(0, 600 * 1024 * 1024);
+                                   server.set_deframer_cap(1, 600 * 1024 * 1024);
+                                   server.set_deframer_cap(2, 600 * 1024 * 1024);
 
                                    let mut tcpls_client = TcplsSession::new(false);
                                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
+                                   tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 2);
 
                                    //Encrypt data and buffer it in send buffer
                                    tcpls_client.stream_send(1, sendbuf1.as_slice(), false).expect("Buffering in send buffer failed");
@@ -186,13 +187,13 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
 
 
                                    // Create app receive buffer
-                                   recv_svr.get_or_create(1, Some(220000*16384));
-                                   recv_svr.get_or_create(2, Some(220000*16384));
+                                   recv_svr.get_or_create(1, Some(600 * 1024 * 1024));
+                                   recv_svr.get_or_create(2, Some(600 * 1024 * 1024));
                                    (pipe, recv_svr)
                                },
 
                                                   |(ref mut pipe, recv_svr)| process_received(pipe, recv_svr, data_len as u64),
-                                                  BatchSize::SmallInput)
+                                                  BatchSize::LargeInput)
                            });
     group.finish();
 }
@@ -213,7 +214,7 @@ criterion_group! {
     config = Criterion::default()
         .measurement_time(std::time::Duration::from_secs(200))
         .with_measurement(CPUTime)
-        .sample_size(500);
+        .sample_size(10);
     targets = criterion_benchmark
 }
 criterion_main!(benches);
