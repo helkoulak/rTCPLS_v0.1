@@ -73,6 +73,12 @@ harness = false
 required-features = ["ring"]
 
 [[bench]]
+name = "encryption_tcpls_header_benchmark"
+path = "benches/encryption_tcpls_header_benchmark.rs"
+harness = false
+required-features = ["ring"]
+
+[[bench]]
 name = "srv_clnt_single_stream_single_conn"
 path = "benches/srv_clnt_single_stream_single_conn.rs"
 harness = false

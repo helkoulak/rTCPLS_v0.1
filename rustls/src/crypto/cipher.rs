@@ -389,7 +389,7 @@ impl HeaderProtector {
         Ok(out)
     }
 
-    pub(crate) fn calculate_hash(&mut self, input: &[u8]) -> [u8;8] {
+    pub fn calculate_hash(&mut self, input: &[u8]) -> [u8;8] {
         self.sip_hasher.hash(input).to_be_bytes()
     }
 
