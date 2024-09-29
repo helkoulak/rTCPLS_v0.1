@@ -12,6 +12,7 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+use alloc::vec;
 use super::{Aad, Algorithm, KeyInner, Nonce, Tag, UnboundKey, TAG_LEN};
 use crate::{constant_time, cpu, error};
 use core::ops::RangeFrom;
@@ -185,6 +186,28 @@ impl LessSafeKey {
     }
 
     #[inline]
+    pub fn seal_in_output<A>(
+        &self,
+        nonce: Nonce,
+        aad: Aad<A>,
+        in_out: & [u8],
+        output: & mut [u8],
+        offset: usize,
+    ) -> Result<(), error::Unspecified>
+    where
+        A: AsRef<[u8]>,
+    {
+        let len  = in_out[offset..].len();
+        let mut tagg = Tag([0u8; 16]);
+        self.seal_in_output_separate_tag(nonce, aad, & in_out[offset..], output.as_mut())
+            .map(|tag| tagg = tag)?;
+        for i in 0..tagg.0.len(){
+            output[len..][i] = tagg.0[i];
+        }
+        Ok(())
+    }
+
+    #[inline]
     pub fn seal_in_place_append_tag_tcpls<A, InOut>(
         &self,
         nonce: Nonce,
@@ -215,6 +238,22 @@ impl LessSafeKey {
         A: AsRef<[u8]>,
     {
         seal_in_place_separate_tag_(self, nonce, Aad::from(aad.as_ref()), in_out)
+    }
+
+
+    #[inline]
+    pub fn seal_in_output_separate_tag<A>(
+        &self,
+        nonce: Nonce,
+        aad: Aad<A>,
+        in_out: & [u8],
+        output: &mut [u8],
+    ) -> Result<Tag, error::Unspecified>
+    where
+        A: AsRef<[u8]>,
+    {
+
+        seal_in_output_separate_tag_(self, nonce, Aad::from(aad.as_ref()), in_out, output)
     }
 
     /// The key's AEAD algorithm.
@@ -303,6 +342,17 @@ pub(super) fn seal_in_place_separate_tag_(
     in_out: &mut [u8],
 ) -> Result<Tag, error::Unspecified> {
     (key.algorithm.seal)(&key.inner, nonce, aad, in_out, cpu::features())
+}
+
+#[inline]
+pub(super) fn seal_in_output_separate_tag_(
+    key: &LessSafeKey,
+    nonce: Nonce,
+    aad: Aad<&[u8]>,
+    in_out: & [u8],
+    output:& mut [u8],
+) -> Result<Tag, error::Unspecified> {
+    (key.algorithm.seal_output)(&key.inner, nonce, aad, in_out, output, cpu::features())
 }
 
 impl core::fmt::Debug for LessSafeKey {

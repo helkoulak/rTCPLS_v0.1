@@ -25,6 +25,7 @@ pub static AES_128_GCM: aead::Algorithm = aead::Algorithm {
     key_len: 16,
     init: init_128,
     seal: aes_gcm_seal,
+    seal_output: aes_gcm_seal_output,
     open: aes_gcm_open,
     open_output: aes_gcm_open_output,
     id: aead::AlgorithmID::AES_128_GCM,
@@ -35,6 +36,7 @@ pub static AES_256_GCM: aead::Algorithm = aead::Algorithm {
     key_len: 32,
     init: init_256,
     seal: aes_gcm_seal,
+    seal_output: aes_gcm_seal_output,
     open: aes_gcm_open,
     open_output:aes_gcm_open_output,
     id: aead::AlgorithmID::AES_256_GCM,
@@ -175,6 +177,120 @@ fn aes_gcm_seal(
         output.zero_from(remainder.len());
         auth.update_block(output);
         remainder.copy_from_slice(&output.as_ref()[..remainder.len()]);
+    }
+
+    Ok(finish(aes_key, auth, tag_iv))
+}
+
+fn aes_gcm_seal_output(
+    key: &aead::KeyInner,
+    nonce: Nonce,
+    aad: Aad<&[u8]>,
+    in_out: & [u8],
+    out:&mut [u8],
+    cpu_features: cpu::Features,
+) -> Result<Tag, error::Unspecified> {
+    let Key { gcm_key, aes_key } = match key {
+        aead::KeyInner::AesGcm(key) => key,
+        _ => unreachable!(),
+    };
+
+    let mut auth = gcm::Context::new(gcm_key, aad, in_out.len(), cpu_features)?;
+
+    let mut ctr = Counter::one(nonce);
+    let tag_iv = ctr.increment();
+
+    #[cfg(target_arch = "x86_64")]
+    let (mut output_remaining, input_remaining ) = {
+        if !aes_key.is_aes_hw(cpu_features) || !auth.is_avx() {
+            (out, in_out)
+        } else {
+            use crate::c;
+            let (htable, xi) = auth.inner();
+            prefixed_extern! {
+                // `HTable` and `Xi` should be 128-bit aligned. TODO: Can we shrink `HTable`? The
+                // assembly says it needs just nine values in that array.
+                fn aesni_gcm_encrypt(
+                    input: *const u8,
+                    output: *mut u8,
+                    len: c::size_t,
+                    key: &aes::AES_KEY,
+                    ivec: &mut Counter,
+                    Htable: &gcm::HTable,
+                    Xi: &mut gcm::Xi) -> c::size_t;
+            }
+            let processed = unsafe {
+                aesni_gcm_encrypt(
+                    in_out.as_ptr(),
+                    out.as_mut_ptr(),
+                    in_out.len(),
+                    aes_key.inner_less_safe(),
+                    &mut ctr,
+                    htable,
+                    xi,
+                )
+            };
+
+            (&mut out[processed..in_out.len()], &in_out[processed..])
+        }
+    };
+
+    #[cfg(target_arch = "aarch64")]
+    let in_out = {
+        if !aes_key.is_aes_hw(cpu_features) || !auth.is_clmul() {
+            in_out
+        } else {
+            let whole_block_bits = auth.in_out_whole_block_bits();
+            if whole_block_bits.as_bits() > 0 {
+                use crate::{bits::BitLength, c};
+                let (htable, xi) = auth.inner();
+                prefixed_extern! {
+                    fn aes_gcm_enc_kernel(
+                        input: *const u8,
+                        in_bits: BitLength<c::size_t>,
+                        output: *mut u8,
+                        Xi: &mut gcm::Xi,
+                        ivec: &mut Counter,
+                        key: &aes::AES_KEY,
+                        Htable: &gcm::HTable);
+                }
+                unsafe {
+                    aes_gcm_enc_kernel(
+                        in_out.as_ptr(),
+                        whole_block_bits,
+                        in_out.as_mut_ptr(),
+                        xi,
+                        &mut ctr,
+                        aes_key.inner_less_safe(),
+                        htable,
+                    )
+                }
+            }
+
+            &mut in_out[whole_block_bits.as_usize_bytes_rounded_up()..]
+        }
+    };
+
+    let (whole, remainder) = {
+        let in_out_len = input_remaining.len();
+        let whole_len = in_out_len - (in_out_len % BLOCK_LEN);
+        input_remaining.split_at(whole_len)
+    };
+    let mut output = 0;
+    for chunk in whole.chunks(CHUNK_BLOCKS * BLOCK_LEN) {
+        aes_key.ctr32_encrypt_within_out(chunk, &mut output_remaining[output..][..chunk.len()], 0.., &mut ctr, cpu_features);
+        auth.update_blocks(&output_remaining[output..][..chunk.len()]);
+        output += chunk.len();
+    }
+
+
+    if !remainder.is_empty() {
+        let mut input = Block::zero();
+        input.overwrite_part_at(0, remainder);
+        let mut output = aes_key.encrypt_iv_xor_block(ctr.into(), input, cpu_features);
+        output.zero_from(remainder.len());
+        auth.update_block(output);
+        output_remaining[whole.len()..].copy_from_slice(&output.as_ref()[..remainder.len()]);
     }
 
     Ok(finish(aes_key, auth, tag_iv))

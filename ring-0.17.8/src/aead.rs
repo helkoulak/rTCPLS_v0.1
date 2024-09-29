@@ -144,6 +144,16 @@ pub struct Algorithm {
         in_out: &mut [u8],
         cpu_features: cpu::Features,
     ) -> Result<Tag, error::Unspecified>,
+
+    seal_output: fn(
+        key: &KeyInner,
+        nonce: Nonce,
+        aad: Aad<&[u8]>,
+        in_out: & [u8],
+        out:&mut [u8],
+        cpu_features: cpu::Features,
+    ) -> Result<Tag, error::Unspecified>,
+
     open: fn(
         key: &KeyInner,
         nonce: Nonce,
