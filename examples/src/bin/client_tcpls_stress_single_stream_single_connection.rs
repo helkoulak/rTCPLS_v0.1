@@ -161,33 +161,19 @@ impl TlsClient {
 
     fn send_data(&mut self, input: &[u8], stream: u16) -> io::Result<()> {
         let mut data = Vec::new();
-        // Total length to send
-        let mut len: u64 = 0;
 
-        len += input.len() as u64;
         // Calculate the hash of input using SHA-256
         let hash = TlsClient::calculate_sha256_hash(input);
-        len += hash.algorithm().output_len() as u64;
-        len += 4;
-        // Append total length and hash value to the input to be sent to the peer
-        data.extend_from_slice(&[
-            ((len >> 56) & 0xFF) as u8,
-            ((len >> 48) & 0xFF) as u8,
-            ((len >> 40) & 0xFF) as u8,
-            ((len >> 32) & 0xFF) as u8,
-            ((len >> 24) & 0xFF) as u8,
-            ((len >> 16) & 0xFF) as u8,
-            ((len >>  8) & 0xFF) as u8,
-            (len & 0xFF) as u8,
-        ]);
+
+
         data.extend_from_slice(input);
         data.extend(vec![0x0F, 0x0F, 0x0F, 0x0F]);
         data.extend(hash.as_ref());
 
         // Print the hash as a hexadecimal string
-        println!("\n \n \n SHA-256 Hash {:?} \n Total length: {:?} \n", hash, len);
+        println!("\n \n \n SHA-256 Hash {:?} \n Total length: {:?} \n", hash, data.len());
 
-        self.tcpls_session.stream_send(stream, data.as_ref(), false).expect("buffering failed");
+        self.tcpls_session.stream_send(stream, data.as_ref()).expect("buffering failed");
 
 
         Ok(())

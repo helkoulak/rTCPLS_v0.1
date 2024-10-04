@@ -219,10 +219,9 @@ impl TcplsSession {
         Ok(conn_id)
     }
     /// Store data in send buffer
-    pub fn stream_send(&mut self, str_id: u16, input: &[u8], fin: bool) -> Result<usize, Error> {
+    pub fn stream_send(&mut self, str_id: u16, input: &[u8]) -> Result<usize, Error> {
 
         self.tls_conn.as_mut().unwrap().write_to = str_id;
-        self.tls_conn.as_mut().unwrap().fin = fin;
         let buffered = self.tls_conn.as_mut().unwrap().writer().write(input).expect("Could not write data to stream");
         Ok(buffered)
     }

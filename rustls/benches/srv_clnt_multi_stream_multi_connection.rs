@@ -165,8 +165,8 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 2);
 
                                    //Encrypt data and buffer it in send buffer
-                                   tcpls_client.stream_send(1, sendbuf1.as_slice(), false).expect("Buffering in send buffer failed");
-                                   tcpls_client.stream_send(2, sendbuf2.as_slice(), false).expect("Buffering in send buffer failed");
+                                   tcpls_client.stream_send(1, sendbuf1.as_slice()).expect("Buffering in send buffer failed");
+                                   tcpls_client.stream_send(2, sendbuf2.as_slice()).expect("Buffering in send buffer failed");
                                    let mut pipe = OtherSession::new(server);
                                    let mut conn_id: u32 = 0;
                                    let stream_ids: Vec<u32> = vec![1, 2];

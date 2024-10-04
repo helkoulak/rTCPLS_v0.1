@@ -142,10 +142,7 @@ impl TlsServer {
         for id in recv_map.readable() {
             let mut stream = recv_map.get_mut(id as u16).unwrap();
 
-            let received_len: usize = u16::from_be_bytes([stream.as_ref_consumed()[0], stream.as_ref_consumed()[1]]) as usize;
-            let unprocessed_len = stream.as_ref_consumed()[2..].len();
-
-            if received_len != unprocessed_len {
+            if !stream.complete {
                 continue
             }
 
@@ -155,12 +152,12 @@ impl TlsServer {
                 None => panic!("hash prefix does not exist"),
             };
 
-            self.tcpls_session.tcp_connections.get_mut(&conn_id).unwrap().nbr_bytes_received += unprocessed_len as u32;
-            assert_eq!(&stream.as_ref_consumed()[hash_index..], self.calculate_sha256_hash(&stream.as_ref_consumed()[2..hash_index - 4]).as_ref());
+
+            assert_eq!(&stream.as_ref_consumed()[hash_index..], self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4]).as_ref());
             print!("\n \n Bytes received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
                 id,
                 &stream.as_ref_consumed()[hash_index..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>(),
-                unprocessed_len);
+                   stream.as_ref_consumed()[..hash_index - 4].len());
             stream.empty_stream();
             recv_map.remove_readable(id);
             self.total_streams_received += 1;

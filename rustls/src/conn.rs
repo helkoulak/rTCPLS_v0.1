@@ -332,16 +332,14 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     impl<T> PlaintextSink for ConnectionCommon<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let stream_id = self.write_to;
-            let fin = self.fin;
             Ok(self
                 .core
                 .common_state
-                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext, stream_id, fin))
+                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext, stream_id))
         }
 
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let stream_id = self.write_to;
-            let fin = self.fin;
             let payload_owner: Vec<&[u8]>;
             let payload = match bufs.len() {
                 0 => return Ok(0),
@@ -358,7 +356,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
             Ok(self
                 .core
                 .common_state
-                .buffer_plaintext(payload, &mut self.sendable_plaintext, stream_id, fin))
+                .buffer_plaintext(payload, &mut self.sendable_plaintext, stream_id))
         }
 
         fn flush(&mut self) -> io::Result<()> {

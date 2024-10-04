@@ -28,6 +28,8 @@ pub struct RecvBuf {
 
     pub last_data_type_decrypted: u8,
 
+    pub complete: bool,
+
 
 }
 
@@ -168,6 +170,7 @@ impl RecvBuf {
         self.last_decrypted = 0;
         self.total_decrypted = 0;
         self.last_data_type_decrypted = 0;
+        self.complete = false;
     }
 
     pub fn empty_stream(&mut self) {
@@ -179,7 +182,7 @@ impl RecvBuf {
         self.last_decrypted = 0;
         self.last_data_type_decrypted = 0;
         self.total_decrypted = 0;
-
+        self.complete = false;
 
     }
 

@@ -496,7 +496,6 @@ impl MessageDeframer {
 
                 if typ == ContentType::ApplicationData {
                     app_buffers.insert_readable(hdr_decrypted.stream_id as u64);
-                    continue
                 }
 
                 let message = InboundPlainMessage {
