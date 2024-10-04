@@ -137,14 +137,15 @@ pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
                 pipe.sess.set_connection_in_use(*id);
                 pipe.sess.process_new_packets(app_bufs).unwrap();
             }
-            if app_bufs.get(str_id as u16).unwrap().data_length() == data_len { break }
+            if app_bufs.get(str_id as u16).unwrap().data_length() >= data_len { break }
         }
     }
 
 }
 mod bench_util;
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 500 * 1024 * 1024;
+    let data_len= 300 * MAX_TCPLS_FRAGMENT_LEN;
+    let capacity = 400 * MAX_TCPLS_FRAGMENT_LEN;
     let sendbuf1 = vec![1u8; data_len];
     let sendbuf2 = vec![2u8; data_len];
     let mut group = c.benchmark_group("Data_recv");
@@ -157,10 +158,6 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    let (mut client, mut server, mut recv_svr, mut recv_clnt) =
                                        make_pair(KeyType::Rsa);
                                    do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
-
-                                   server.set_deframer_cap(0, 600 * 1024 * 1024);
-                                   server.set_deframer_cap(1, 600 * 1024 * 1024);
-                                   server.set_deframer_cap(2, 600 * 1024 * 1024);
 
                                    let mut tcpls_client = TcplsSession::new(false);
                                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
@@ -187,8 +184,8 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
 
 
                                    // Create app receive buffer
-                                   recv_svr.get_or_create(1, Some(600 * 1024 * 1024));
-                                   recv_svr.get_or_create(2, Some(600 * 1024 * 1024));
+                                   recv_svr.get_or_create(1, Some(capacity));
+                                   recv_svr.get_or_create(2, Some(capacity));
                                    (pipe, recv_svr)
                                },
 
@@ -212,9 +209,9 @@ criterion_main!(benches);*/
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .measurement_time(std::time::Duration::from_secs(200))
+        .measurement_time(std::time::Duration::from_secs(1))
         .with_measurement(CPUTime)
-        .sample_size(10);
+        .sample_size(5000);
     targets = criterion_benchmark
 }
 criterion_main!(benches);

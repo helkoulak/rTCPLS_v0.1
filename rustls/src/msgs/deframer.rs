@@ -422,7 +422,7 @@ impl MessageDeframer {
                         &record_layer.decrypt_header(sample, &m.payload[..TCPLS_HEADER_SIZE]).expect("decrypting header failed")
                     );
 
-                if app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).next_recv_pkt_num != hdr_decrypted.chunk_num {
+                  if app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).next_recv_pkt_num != hdr_decrypted.chunk_num {
                     self.record_info.entry(conn_id)
                         .or_insert_with(BTreeMap::new)
                         .insert(start,  RangeBufInfo::from(hdr_decrypted.chunk_num, hdr_decrypted.stream_id,
@@ -489,13 +489,15 @@ impl MessageDeframer {
             // If it's not a handshake message, just return it -- no joining necessary.
 
             if typ != ContentType::Handshake {
-                if typ == ContentType::ApplicationData {
-                    app_buffers.insert_readable(hdr_decrypted.stream_id as u64);
-                }
                 self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                 self.processed_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(Range::from(start..end));
+
+                if typ == ContentType::ApplicationData {
+                    app_buffers.insert_readable(hdr_decrypted.stream_id as u64);
+                    continue
+                }
 
                 let message = InboundPlainMessage {
                     typ,
