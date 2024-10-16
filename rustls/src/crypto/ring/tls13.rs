@@ -404,7 +404,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         recv_buf.total_decrypted += payload_len_no_type;
         recv_buf.offset += payload_len_no_type as u64;
         recv_buf.last_data_type_decrypted = msg.typ.into();
-        recv_buf.next_recv_pkt_num += 1;
+
         Ok(InboundOpaqueMessage::new(msg.typ, ProtocolVersion::TLSv1_3, match msg.typ {
             ContentType::ApplicationData => {
                 if recv_buf.as_ref()[current_offset as usize..][type_pos - 1] == 3{

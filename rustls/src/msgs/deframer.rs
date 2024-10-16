@@ -541,7 +541,13 @@ impl MessageDeframer {
 
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
-                HandshakePayloadState::Continue => continue,
+                HandshakePayloadState::Continue => {
+                    self.processed_ranges
+                        .entry(conn_id)
+                        .or_insert_with(Vec::new)
+                        .push(Range::from(start..end));
+                    continue
+                },
             }
         };
 
@@ -570,17 +576,17 @@ impl MessageDeframer {
             // Otherwise, we've yielded the last handshake payload in the buffer, so we can
             // discard all of the bytes that we're previously buffered as handshake data.
 
-            self.joined_messages.push(Range {
-                start: meta.message.start,
-                end: meta.message.end,
-            });
+            self.processed_ranges
+                .entry(conn_id)
+                .or_insert_with(Vec::new)
+                .push(Range::from(meta.message.start..meta.message.end));
 
 
 
             self.joining_hs = None;
 
             //Delete record_info struct of processed records of joined Handshake messages
-            self.delete_processed();
+           // self.delete_processed();
         }
 
         let message = InboundPlainMessage {

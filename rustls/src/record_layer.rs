@@ -156,6 +156,7 @@ impl RecordLayer {
         let want_close_before_decrypt = read_seq == SEQ_SOFT_LIMIT;
 
         let encrypted_len = encr.payload.len();
+        recv_buf.next_recv_pkt_num += 1;
         match self
             .message_decrypter
             .decrypt_tcpls(encr, read_seq, self.stream_in_use as u32, recv_buf, &tcpls_header)
