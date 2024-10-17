@@ -932,7 +932,7 @@ impl ServerExtension {
     pub fn make_tcpls_tokens(tokens_count: usize, secure_random: &dyn SecureRandom) -> Vec<TcplsToken> {
         let mut tokens: Vec<TcplsToken> = Vec::with_capacity(tokens_count);
         //Generate tokens
-        for i in 1..=tokens_count {
+        for _i in 1..=tokens_count {
             tokens.push(TcplsToken::random(secure_random).unwrap());
         }
        tokens

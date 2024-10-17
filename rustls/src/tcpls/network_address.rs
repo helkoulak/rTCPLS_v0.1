@@ -30,7 +30,7 @@ impl AddressMap {
     }
 
     pub fn build_local_address_list(&mut self) {
-        let mut v = 0;
+        let mut v;
         match get_if_addrs() {
             Ok(ifaces) => {
                 for iface in ifaces {
@@ -39,7 +39,7 @@ impl AddressMap {
                     } else {
                         v = 6;
                     }
-                    let bytes_add = AddressMap::ip_addr_to_bytes(iface.ip()).unwrap();
+                    let bytes_add = Self::ip_addr_to_bytes(iface.ip()).unwrap();
                     let new_add = Frame::NewAddress {
                         port: 0,
                         address: bytes_add,
@@ -68,7 +68,7 @@ impl AddressMap {
 
 
 
-    fn is_private_ip(ip: &IpAddr) -> bool {
+    /*fn is_private_ip(ip: &IpAddr) -> bool {
         match ip {
             IpAddr::V4(v4) => {
                 let octets = v4.octets();
@@ -82,7 +82,7 @@ impl AddressMap {
                 v6.segments()[0] & 0xfe00 == 0xfc00
             }
         }
-    }
+    }*/
 
     pub fn add_new_peer_address(&mut self, address: Frame) {
         if !self.peer_addresses.contains(&address) {

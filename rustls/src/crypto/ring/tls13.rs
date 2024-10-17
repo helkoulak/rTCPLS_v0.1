@@ -2,13 +2,13 @@ use alloc::boxed::Box;
 use std::prelude::rust_2018::ToString;
 use std::vec;
 
-use ring::rand::SecureRandom;
+
 
 use crate::crypto::cipher::{make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
-use crate::msgs::codec::Codec;
+
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload};
 use crate::recvbuf::RecvBuf;
@@ -88,7 +88,6 @@ fn unpad_tls13_from_slice(v: &mut [u8]) -> (ContentType, usize) {
                 v[last] = 0x00;
                 return (typ, last)
             },
-            _ => return (ContentType::Unknown(0), last),
         }
     }
 }
@@ -283,13 +282,13 @@ impl MessageEncrypter for Tls13MessageEncrypter {
                 payload.extend_from_slice(vec![0u8; 4].as_slice());
                 let mut b =
                     octets::OctetsMut::with_slice_at_offset(payload.as_mut(), plain_len + TCPLS_HEADER_SIZE);
-                header.encode(&mut b).unwrap();
+                header.encode(&mut b)?;
                 b.put_bytes(&msg.typ.to_array()).unwrap();
-                ()
+
             },
             None => {
                 payload.extend_from_slice(&msg.typ.to_array());
-                ()
+
             },
         }
 
@@ -301,11 +300,10 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         // Take the LSBs of calculated tag as input sample for hash function
         let sample = payload.as_mut_tcpls_payload().rchunks(tag_len).next().unwrap();
 
-        let mut i = 0;
+
         // Calculate hash(sample) XOR TCPLS header
-        for byte in header_encrypter.calculate_hash(sample){
+        for (i, byte) in header_encrypter.calculate_hash(sample).into_iter().enumerate(){
             payload.as_mut_tcpls_header()[i] ^= byte;
-            i += 1;
         }
 
         Ok(OutboundOpaqueMessage::new(
@@ -371,7 +369,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         }
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq, stream_id).0);
-        let aad = aead::Aad::from(make_tls13_aad_tcpls(payload.len(), &tcpls_header));
+        let aad = aead::Aad::from(make_tls13_aad_tcpls(payload.len(), tcpls_header));
 
 
 
@@ -385,7 +383,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             return Err(Error::PeerSentOversizedRecord);
         }
 
-        let mut type_pos = 0;
+        let type_pos;
         (msg.typ, type_pos)  = unpad_tls13_from_slice(&mut recv_buf.get_mut()[..plain_len]);
 
         let payload_len_no_type = recv_buf.get_mut()[..type_pos].len();
@@ -407,7 +405,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         Ok(InboundOpaqueMessage::new(msg.typ, ProtocolVersion::TLSv1_3, match msg.typ {
             ContentType::ApplicationData => {
-                if recv_buf.as_ref()[current_offset as usize..][type_pos - 1] == 3{
+                if recv_buf.get_ref()[current_offset as usize..][type_pos - 1] == 3{
                     recv_buf.complete = true;
                 }
                 recv_buf.get_mut_consumed()
@@ -503,5 +501,3 @@ impl KeyType for Len {
         self.0
     }
 }
-
-const TCPLS_HEADER_OFFSET: usize = 5;

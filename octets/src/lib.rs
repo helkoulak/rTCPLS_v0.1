@@ -304,7 +304,7 @@ impl<'a> Octets<'a> {
     /// 2-bits length indicator at the end of the last byte.
     pub fn get_varint_reverse(&mut self) -> Result<u64> {
         if_unlikely!{ self.off == 0 => {
-            return Err(BufferError::BufferProtocolError);
+            Err(BufferError::BufferProtocolError)
         } else {
             self.off -= 1;
             // This checks buffer size while we don't need it.
@@ -324,8 +324,8 @@ impl<'a> Octets<'a> {
 
                 _ => unreachable!(),
             };
-            return Ok(out);
-        }};
+            Ok(out)
+        }}
     }
 
     /// Reads `len` bytes from the current offset without copying and advances
@@ -349,7 +349,7 @@ impl<'a> Octets<'a> {
     /// read without copying.
     pub fn get_bytes_reverse(&mut self, len: usize) -> Result<Octets<'a>> {
         if_unlikely!{ self.off < len => {
-            return Err(BufferError::BufferProtocolError);
+            Err(BufferError::BufferProtocolError)
         } else {
             self.off -= len;
             let out = Octets {
@@ -357,8 +357,8 @@ impl<'a> Octets<'a> {
                 off: 0,
             };
 
-            return Ok(out);
-        }};
+            Ok(out)
+        }}
     }
 
     /// Reads `len` + 1 bytes from the current offset without copying and advances

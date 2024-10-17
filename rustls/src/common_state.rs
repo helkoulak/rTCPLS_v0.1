@@ -15,7 +15,7 @@ use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{CertificateChain, TcplsToken};
 use crate::msgs::message::{
-    Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage,
+    Message, MessagePayload, OutboundChunks, OutboundPlainMessage,
     PlainMessage,
 };
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
@@ -23,7 +23,7 @@ use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
-use crate::{quic, record_layer, tcpls};
+use crate::{quic, record_layer};
 use crate::recvbuf::RecvBufMap;
 use crate::tcpls::frame::Frame;
 use crate::tcpls::outstanding_conn::OutstandingConnMap;
@@ -460,9 +460,9 @@ impl CommonState {
 
     // Put m into sendable_tls for writing.
 
-    fn queue_tls_message(&mut self, m: OutboundOpaqueMessage) {
+   /* fn queue_tls_message(&mut self, m: OutboundOpaqueMessage) {
         self.record_layer.streams.get_or_create(DEFAULT_STREAM_ID).unwrap().send.append(m.encode());
-    }
+    }*/
 
     /// Send a raw TLS message, fragmenting it if needed.
     pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool, id: u16) {
@@ -873,7 +873,7 @@ pub struct IoState {
 
 impl IoState {
     pub fn new() -> Self {
-        IoState {
+        Self {
             tls_bytes_to_write: 0,
             plaintext_bytes_to_read: 0,
             peer_has_closed: false,

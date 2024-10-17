@@ -1,8 +1,9 @@
+use alloc::vec;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
 #[cfg(feature = "std")]
-use crate::msgs::message::MAX_WIRE_SIZE;
+
 use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
 use crate::record_layer::{Decrypted, RecordLayer};
 use crate::recvbuf::{RecvBuf, RecvBufMap};
@@ -14,8 +15,8 @@ use core::slice::SliceIndex;
 use std::collections::{hash_map, BTreeMap};
 #[cfg(feature = "std")]
 use std::io;
-use std::prelude::rust_2018::ToString;
-use std::{ptr, vec};
+
+use core::ptr;
 
 use super::codec::Codec;
 
@@ -273,10 +274,10 @@ impl MessageDeframer {
             return Ok(None);
         }
 
-        let mut start = 0;
+        let mut start;
         let tag_len = record_layer.get_tag_length();
         let mut hdr_decrypted = TcplsHeader::default();
-        let mut end = 0;
+        let mut end;
         let conn_id = self.current_conn_id;
 
 
@@ -330,7 +331,7 @@ impl MessageDeframer {
 
 
                     match pos {
-                        None => std::cmp::max(next, last_processed_end),
+                        None => core::cmp::max(next, last_processed_end),
                         Some(p) => p,
                     }
                 }
@@ -398,7 +399,7 @@ impl MessageDeframer {
                 self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                 self.processed_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
-                    .push(Range::from(start..end));
+                    .push(start..end);
                 return Ok(Some(Deframed {
                     want_close_before_decrypt: false,
                     aligned: true,
@@ -462,7 +463,7 @@ impl MessageDeframer {
                     self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                     self.processed_ranges.entry(conn_id)
                         .or_insert_with(Vec::new)
-                        .push(Range::from(start..end));
+                        .push(start..end);
 
                     continue;
                 }
@@ -492,7 +493,7 @@ impl MessageDeframer {
                 self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
                 self.processed_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
-                    .push(Range::from(start..end));
+                    .push(start..end);
 
                 if typ == ContentType::ApplicationData {
                     app_buffers.insert_readable(hdr_decrypted.stream_id as u64);
@@ -545,7 +546,7 @@ impl MessageDeframer {
                     self.processed_ranges
                         .entry(conn_id)
                         .or_insert_with(Vec::new)
-                        .push(Range::from(start..end));
+                        .push(start..end);
                     continue
                 },
             }
@@ -579,7 +580,7 @@ impl MessageDeframer {
             self.processed_ranges
                 .entry(conn_id)
                 .or_insert_with(Vec::new)
-                .push(Range::from(meta.message.start..meta.message.end));
+                .push(meta.message.start..meta.message.end);
 
 
 
@@ -637,7 +638,7 @@ impl MessageDeframer {
                 // Write it into the buffer and update the metadata.
 
                 match recv_buf {
-                    Some(ref buf) => {},
+                    Some(_buf) => {},
                     None => buffer.copy(&payload, meta.payload.end),
                 }
 
@@ -660,22 +661,22 @@ impl MessageDeframer {
                 // Write it into the buffer and create the metadata.
 
                 let expected_len = match recv_buf {
-                    Some(ref buf) => payload_size(buf.get_at_index(buf.offset as usize - buf.last_decrypted, buf.last_decrypted))?,
+                    Some(buf) => payload_size(buf.get_at_index(buf.offset as usize - buf.last_decrypted, buf.last_decrypted))?,
                     None => payload.size(buffer)?,
                 };
 
                 match recv_buf {
-                    Some(ref buf) => {},
+                    Some(_buf) => {},
                     None => buffer.copy(&payload, 0),
                 };
 
                 self.joining_hs
                     .insert(HandshakePayloadMeta {
-                        message: Range { start: start, end },
+                        message: Range { start, end },
                         payload: Range {
                             start: 0,
                             end: match recv_buf {
-                                Some(ref buf) => buf.last_decrypted,
+                                Some(buf) => buf.last_decrypted,
                                 None => payload.len(),
                             } ,
                         },
@@ -692,7 +693,7 @@ impl MessageDeframer {
             Some(len) if len <= meta.payload.len() => HandshakePayloadState::Complete(len),
 
             _ => match recv_buf {
-                Some(buf) => match buffer.len() > meta.message.end {
+                Some(_buf) => match buffer.len() > meta.message.end {
 
                     true => HandshakePayloadState::Continue,
                     false => HandshakePayloadState::Blocked,
@@ -717,9 +718,7 @@ impl MessageDeframer {
         if !self.processed_ranges.contains_key(&conn_id){
             return;
         }
-        let mut initial_discard_range:Range<usize> = Range::default();
-        initial_discard_range.start = self.discard_range.start;
-        initial_discard_range.end = self.discard_range.end;
+        let mut initial_discard_range: Range::<usize> = { self.discard_range.start.. self.discard_range.end};
         loop {
             for range in self.processed_ranges.get(&conn_id).unwrap().iter() {
                 let entry_start = range.start;
@@ -813,7 +812,7 @@ impl MessageDeframer {
                 self.processed_ranges
                     .entry(conn_id)
                     .or_insert_with(Vec::new)
-                    .push(Range::from(range.start..range.end));
+                    .push(range.start..range.end);
             }
         }
 
@@ -928,8 +927,8 @@ pub struct DeframerVecBuffer {
 }
 
 impl DeframerVecBuffer {
-    pub fn new(id: u64) -> DeframerVecBuffer {
-        DeframerVecBuffer{
+    pub fn new(id: u64) -> Self {
+        Self {
             id,
             buf: vec![0u8; MAX_DEFRAMER_CAP],
             cap: MAX_DEFRAMER_CAP,
@@ -939,7 +938,7 @@ impl DeframerVecBuffer {
     /// Borrows the initialized contents of this buffer and tracks pending discard operations via
     /// the `discard` reference
     pub fn borrow(&mut self) -> DeframerSliceBuffer {
-        DeframerSliceBuffer::new(&mut self.buf[..self.used], self.used, self.cap)
+        DeframerSliceBuffer::new(&mut self.buf[..self.used], self.used)
     }
 
     /// Discard `taken` bytes from the start of our buffer.
@@ -998,7 +997,7 @@ impl DeframerVecBuffer {
     }
 
     /// Resize the internal `buf` if necessary for reading more bytes.
-    fn prepare_read(&mut self, is_joining_hs: bool) -> Result<(), &'static str> {
+    fn prepare_read(&mut self, _is_joining_hs: bool) -> Result<(), &'static str> {
         // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
         // by varying the maximum allowed buffer size here based on whether a prefix of a
         // handshake payload is currently being buffered. Given that the first read of such a
@@ -1081,17 +1080,15 @@ pub struct DeframerSliceBuffer<'a> {
     discard: usize,
     taken: usize,
     used: usize,
-    cap: usize,
 }
 
 impl<'a> DeframerSliceBuffer<'a> {
-    pub fn new(buf: &'a mut [u8], used: usize, cap: usize) -> Self {
+    pub fn new(buf: &'a mut [u8], used: usize) -> Self {
         Self {
             buf,
             discard: 0,
             taken: 0,
             used,
-            cap,
         }
     }
 
@@ -1231,8 +1228,8 @@ pub(crate) struct RangeBufInfo {
 }
 
 impl RangeBufInfo {
-    pub(crate) fn from(chunk_num: u32, id: u16, plain_len: usize, enc_len: usize, header_decoded: bool) -> RangeBufInfo {
-        RangeBufInfo {
+    pub(crate) fn from(chunk_num: u32, id: u16, plain_len: usize, enc_len: usize, header_decoded: bool) -> Self {
+        Self {
             id,
             chunk_num,
             plain_len,
@@ -1312,19 +1309,14 @@ const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
 /// service.
 const MAX_HANDSHAKE_SIZE: u32 = 0xffff;
 
-
-#[cfg(feature = "std")]
-const READ_SIZE: usize = 4096;
-
-
 #[derive(Default)]
 pub(crate) struct MessageDeframerMap {
     deframers: SimpleIdHashMap<DeframerVecBuffer>,
 }
 
 impl MessageDeframerMap {
-    pub(crate) fn new() -> MessageDeframerMap {
-        MessageDeframerMap {
+    pub(crate) fn new() -> Self {
+        Self {
             ..Default::default()
         }
     }
@@ -1360,6 +1352,7 @@ mod tests {
 
     use crate::crypto::cipher::PlainMessage;
     use crate::msgs::message::Message;
+    use crate::msgs::message::MAX_WIRE_SIZE;
 
     use super::*;
 

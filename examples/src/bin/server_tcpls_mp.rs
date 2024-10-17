@@ -2,10 +2,10 @@
 extern crate log;
 
 use std::{fs, io};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Read};
 use std::net;
 use std::sync::Arc;
-use std::time::Duration;
+
 
 #[macro_use]
 extern crate serde_derive;
@@ -21,7 +21,7 @@ use ring::digest;
 
 use rustls::crypto::{ring as provider, CryptoProvider};
 
-use rustls::{self, RootCertStore, tcpls};
+use rustls::{self, RootCertStore};
 
 use rustls::recvbuf::RecvBufMap;
 use rustls::server::WebPkiClientVerifier;
@@ -40,16 +40,12 @@ const LISTENER3: mio::Token = mio::Token(102);
 /// connections, and a TLS server configuration.
 struct TlsServer {
     listeners: SimpleIdHashMap<TcpListener>,
-    next_id: usize,
     tls_config: Arc<rustls::ServerConfig>,
 
     closing: bool,
     closed: bool,
-
     back: Option<TcpStream>,
-    sent_http_response: bool,
     tcpls_session: TcplsSession,
-    total_received: usize,
     poll: mio::Poll,
     total_streams_received: usize,
 }
@@ -58,16 +54,11 @@ impl TlsServer {
     fn new(cfg: Arc<rustls::ServerConfig>) -> Self {
         Self {
             listeners: SimpleIdHashMap::default(),
-
-            next_id: 0,
             tls_config: cfg,
             back: None,
-            sent_http_response: false,
-
             closing: false,
             closed: false,
             tcpls_session: TcplsSession::new(true),
-            total_received: 0,
             poll: mio::Poll::new().unwrap(),
             total_streams_received: 0,
         }
@@ -135,12 +126,12 @@ impl TlsServer {
         }
     }
 
-    pub fn verify_received(&mut self, recv_map: &mut RecvBufMap, conn_id: u64) {
-        let mut hash_index = 0;
+    pub fn verify_received(&mut self, recv_map: &mut RecvBufMap) {
+        let mut hash_index;
 
 
         for id in recv_map.readable() {
-            let mut stream = recv_map.get_mut(id as u16).unwrap();
+            let stream = recv_map.get_mut(id as u16).unwrap();
 
             if !stream.complete {
                 continue
@@ -211,7 +202,7 @@ impl TlsServer {
         // Reading some TLS data might have yielded new TLS
         // messages to process.  Errors from this indicate
         // TLS protocol problems and are fatal.
-        let io_state = match self.tcpls_session.process_received(app_buffers) {
+        let _io_state = match self.tcpls_session.process_received(app_buffers) {
             Ok(io_state) => io_state,
             Err(err) => {
                 println!("TLS error: {:?}", err);
@@ -222,7 +213,7 @@ impl TlsServer {
     }
 
 
-    fn try_back_read(&mut self) {
+    /*fn try_back_read(&mut self) {
         if self.back.is_none() {
             return;
         }
@@ -258,7 +249,7 @@ impl TlsServer {
             }
             None => {}
         };
-    }
+    }*/
 
 
 
@@ -280,7 +271,7 @@ impl TlsServer {
     fn register(&mut self, app_buf: &RecvBufMap, token: Token) {
         let event_set = self.event_set(app_buf, token.0 as u64 );
 
-        let mut socket = self.tcpls_session.get_socket(token.0 as u64);
+        let socket = self.tcpls_session.get_socket(token.0 as u64);
 
         match self.poll.registry()
             .register(socket, token, event_set) {
@@ -342,9 +333,9 @@ impl TlsServer {
         }
     }
 
-    fn is_closed(&self) -> bool {
+    /*fn is_closed(&self) -> bool {
         self.closed
-    }
+    }*/
 
     pub(crate) fn process_join_reponse(&mut self, id: u64) {
         match self.tcpls_session
@@ -359,8 +350,7 @@ impl TlsServer {
             Ok(_bytes) => (),
             Err(ref error) => if error.kind() == io::ErrorKind::WouldBlock {
                 return;
-            },
-            Err(error) => panic!("{:?}", error),
+            } else { panic!("{:?}", error) },
         }
 
         match self.tcpls_session.process_join_request(id) {
@@ -453,7 +443,6 @@ pub struct Args {
     flag_require_auth: bool,
     flag_resumption: bool,
     flag_tickets: bool,
-    arg_fport: Option<u16>,
     flag_crl: Vec<String>,
 }
 
@@ -706,7 +695,7 @@ fn main() {
                 _ => {
                     tcpls_server.conn_event(event, &mut recv_map);
                     if !tcpls_server.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking(){
-                        tcpls_server.verify_received(&mut recv_map, event.token().0 as u64);
+                        tcpls_server.verify_received(&mut recv_map);
                     }
                 },
             }

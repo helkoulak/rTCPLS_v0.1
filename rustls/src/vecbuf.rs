@@ -6,7 +6,7 @@ use core::cmp;
 use std::io;
 #[cfg(feature = "std")]
 use std::io::Read;
-use std::vec;
+
 
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
@@ -24,8 +24,6 @@ pub(crate) struct ChunkVecBuffer {
     current_offset: u64,
     /// The offset immediately behind "current_offset"
     previous_offset: u64,
-    /// Amount of application bytes in plain that are buffered
-    plain_buffered: usize,
 
 }
 
@@ -37,16 +35,16 @@ impl ChunkVecBuffer {
             ..Default::default()
         }
     }
-    #[inline]
+  /*  #[inline]
     pub(crate)  fn get_current_offset(&self) -> u64 {
         self.current_offset
-    }
+    }*/
 
-    /// Output is of type u16 as maximum payload size for a TLS record is 16384 bytes
+   /* /// Output is of type u16 as maximum payload size for a TLS record is 16384 bytes
     #[inline]
     pub(crate)  fn get_offset_diff(&self) -> u16 {
         self.current_offset.saturating_sub(self.previous_offset) as u16
-    }
+    }*/
     #[inline]
     pub(crate)  fn advance_offset(&mut self, added: u64) {
         self.previous_offset = self.current_offset;
@@ -184,7 +182,7 @@ impl ChunkVecBuffer {
     }
 
 
-    pub(crate) fn consume_chunk(&mut self, mut used: usize, chunk: Vec<u8>) {
+    pub(crate) fn consume_chunk(&mut self, used: usize, chunk: Vec<u8>) {
         let mut buf = chunk;
         if used < buf.len() {
             self.chunks.push_front(buf.split_off(used));
@@ -216,21 +214,21 @@ impl ChunkVecBuffer {
 
     pub(crate) fn get_chunk(&mut self) -> Option<Vec<u8>> {
         if self.is_empty() {
-            return None ;
+            None
         } else {
             Some(self.chunks.pop_front().unwrap())
         }
     }
 
-    #[inline]
+   /* #[inline]
     pub(crate) fn pop_front(&mut self) -> Option<Vec<u8>> {
        self.chunks.pop_front()
-    }
+    }*/
 
-    #[inline]
+ /*   #[inline]
     pub(crate) fn push_front(&mut self, buf: Vec<u8>) {
         self.chunks.push_front(buf)
-    }
+    }*/
 
 }
 

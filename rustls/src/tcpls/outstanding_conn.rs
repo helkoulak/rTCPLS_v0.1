@@ -56,7 +56,7 @@ impl OutstandingConnMap {
     }
 
     pub fn wants_write(&self, id: u64) -> bool {
-        self.map.get(&id).unwrap().request_sent == false
+        !self.map.get(&id).unwrap().request_sent
     }
 
     pub fn wants_read(&self, id: u64) -> bool {

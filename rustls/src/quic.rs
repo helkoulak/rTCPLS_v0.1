@@ -28,7 +28,7 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, Protocol, DEFAULT_BUFFER_LIMIT, PlainBufsMap};
+    use crate::common_state::{CommonState, Protocol, PlainBufsMap};
     use crate::conn::{ConnectionCore, SideData};
     use crate::enums::{AlertDescription, ProtocolVersion};
     use crate::error::Error;
@@ -36,7 +36,7 @@ mod connection {
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
     use crate::recvbuf::RecvBufMap;
     use crate::server::{ServerConfig, ServerConnectionData};
-    use crate::vecbuf::ChunkVecBuffer;
+
 
     /// A QUIC client or server connection.
     #[derive(Debug)]
@@ -330,7 +330,6 @@ mod connection {
     pub struct ConnectionCommon<Data> {
         core: ConnectionCore<Data>,
         deframer_buffer: DeframerVecBuffer,
-        sendable_plaintext: ChunkVecBuffer,
     }
 
     impl<Data: SideData> ConnectionCommon<Data> {
@@ -420,7 +419,6 @@ mod connection {
             Self {
                 core,
                 deframer_buffer: DeframerVecBuffer::default(),
-                sendable_plaintext: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             }
         }
     }

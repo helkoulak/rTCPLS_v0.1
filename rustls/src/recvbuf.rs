@@ -35,28 +35,27 @@ pub struct RecvBuf {
 
 impl RecvBuf {
     /// create a new instance of RecvBuffer
-    pub fn new(stream_id: u64, capacity: Option<usize>) -> RecvBuf {
+    pub fn new(stream_id: u64, capacity: Option<usize>) -> Self {
         if let Some(capacity) = capacity {
-            let appbuf = RecvBuf {
+            Self {
                 id: stream_id,
                 data :vec![0; capacity],
                 ..Default::default()
-            };
-            appbuf
+            }
+
         } else {
-            let appbuf = RecvBuf {
+            Self {
                 id: stream_id,
                 data: vec![0; DEFAULT_BUFFER_LIMIT],
                 ..Default::default()
-            };
-            appbuf
+            }
         }
     }
     pub fn get_mut(&mut self) -> &mut [u8] {
         &mut self.data[self.offset as usize..]
     }
 
-    pub fn as_ref(&self) -> & [u8] {
+    pub fn get_ref(&self) -> & [u8] {
         &self.data
     }
 
@@ -190,7 +189,7 @@ impl RecvBuf {
     /// and returning how many bytes were written there.
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
 
-        let mut to_read_length = 0;
+        let to_read_length;
 
         match self.is_empty() {
             true => {
@@ -221,8 +220,8 @@ pub struct RecvBufMap {
 
 impl RecvBufMap {
 
-    pub fn new() -> RecvBufMap {
-        RecvBufMap {
+    pub fn new() -> Self {
+        Self {
             ..Default::default()
         }
     }
@@ -287,7 +286,7 @@ impl RecvBufMap {
     pub fn bytes_to_read(&self) -> usize {
         let mut bytes = 0;
         for stream in &self.readable {
-            bytes += self.buffers.get(&stream).unwrap().as_ref_consumed().len()
+            bytes += self.buffers.get(stream).unwrap().as_ref_consumed().len()
         }
         bytes
     }

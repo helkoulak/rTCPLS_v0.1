@@ -1,5 +1,5 @@
 use std::prelude::rust_2021::Vec;
-use std::vec;
+
 use octets::varint_len;
 use crate::{Error, InvalidMessage};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
@@ -60,13 +60,13 @@ pub enum Frame {
 }
 
 impl Frame {
-    pub fn parse(b: &mut octets::Octets) -> Result<Frame, InvalidMessage> {
+    pub fn parse(b: &mut octets::Octets) -> Result<Self, InvalidMessage> {
         let frame_type = b.get_u8_reverse().expect("failed");
 
         let frame = match frame_type {
-            0x00 => Frame::Padding,
+            0x00 => Self::Padding,
 
-            0x01 => Frame::Ping,
+            0x01 => Self::Ping,
 
             0x02..=0x03 => parse_stream_frame(frame_type, b).unwrap(),
 
@@ -82,7 +82,7 @@ impl Frame {
 
             0x09 => parse_stream_change_frame(b).unwrap(),
 
-            _ => return Err(InvalidMessage::InvalidFrameType.into()),
+            _ => return Err(InvalidMessage::InvalidFrameType),
         };
 
         Ok(frame)
@@ -92,13 +92,13 @@ impl Frame {
         let before = b.cap();
 
         match self {
-            Frame::Padding => {
+            Self::Padding => {
                 b.put_varint(0x00).unwrap();
             }
-            Frame::Ping => {
+            Self::Ping => {
                 b.put_varint(0x01).unwrap();
             }
-            Frame::Stream {
+            Self::Stream {
                 length,
                 fin,
             } => {
@@ -111,7 +111,7 @@ impl Frame {
                 };
             }
 
-            Frame::ACK {
+            Self::ACK {
                 highest_record_sn_received,
                 connection_id,
             } => {
@@ -120,17 +120,17 @@ impl Frame {
                 b.put_varint(0x04).unwrap();
             }
 
-            Frame::NewToken { token, sequence } => {
+            Self::NewToken { token, sequence } => {
                 b.put_bytes(token).unwrap();
                 b.put_varint_reverse(*sequence).unwrap();
                 b.put_varint(0x05).unwrap();
             }
 
-            Frame::ConnectionReset { connection_id } => {
+            Self::ConnectionReset { connection_id } => {
                 b.put_varint_reverse(*connection_id).unwrap();
                 b.put_varint(0x06).unwrap();
             }
-            Frame::NewAddress {
+            Self::NewAddress {
                 port,
                 address,
                 address_version,
@@ -143,12 +143,12 @@ impl Frame {
                 b.put_varint(0x07).unwrap();
             }
 
-            Frame::RemoveAddress { address_id } => {
+            Self::RemoveAddress { address_id } => {
                 b.put_varint_reverse(*address_id).unwrap();
                 b.put_varint(0x08).unwrap();
             }
 
-            Frame::StreamChange {
+            Self::StreamChange {
                 next_record_stream_id,
                 next_offset,
             } => {
@@ -156,8 +156,6 @@ impl Frame {
                 b.put_varint_reverse(*next_offset).unwrap();
                 b.put_varint(0x09).unwrap();
             }
-
-            _ => {}
         }
 
         Ok(before - b.cap())
@@ -213,7 +211,7 @@ impl Frame {
                         + varint_len(b.get_varint_reverse().unwrap())
             },
 
-            _ => return Err(InvalidMessage::InvalidFrameType.into()),
+            _ => return Err(InvalidMessage::InvalidFrameType),
         };
 
         Ok(frame_size)

@@ -66,7 +66,7 @@ impl RangeSet {
     /// When the length of a [`RangeSet`] overflows `capacity` it will remove
     /// the smallest range.
     pub fn new(capacity: usize) -> Self {
-        RangeSet::Inline(InlineRangeSet {
+        Self::Inline(InlineRangeSet {
             inner: Default::default(),
             capacity,
         })
@@ -75,8 +75,8 @@ impl RangeSet {
     /// The number of nonoverlapping ranges stored in this [`RangeSet`].
     pub fn len(&self) -> usize {
         match self {
-            RangeSet::Inline(set) => set.inner.len(),
-            RangeSet::BTree(set) => set.inner.len(),
+            Self::Inline(set) => set.inner.len(),
+            Self::BTree(set) => set.inner.len(),
         }
     }
 
@@ -85,18 +85,18 @@ impl RangeSet {
     #[inline(always)]
     fn fixup(&mut self) {
         match self {
-            RangeSet::Inline(set) if set.inner.len() == MAX_INLINE_CAPACITY => {
-                let old_inner = std::mem::take(&mut set.inner);
-                *self = RangeSet::BTree(BTreeRangeSet {
+            Self::Inline(set) if set.inner.len() == MAX_INLINE_CAPACITY => {
+                let old_inner = core::mem::take(&mut set.inner);
+                *self = Self::BTree(BTreeRangeSet {
                     inner: old_inner.into_inner().expect("At capacity").into(),
                     capacity: set.capacity,
                 });
             },
 
-            RangeSet::BTree(set) if set.inner.len() <= MIN_TO_INLINE => {
-                let old_inner = std::mem::take(&mut set.inner);
+            Self::BTree(set) if set.inner.len() <= MIN_TO_INLINE => {
+                let old_inner = core::mem::take(&mut set.inner);
                 *self = RangeSet::Inline(InlineRangeSet {
-                    inner: SmallVec::from_iter(old_inner.into_iter()),
+                    inner: SmallVec::from_iter(old_inner),
                     capacity: set.capacity,
                 })
             },
@@ -113,8 +113,8 @@ impl RangeSet {
     #[inline]
     pub fn insert(&mut self, item: Range<u64>) {
         match self {
-            RangeSet::Inline(set) => set.insert(item),
-            RangeSet::BTree(set) => set.insert(item),
+            Self::Inline(set) => set.insert(item),
+            Self::BTree(set) => set.insert(item),
         }
 
         self.fixup();
@@ -126,10 +126,10 @@ impl RangeSet {
     ) -> impl Iterator<Item = Range<u64>> + DoubleEndedIterator + ExactSizeIterator + '_
     {
         match self {
-            RangeSet::BTree(set) =>
+            Self::BTree(set) =>
                 Either::Left(set.inner.iter().map(|(k, v)| *k..*v)),
 
-            RangeSet::Inline(set) =>
+            Self::Inline(set) =>
                 Either::Right(set.inner.iter().map(|(s, e)| *s..*e)),
         }
     }
@@ -140,10 +140,10 @@ impl RangeSet {
         &self,
     ) -> impl Iterator<Item = u64> + DoubleEndedIterator + '_ {
         match self {
-            RangeSet::BTree(set) =>
+            Self::BTree(set) =>
                 Either::Left(set.inner.iter().flat_map(|(k, v)| *k..*v)),
 
-            RangeSet::Inline(set) =>
+            Self::Inline(set) =>
                 Either::Right(set.inner.iter().flat_map(|(s, e)| *s..*e)),
         }
     }
@@ -151,18 +151,18 @@ impl RangeSet {
     /// The smallest value covered by ranges in this collection.
     pub fn first(&self) -> Option<u64> {
         match self {
-            RangeSet::Inline(set) => set.inner.first().map(|(s, _)| *s),
+            Self::Inline(set) => set.inner.first().map(|(s, _)| *s),
 
-            RangeSet::BTree(set) => set.inner.first_key_value().map(|(k, _)| *k),
+            Self::BTree(set) => set.inner.first_key_value().map(|(k, _)| *k),
         }
     }
 
     /// The largest value covered by ranges in this collection.
     pub fn last(&self) -> Option<u64> {
         match self {
-            RangeSet::Inline(set) => set.inner.last().map(|(_, e)| *e - 1),
+            Self::Inline(set) => set.inner.last().map(|(_, e)| *e - 1),
 
-            RangeSet::BTree(set) =>
+            Self::BTree(set) =>
                 set.inner.last_key_value().map(|(_, v)| *v - 1),
         }
     }
@@ -170,8 +170,8 @@ impl RangeSet {
     #[inline]
     pub fn remove_until(&mut self, largest: u64) {
         match self {
-            RangeSet::Inline(set) => set.remove_until(largest),
-            RangeSet::BTree(set) => set.remove_until(largest),
+            Self::Inline(set) => set.remove_until(largest),
+            Self::BTree(set) => set.remove_until(largest),
         }
 
         self.fixup();
@@ -280,8 +280,8 @@ impl BTreeRangeSet {
             if range_overlaps(&r, &item) {
                 self.inner.remove(&r.start);
 
-                start = std::cmp::min(start, r.start);
-                end = std::cmp::max(end, r.end);
+                start = core::cmp::min(start, r.start);
+                end = core::cmp::max(end, r.end);
             }
         }
 
@@ -301,8 +301,8 @@ impl BTreeRangeSet {
             // New range overlaps with existing range in the set, merge them.
             self.inner.remove(&r.start);
 
-            start = std::cmp::min(start, r.start);
-            end = std::cmp::max(end, r.end);
+            start = core::cmp::min(start, r.start);
+            end = core::cmp::max(end, r.end);
         }
 
         if self.inner.len() >= self.capacity {
@@ -346,7 +346,7 @@ impl BTreeRangeSet {
 
 impl Default for RangeSet {
     fn default() -> Self {
-        RangeSet::Inline(InlineRangeSet {
+        Self::Inline(InlineRangeSet {
             inner: Default::default(),
             capacity: usize::MAX,
         })
@@ -371,8 +371,8 @@ impl PartialEq<Range<u64>> for RangeSet {
     }
 }
 
-impl std::fmt::Debug for RangeSet {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Debug for RangeSet {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         let ranges: Vec<Range<u64>> = self
             .iter()
             .map(|mut r| {

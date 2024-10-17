@@ -786,7 +786,7 @@ fn walk_dir(dir: &Path, cb: &impl Fn(&DirEntry)) {
         }
     }
 }
-
+#[allow(unused_variables)]
 fn ring_core_prefix() -> String {
     let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap();
 

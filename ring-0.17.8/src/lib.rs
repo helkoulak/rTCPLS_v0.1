@@ -56,7 +56,10 @@
     clippy::type_complexity,
     non_camel_case_types,
     non_snake_case,
-    unsafe_code
+    unsafe_code,
+    unused_variables,
+    unused_mut,
+    clashing_extern_declarations
 )]
 #![deny(variant_size_differences)]
 #![forbid(

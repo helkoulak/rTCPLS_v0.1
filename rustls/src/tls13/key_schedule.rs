@@ -595,11 +595,11 @@ impl KeySchedule {
         common
             .record_layer
             .set_message_decrypter(md);
-        if !common.record_layer.header_decrypter_is_set() {
-            if !early_secret || (early_secret && common.record_layer.early_data_request()) {
+        if !common.record_layer.header_decrypter_is_set() &&
+            (!early_secret || common.record_layer.early_data_request())
+        {
                 common.record_layer.set_header_decrypter(HeaderProtector::new(
                     expander.as_ref(), self.suite.aead_alg.key_len()))
-            }
         }
     }
 

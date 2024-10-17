@@ -63,7 +63,7 @@ where
         // needed to get more plaintext, which we must do if EOF has not been
 
         // hit.
-        while self.conn.wants_read(&self.recv_conn) {
+        while self.conn.wants_read(self.recv_conn) {
             if self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?.0 == 0 {
                 break;
             }

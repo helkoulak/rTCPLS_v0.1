@@ -159,7 +159,7 @@ impl RecordLayer {
         recv_buf.next_recv_pkt_num += 1;
         match self
             .message_decrypter
-            .decrypt_tcpls(encr, read_seq, self.stream_in_use as u32, recv_buf, &tcpls_header)
+            .decrypt_tcpls(encr, read_seq, self.stream_in_use as u32, recv_buf, tcpls_header)
         {
             Ok(plaintext) => {
                 self.read_seq_map.get_or_create(self.stream_in_use as u64).read_seq += 1;
@@ -388,7 +388,7 @@ pub(crate) struct Decrypted<'a> {
     pub(crate) plaintext: InboundPlainMessage<'a>,
 }
 #[derive(Default)]
-pub(crate) struct WriteSeqMap {
+pub struct WriteSeqMap {
     map: SimpleIdHashMap<WriteSeq>,
 }
 
@@ -396,7 +396,7 @@ impl WriteSeqMap {
     pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut WriteSeq {
         match self.map.entry(stream_id) {
             hash_map::Entry::Vacant(v) => {
-                v.insert(WriteSeq::new(stream_id))
+                v.insert(WriteSeq::new())
             },
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
@@ -415,7 +415,7 @@ impl WriteSeqMap {
 }
 
 #[derive(Default)]
-pub(crate) struct ReadSeqMap {
+pub struct ReadSeqMap {
     map: SimpleIdHashMap<ReadSeq>,
 }
 
@@ -423,7 +423,7 @@ impl ReadSeqMap {
     pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut ReadSeq {
         match self.map.entry(stream_id) {
             hash_map::Entry::Vacant(v) => {
-                v.insert(ReadSeq::new(stream_id))
+                v.insert(ReadSeq::new())
             },
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
@@ -442,28 +442,24 @@ impl ReadSeqMap {
 }
 #[derive(Default)]
 pub(crate) struct WriteSeq {
-    id: u64,
     write_seq: u64,
 }
 
 impl WriteSeq {
-    pub(crate) fn new(id: u64) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            id,
             write_seq: 0,
         }
     }
 
 }
 pub(crate) struct ReadSeq {
-    id: u64,
     read_seq: u64,
 }
 
 impl ReadSeq {
-    pub(crate) fn new(id: u64) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            id,
             read_seq: 0,
         }
     }

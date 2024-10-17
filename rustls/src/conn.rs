@@ -26,7 +26,7 @@ mod connection {
     use core::ops::{Deref, DerefMut};
     use std::io;
 
-    use crate::common_state::{CommonState, IoState, PlainBufsMap};
+    use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
     use crate::suites::ExtractedSecrets;
@@ -98,12 +98,12 @@ mod connection {
             }
         }
 
-        pub fn get_sendable_plain_bufs(&mut self) -> &mut PlainBufsMap {
+        /*pub(crate) fn get_sendable_plain_bufs(&mut self) -> &mut PlainBufsMap {
             match self {
                 Self::Client(conn) => &mut conn.sendable_plaintext,
                 Self::Server(conn) => &mut conn.sendable_plaintext,
             }
-        }
+        }*/
 
         /// Derives key material from the agreed connection secrets.
         ///
@@ -367,7 +367,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
-use crate::recvbuf::{ReaderAppBufs, RecvBuf, RecvBufMap};
+use crate::recvbuf::{ReaderAppBufs, RecvBufMap};
 use crate::tcpls::frame::{Frame, STREAM_FRAME_HEADER_SIZE};
 use crate::tcpls::stream::DEFAULT_STREAM_ID;
 
@@ -599,9 +599,9 @@ impl<Data> ConnectionCommon<Data> {
     {
 
         let empty_map = &mut RecvBufMap::new();
-        let mut recv = recv_map.unwrap_or_else(|| empty_map);
+        let recv = recv_map.unwrap_or(empty_map);
 
-        let until_handshaked = self.is_handshaking();
+        let _until_handshaked = self.is_handshaking();
         let mut eof = false;
         let mut wrlen = 0;
         let mut rdlen = 0;
@@ -620,7 +620,7 @@ impl<Data> ConnectionCommon<Data> {
             }
 
 
-            while !eof && self.wants_read(&recv) {
+            while !eof && self.wants_read(recv) {
                 let read_size = match self.read_tls(io) {
                     Ok(0) => {
                         eof = true;
@@ -639,7 +639,7 @@ impl<Data> ConnectionCommon<Data> {
             }
 
 
-            match self.process_new_packets(&mut recv) {
+            match self.process_new_packets(recv) {
                 Ok(_) => {}
                 Err(e) => {
                     // In case we have an alert to send describing this error,
@@ -898,39 +898,39 @@ impl<Data> ConnectionCore<Data> {
 
     ///TODO: Add process functionality to other TCPLS control frames
     fn process_tcpls_payload(&mut self, app_buffers: &mut RecvBufMap) {
-        let mut app_buffer = app_buffers.get_mut(self.common_state.record_layer.get_stream_id()).unwrap();
+        let app_buffer = app_buffers.get_mut(self.common_state.record_layer.get_stream_id()).unwrap();
         let offset = app_buffer.get_offset();
 
-        let mut b = octets::Octets::with_slice_at_offset(app_buffer.as_ref(), offset as usize);
+        let mut b = octets::Octets::with_slice_at_offset(app_buffer.get_ref(), offset as usize);
         loop {
             let decoded_frame = Frame::parse(&mut b).unwrap();
             match decoded_frame {
                 Frame::Padding => {},
                 Frame::Ping => {},
                 Frame::Stream {
-                    length,
-                    fin,
+                    length: _,
+                    fin: _,
                 } => {
                     app_buffer.offset -= STREAM_FRAME_HEADER_SIZE as u64;
                     app_buffer.total_decrypted = 0;
                     break
                 },
                 Frame::ACK {
-                    highest_record_sn_received,
-                    connection_id,
+                    highest_record_sn_received: _,
+                    connection_id: _,
                 } => {},
-                Frame::NewToken { token, sequence } => {},
-                Frame::ConnectionReset { connection_id } => {},
+                Frame::NewToken { token: _, sequence: _ } => {},
+                Frame::ConnectionReset { connection_id: _ } => {},
                 Frame::NewAddress {
-                    port,
-                    address,
-                    address_version,
-                    address_id,
+                    port: _,
+                    address: _,
+                    address_version: _,
+                    address_id: _,
                 } => {},
-                Frame::RemoveAddress { address_id } => {},
+                Frame::RemoveAddress { address_id: _ } => {},
                 Frame::StreamChange {
-                    next_record_stream_id,
-                    next_offset,
+                    next_record_stream_id: _,
+                    next_offset: _,
                 } => {},
             }
         }

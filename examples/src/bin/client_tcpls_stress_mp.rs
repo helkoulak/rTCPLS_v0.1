@@ -3,9 +3,9 @@ extern crate serde_derive;
 
 use std::{fs, process};
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::BufReader;
 use std::net::ToSocketAddrs;
-use std::ops::{Deref, DerefMut};
+
 use std::str;
 use std::sync::Arc;
 
@@ -22,9 +22,6 @@ use rustls::tcpls::stream::SimpleIdHashSet;
 use rustls::tcpls::TcplsSession;
 
 const CONNECTION1: mio::Token = mio::Token(0);
-const CONNECTION2: mio::Token = mio::Token(1);
-
-const CONNECTION3: mio::Token = mio::Token(2);
 
 
 struct TlsClient {
@@ -67,7 +64,7 @@ impl TlsClient {
                 if self.tcpls_session.tcp_connections.len() == 3 &&
                     !self.data_sent
                      {
-                         let mut num_of_buf:u32 = 10000;
+                         let num_of_buf:u32 = 10000;
                          //Send three byte arrays on three streams
                          let mut id_set = SimpleIdHashSet::default();
                          for i in 0..num_of_buf {
@@ -246,8 +243,9 @@ impl TlsClient {
             Ok(_bytes) => (),
             Err(ref error) => if error.kind() == io::ErrorKind::WouldBlock {
                 return;
+            } else {
+                panic!("{:?}", error)
             },
-            Err(error) => panic!("{:?}", error),
         }
 
         match self.tcpls_session.process_join_request(id) {
@@ -304,7 +302,6 @@ Options:
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_port: Option<u16>,
-    flag_http: bool,
     flag_verbose: bool,
     flag_protover: Vec<String>,
     flag_suite: Vec<String>,

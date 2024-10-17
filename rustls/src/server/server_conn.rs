@@ -534,7 +534,6 @@ mod connection {
     use crate::recvbuf::RecvBufMap;
     use crate::server::hs;
     use crate::suites::ExtractedSecrets;
-    use crate::tcpls::stream::DEFAULT_STREAM_ID;
     use crate::vecbuf::ChunkVecBuffer;
 
     /// Allows reading of early data in resumed TLS1.3 connections.
@@ -840,7 +839,7 @@ mod connection {
     }
 
     impl From<ConnectionCommon<ServerConnectionData>> for AcceptedAlert {
-        fn from(conn: ConnectionCommon<ServerConnectionData>) -> Self {
+        fn from(_conn: ConnectionCommon<ServerConnectionData>) -> Self {
             Self(ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)))
         }
     }
@@ -854,7 +853,7 @@ mod connection {
 
 #[cfg(feature = "std")]
 pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-use crate::recvbuf::RecvBuf;
+
 
 /// Unbuffered version of `ServerConnection`
 ///

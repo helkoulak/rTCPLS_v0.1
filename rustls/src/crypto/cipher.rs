@@ -5,7 +5,7 @@ use siphasher::sip::SipHasher;
 use std::vec;
 
 use crate::crypto::tls13::HkdfExpander;
-use ring::rand::{SecureRandom, SystemRandom};
+
 use zeroize::Zeroize;
 
 use crate::enums::{ContentType, ProtocolVersion};
@@ -317,7 +317,6 @@ pub fn make_tls12_aad(
 
 #[derive(Default)]
 pub struct HeaderProtector{
-    key: [u8;16],
     sip_hasher: SipHasher
 }
 
@@ -329,14 +328,12 @@ impl HeaderProtector {
         let mut key = [0; 16];
         key.copy_from_slice(&derived_key[..16]);
         Self{
-            key,
             sip_hasher: SipHasher::new_with_key(&key),
         }
     }
 
     pub fn new_with_key(key: [u8; 16]) -> Self {
         Self{
-            key,
             sip_hasher: SipHasher::new_with_key(&key),
         }
     }
@@ -346,16 +343,16 @@ impl HeaderProtector {
     /// `input` references the calculated tag bytes
     ///
     /// `header` references the header slice of the encrypted TLS record
-    #[inline]
+   /* #[inline]
     pub(crate) fn encrypt_in_place(
         &mut self,
         input: &[u8],
         header: &mut [u8],
     ) -> Result<(), Error> {
         self.xor_in_place(input, header)
-    }
+    }*/
 
-    fn xor_in_place(
+    /*fn xor_in_place(
         &mut self,
         input: &[u8],
         header: &mut [u8],
@@ -365,7 +362,7 @@ impl HeaderProtector {
             header[i] ^= out[i];
         }
         Ok(())
-    }
+    }*/
 
 
     #[inline]
@@ -382,7 +379,7 @@ impl HeaderProtector {
         input: &[u8],
         header: & [u8],
     ) -> Result<[u8; 8], Error> {
-        let mut out = self.calculate_hash(&input);
+        let mut out = self.calculate_hash(input);
         for i in 0..header.len() {
             out[i] ^= header[i];
         }
@@ -464,11 +461,11 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         payload_len
     }
 
-    fn encrypt_tcpls(&mut self, msg: OutboundPlainMessage, seq: u64, stream_id: u32, tcpls_header: &TcplsHeader, frame_header: Option<Frame>, header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt_tcpls(&mut self, _msg: OutboundPlainMessage, _seq: u64, _stream_id: u32, _tcpls_header: &TcplsHeader, _frame_header: Option<Frame>, _header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
         todo!()
     }
 
-    fn encrypted_payload_len_tcpls(&self, payload_len: usize, header_len: usize) -> (usize, usize) {
+    fn encrypted_payload_len_tcpls(&self, _payload_len: usize, _header_len: usize) -> (usize, usize) {
         todo!()
     }
 
@@ -489,12 +486,13 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         Err(Error::DecryptError)
     }
 
-    fn decrypt_tcpls<'a, 'b>(&mut self, msg: InboundOpaqueMessage<'a>, seq: u64, stream_id: u32, recv_buf: &'b mut RecvBuf, tcpls_header: &TcplsHeader) -> Result<InboundPlainMessage<'b>, Error> {
+    fn decrypt_tcpls<'a>(&mut self, _msg: InboundOpaqueMessage<'a>, _seq: u64, _stream_id: u32, _recv_buf: &'a mut RecvBuf, _tcpls_header: &TcplsHeader) -> Result<InboundPlainMessage<'a>, Error> {
         Err(Error::DecryptError)
     }
 }
 #[test]
 fn test_header_enc_dec() {
+    use ring::rand::SystemRandom;
     let rng = SystemRandom::new();
     const INPUT_SIZE: usize = 16;
     const HEADER_SIZE: usize = 8;
@@ -505,7 +503,6 @@ fn test_header_enc_dec() {
     rng.fill(&mut key).unwrap();
 
     let mut header_enc_dec = HeaderProtector {
-        key,
         sip_hasher:SipHasher::new_with_key(&key),
     };
 

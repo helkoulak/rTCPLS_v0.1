@@ -6,7 +6,7 @@ use crate::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + PACKET_OVERHEAD;
+
 
 
 pub struct MessageFragmenter {

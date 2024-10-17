@@ -3,11 +3,11 @@
 
 /// This module contains optional APIs for implementing TCPLS.
 use std::{io, u32, vec};
-use std::cmp::max;
-use std::io::{Read, Write};
-use std::net::{Shutdown, SocketAddr, ToSocketAddrs};
-use std::ops::DerefMut;
-use std::prelude::rust_2021::{Box, ToString, Vec};
+
+use std::io::Write;
+use std::net::{Shutdown, SocketAddr};
+
+use std::prelude::rust_2021::{ToString, Vec};
 use std::sync::Arc;
 use log::trace;
 
@@ -22,7 +22,7 @@ use crate::msgs::codec;
 use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType};
 use crate::msgs::handshake::{ClientExtension, ClientHelloPayload,
                              HandshakeMessagePayload, HandshakePayload,
-                             HasServerExtensions, KeyShareEntry, Random,
+                             KeyShareEntry, Random,
                              ServerExtension, ServerHelloPayload, SessionId};
 use crate::msgs::message::{InboundOpaqueMessage, Message, MessageError, MessagePayload, PlainMessage};
 use crate::PeerMisbehaved::{InvalidTcplsJoinToken, TcplsJoinExtensionNotFound};
@@ -77,7 +77,7 @@ impl TcplsSession {
 
         if self.next_conn_id == DEFAULT_CONNECTION_ID {
             match config {
-                Some(ref client_config) => (),
+                Some(ref _client_config) => (),
                 None => panic!("No ClientConfig supplied"),
             };
             let client_conn = ClientConnection::new(config.as_ref().unwrap().clone(), server_name.unwrap())
@@ -113,7 +113,7 @@ impl TcplsSession {
             false => (),
         };
 
-        let mut client_conn = match self.tls_conn.as_mut().unwrap() {
+        let client_conn = match self.tls_conn.as_mut().unwrap() {
             Connection::Client(conn) => conn,
             Connection::Server(_conn) => panic!("Server connection found. Client connection required")
         };
@@ -193,7 +193,7 @@ impl TcplsSession {
         listener: &mut TcpListener,
         config: Arc<ServerConfig>,
     ) -> Result<u32, io::Error> {
-        let mut conn_id= 0;
+        let conn_id;
         let (socket, _remote_add) = match listener.accept() {
             Ok((socket, remote_add)) => (socket, remote_add),
             Err(err) => return Err(err),
@@ -251,7 +251,7 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.len();
-            let mut sent = 0;
+            let mut sent;
 
 
             while len > 0 {
@@ -285,7 +285,7 @@ impl TcplsSession {
                                 tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.consume_chunk(sent, chunk);
                                return Ok(done)
                             },
-                            error => {
+                            _error => {
                                 return Err(Error::General("Data sending on socket failed".to_string()))
                             },
                         };
@@ -349,7 +349,7 @@ impl TcplsSession {
         let bytes_to_process = self.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().get_mut(&id).unwrap().used;
 
         let mut bytes: Vec<u8> = vec![0u8; bytes_to_process];
-            bytes.clone_from_slice(&mut self.tls_conn.as_mut()
+            bytes.clone_from_slice(&self.tls_conn.as_mut()
                 .unwrap()
                 .outstanding_tcp_conns
                 .as_mut_ref()
@@ -428,7 +428,7 @@ impl TcplsSession {
         });
     }
     fn handle_fake_client_hello(&mut self,  m: &Message, id: u64) -> Result<(), Error>{
-        let client_hello = match self.process_fake_client_hello(&m) {
+        let client_hello = match self.process_fake_client_hello(m) {
             Ok(chp) => chp,
             Err(e) => return Err(e),
         };
@@ -455,7 +455,7 @@ impl TcplsSession {
                     legacy_version: ProtocolVersion::TLSv1_2,
                     random: Random::from(random),
                     session_id: SessionId::empty(),
-                    cipher_suite: self.tls_conn.as_ref().unwrap().suite.unwrap().suite().clone(),
+                    cipher_suite: self.tls_conn.as_ref().unwrap().suite.unwrap().suite(),
                     compression_method: Compression::Null,
                     extensions,
                 }),
@@ -588,11 +588,7 @@ pub enum TcplsConnectionState {
 pub fn server_create_listener(local_address: &str, port: Option<u16>) -> TcpListener {
     let mut addr: SocketAddr = local_address.parse().unwrap();
 
-    match port {
-        Some(port) => addr.set_port(port),
-        None => (),
-    };
-
+    if let Some(port) = port { addr.set_port(port) }
 
     TcpListener::bind(addr).expect("cannot listen on port")
 }

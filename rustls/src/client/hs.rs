@@ -36,7 +36,7 @@ use crate::msgs::handshake::{
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
 use crate::tls13::key_schedule::KeyScheduleEarly;
-use crate::{NamedGroup, SupportedCipherSuite};
+use crate::SupportedCipherSuite;
 use crate::common_state::Protocol::Tcpls;
 use crate::tcpls::stream::DEFAULT_STREAM_ID;
 
@@ -93,9 +93,9 @@ fn find_session(
 
     found
 }
-pub(super) fn start_fake_handshake(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
+/*pub(super) fn start_fake_handshake(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
     emit_fake_client_hello(config, common)
-}
+}*/
 
 pub(super) fn start_handshake(
     server_name: ServerName<'static>,
@@ -194,7 +194,7 @@ struct ClientHelloInput {
     session_id: SessionId,
     server_name: ServerName<'static>,
 }
-fn emit_fake_client_hello(client_config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
+/*fn emit_fake_client_hello(client_config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
 
     let support_tls13 = client_config.supports_version(ProtocolVersion::TLSv1_3);
 
@@ -280,7 +280,7 @@ fn emit_fake_client_hello(client_config: &Arc<ClientConfig>, common: &mut Common
     common.send_msg(ch, false, DEFAULT_STREAM_ID);
     Ok(())
 
-}
+}*/
 
 fn emit_client_hello_for_retry(
     mut transcript_buffer: HandshakeHashBuffer,

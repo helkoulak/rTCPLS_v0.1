@@ -796,9 +796,9 @@ impl ConnectionCore<ClientConnectionData> {
 
 
 
-    pub(crate) fn join_tcp_connection(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
+   /* pub(crate) fn join_tcp_connection(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
         hs::start_fake_handshake(config, common)
-    }
+    }*/
 
     #[cfg(feature = "std")]
     pub(crate) fn is_early_data_accepted(&self) -> bool {

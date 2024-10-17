@@ -115,7 +115,7 @@ pub struct SimpleIdHasher {
     id: u64,
 }
 
-impl std::hash::Hasher for SimpleIdHasher {
+impl core::hash::Hasher for SimpleIdHasher {
     #[inline]
     fn finish(&self) -> u64 {
         self.id
@@ -134,7 +134,7 @@ impl std::hash::Hasher for SimpleIdHasher {
     }
 }
 
-type BuildStreamIdHasher = std::hash::BuildHasherDefault<SimpleIdHasher>;
+type BuildStreamIdHasher = core::hash::BuildHasherDefault<SimpleIdHasher>;
 
 pub type SimpleIdHashMap<V> = HashMap<u64, V, BuildStreamIdHasher>;
 pub type SimpleIdHashSet = HashSet<u64, BuildStreamIdHasher>;
@@ -169,7 +169,7 @@ impl StreamMap {
     pub fn new() -> Self {
         Self {
             streams: SimpleIdHashMap::default(),
-            ..StreamMap::default()
+            ..Self::default()
         }
     }
 
@@ -295,7 +295,7 @@ impl StreamMap {
 
 
     pub fn streams_to_flush(&self, flushables: &mut SimpleIdHashSet) -> StreamIter {
-        StreamIter::from(&flushables)
+        StreamIter::from(flushables)
     }
 
     /// Returns the set of ids of open streams
@@ -370,7 +370,7 @@ pub struct StreamIter {
 impl StreamIter {
     #[inline]
     pub fn from(streams: &SimpleIdHashSet) -> Self {
-        StreamIter {
+        Self {
             streams: streams.iter().copied().collect(),
             index: 0,
         }
