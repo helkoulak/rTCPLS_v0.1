@@ -237,12 +237,12 @@ impl RecvBufMap {
     }
 
 
-    pub fn get(&self, id: u16) -> Option<&RecvBuf> {
+    pub fn get(&self, id: u32) -> Option<&RecvBuf> {
         self.buffers.get(&(id as u64))
     }
 
     /// Returns the mutable stream with the given ID if it exists.
-    pub fn get_mut(&mut self, id: u16) -> Option<&mut RecvBuf> {
+    pub fn get_mut(&mut self, id: u32) -> Option<&mut RecvBuf> {
         self.buffers.get_mut(&(id as u64))
     }
 

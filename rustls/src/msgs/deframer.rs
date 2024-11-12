@@ -1,4 +1,3 @@
-use alloc::vec;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
@@ -7,8 +6,8 @@ use crate::msgs::codec;
 use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
 use crate::record_layer::{Decrypted, RecordLayer};
 use crate::recvbuf::{RecvBuf, RecvBufMap};
-use crate::tcpls::frame::{TcplsHeader, TCPLS_HEADER_SIZE};
 use crate::tcpls::stream::SimpleIdHashMap;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Range;
 use core::slice::SliceIndex;
@@ -16,9 +15,9 @@ use std::collections::{hash_map, BTreeMap};
 #[cfg(feature = "std")]
 use std::io;
 
-use core::ptr;
-
 use super::codec::Codec;
+use crate::msgs::message::{CHUNK_NUM_OFFSET, CHUNK_NUM_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
+use core::ptr;
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///
@@ -37,9 +36,9 @@ pub struct MessageDeframer {
     joining_hs: Option<HandshakePayloadMeta>,
 
     /// Info of records delivered
-    pub(crate) record_info: SimpleIdHashMap<BTreeMap<usize, RangeBufInfo>>,
+    pub(crate) unproc_ranges: SimpleIdHashMap<Vec<Range<usize>>>,
 
-    pub(crate) processed_ranges: SimpleIdHashMap<Vec<Range<usize>>>,
+    pub(crate) proc_ranges: SimpleIdHashMap<Vec<Range<usize>>>,
 
     /// Range of dicard area in deframer buffer.
     pub(crate) discard_range: Range<usize>,
@@ -56,7 +55,6 @@ pub struct MessageDeframer {
 }
 
 impl MessageDeframer {
-
     pub fn pop_unbuffered<'b>(
         &mut self,
         record_layer: &mut RecordLayer,
@@ -270,26 +268,26 @@ impl MessageDeframer {
     ) -> Result<Option<Deframed<'b>>, Error> {
         if let Some(last_err) = self.last_error.clone() {
             return Err(last_err);
-        } else if buffer.used == 0{
+        } else if buffer.used == 0 {
             return Ok(None);
         }
 
         let mut start;
-        let tag_len = record_layer.get_tag_length();
-        let mut hdr_decrypted = TcplsHeader::default();
         let mut end;
+        let mut header_decrypted = false;
+        let mut stream_id: u32 = 0;
+        let mut chunk_num: u32 = 0;
         let conn_id = self.current_conn_id;
-
 
 
         // We loop over records we've received but not processed yet.
         // For records that decrypt as `Handshake`, we keep the current state of the joined
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
-            start = match self.record_info.get(&conn_id) {
+            start = match self.unproc_ranges.get(&conn_id) {
                 // If no records exist for conn_id
                 None => {
-                    self.processed_ranges
+                    self.proc_ranges
                         .get(&conn_id)
                         .and_then(|ranges| ranges.last())
                         .map(|range| range.end)
@@ -297,8 +295,8 @@ impl MessageDeframer {
                 }
 
                 // If records exist but are empty
-                Some(records) if records.is_empty() => {
-                    self.processed_ranges
+                Some(unranges) if unranges.is_empty() => {
+                    self.proc_ranges
                         .get(&conn_id)
                         .and_then(|ranges| ranges.last())
                         .map(|range| range.end)
@@ -306,24 +304,28 @@ impl MessageDeframer {
                 }
 
                 // If records exist and are non-empty, check for a match or fallback to the last range's end
-                Some(records) => {
+                Some(unranges) => {
                     let mut pos = None;
                     let mut next: usize = 0;
-                    for (offset, info) in records.iter() {
-                        if let Some(buffer) = app_buffers.get(info.id) {
-                            if buffer.next_recv_pkt_num == info.chunk_num {
-                                pos = Some(*offset);
-                                hdr_decrypted.chunk_num = info.chunk_num;
-                                hdr_decrypted.stream_id = info.id;
-                                hdr_decrypted.offset_step = info.plain_len as u16;
+                    for (unrange) in unranges.iter() {
+                        if let Some(rev_buf) = app_buffers
+                            .get(u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
+                                .try_into()
+                                .unwrap()))
+                        {
+                            if rev_buf.next_recv_pkt_num == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
+                                .try_into()
+                                .unwrap()) {
+                                pos = Some(unrange.start);
+                                header_decrypted = true;
                                 break;
                             } else {
-                                next = *offset + info.enc_len;
+                                next = unrange.start + (unrange.end - unrange.start);
                             }
                         }
                     }
 
-                    let last_processed_end = self.processed_ranges
+                    let last_processed_end = self.proc_ranges
                         .get(&conn_id)
                         .and_then(|ranges| ranges.last())
                         .map(|range| range.end)
@@ -374,12 +376,12 @@ impl MessageDeframer {
                 //   expect any plaintext.
                 // * The payload size is indicative of a plaintext alert message.
                 ContentType::Alert
-                    if version_is_tls13
-                        && !record_layer.has_decrypted()
-                        && m.payload.len() <= 2 =>
-                {
-                    true
-                }
+                if version_is_tls13
+                    && !record_layer.has_decrypted()
+                    && m.payload.len() <= 2 =>
+                    {
+                        true
+                    }
                 // In other circumstances, we expect all messages to be encrypted.
                 _ => false,
             };
@@ -396,8 +398,10 @@ impl MessageDeframer {
                     version,
                     payload: buffer.take(raw_payload_slice),
                 };
-                self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
-                self.processed_ranges.entry(conn_id)
+                self.unproc_ranges
+                    .get_mut(&conn_id)
+                    .map(|ranges| ranges.retain(|r| *r != Range::from(start..end)));
+                self.proc_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(start..end);
                 return Ok(Some(Deframed {
@@ -408,74 +412,66 @@ impl MessageDeframer {
                 }));
             }
 
-            // Consider header protection in case dec/enc state is active
-            if record_layer.is_decrypting() && m.payload.len() > TCPLS_HEADER_SIZE &&
-                self.record_info.get_mut(&conn_id)
-                    .and_then(|records| records.get(&start))
-                    .map_or(true, |info| !info.header_decrypted)
-            {
-
-            // Take the LSBs of calculated tag as input sample for hash function
-                let sample = m.payload.rchunks(tag_len).next().unwrap();
-                // Decode tcpls header and choose recv_buf accordingly
-                hdr_decrypted =
-                    TcplsHeader::decode_tcpls_header_from_slice(
-                        &record_layer.decrypt_header(sample, &m.payload[..TCPLS_HEADER_SIZE]).expect("decrypting header failed")
-                    );
-
-                  if app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).next_recv_pkt_num != hdr_decrypted.chunk_num {
-                    self.record_info.entry(conn_id)
-                        .or_insert_with(BTreeMap::new)
-                        .insert(start,  RangeBufInfo::from(hdr_decrypted.chunk_num, hdr_decrypted.stream_id,
-                                                           hdr_decrypted.offset_step as usize, end - start, true));
-                    continue
-                }
-
-            }
-
 
             // Decrypt the encrypted message (if necessary).
             let (typ, version, plain_payload_slice) =
-                match record_layer.decrypt_incoming_tcpls(m, app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None), &hdr_decrypted) {
-                Ok(Some(decrypted)) => {
+                match record_layer.decrypt_incoming_tcpls(m, app_buffers, header_decrypted) {
+                    Ok((Some(decrypted), chunk, strm_id)) => {
+                        header_decrypted = false;
+                        if let Some(ch_num) = chunk {
+                            chunk_num = ch_num;
+                        }
 
-                    let Decrypted {
-                        want_close_before_decrypt,
-                        plaintext:
+                        if let Some(id) = strm_id {
+                            stream_id = id;
+                        }
+
+                        let Decrypted {
+                            want_close_before_decrypt,
+                            plaintext:
                             InboundPlainMessage {
                                 typ,
                                 version,
                                 payload,
                             },
-                    } = decrypted;
-                    debug_assert!(!want_close_before_decrypt);
-                    (typ, version, RawSlice::from(payload))
+                        } = decrypted;
+                        debug_assert!(!want_close_before_decrypt);
+                        (typ, version, RawSlice::from(payload))
+                    }
 
-                }
-                // This was rejected early data, discard it. If we currently have a handshake
-                // payload in progress, this counts as interleaved, so we error out.
-                Ok(None) if self.joining_hs.is_some() => {
-                    return Err(self.set_err(
-                        PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
-                    ));
-                }
-                Ok(None) => {
-                    self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
-                    self.processed_ranges.entry(conn_id)
-                        .or_insert_with(Vec::new)
-                        .push(start..end);
+                    Err(e) => match e {
+                        Error::General(ref msg) if msg == "Buffer too short" => {
+                            continue;
+                        }
 
-                    continue;
-                }
-                Err(e) => match e {
-                    Error::General(ref msg) if msg == "Buffer too short" => {
-                        continue;
+                        Error::General(ref msg) if msg == "Record out of order" => {
+                            self.unproc_ranges.entry(conn_id)
+                                .or_insert_with(Vec::new)
+                                .push(start..end);
+                            continue;
+                        }
+
+                        Error::General(ref msg) if msg == "Dropping undecryptable message after aborted early_data" => {
+                            if self.joining_hs.is_some() {
+                                return Err(self.set_err(
+                                    PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
+                                ));
+                            } else {
+                                self.unproc_ranges.get_mut(&conn_id).unwrap().retain(|r| *r != Range::from(start..end));
+                                self.proc_ranges.entry(conn_id)
+                                    .or_insert_with(Vec::new)
+                                    .push(start..end);
+
+                                continue;
+                            }
+
+                        }
+                        _ => {
+                            return Err(e)
+                        }
                     },
-                    _ => {
-                        return Err(e)
-                    },
-                },
-            };
+                    _ => (ContentType::ApplicationData, ProtocolVersion::TLSv1_3, RawSlice::from(vec![0u8;1].as_slice()))
+                };
 
 
             if self.joining_hs.is_some() && typ != ContentType::Handshake {
@@ -490,24 +486,26 @@ impl MessageDeframer {
             // If it's not a handshake message, just return it -- no joining necessary.
 
             if typ != ContentType::Handshake {
-                self.record_info.get_mut(&conn_id).map(|records| records.remove(&start));
-                self.processed_ranges.entry(conn_id)
+                self.unproc_ranges
+                    .get_mut(&conn_id)
+                    .map(|ranges| ranges.retain(|r| *r != Range::from(start..end)));
+                self.proc_ranges.entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(start..end);
 
                 if typ == ContentType::ApplicationData {
-                    app_buffers.insert_readable(hdr_decrypted.stream_id as u64);
+                    app_buffers.insert_readable(stream_id as u64);
                 }
 
                 let message = InboundPlainMessage {
                     typ,
                     version,
                     payload: match record_layer.has_decrypted() {
-                        true => if app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None)
+                        true => if app_buffers.get_or_create(stream_id as u64, None)
                             .last_data_type_decrypted != u8::from(ContentType::ApplicationData) {
-                            core::mem::take(&mut &*app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).get_last_decrypted())
+                            core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).get_last_decrypted())
                         } else {
-                            core::mem::take(&mut &*app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).as_ref_consumed())
+                            core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).as_ref_consumed())
                         },
                         false => buffer.take(plain_payload_slice),
                     },
@@ -526,29 +524,28 @@ impl MessageDeframer {
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
 
-            let src = match app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None)
+            let src = match app_buffers.get_or_create(stream_id as u64, None)
                 .last_decrypted > 0 {
-                true => 0.. app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None)
+                true => 0..app_buffers.get_or_create(stream_id as u64, None)
                     .last_decrypted, // 13 bytes of TLS header + 8 bytes of TCPLS header
                 false => buffer.raw_slice_to_filled_range(plain_payload_slice),
             };
             match self.append_hs(version, InternalPayload(src), end,
-                                 start, buffer, match app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None)
-                                                             .last_decrypted > 0 {
-                                                             true => Some(app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None)),
-                                                             false => None,
-                                                         }
+                                 start, buffer, match app_buffers.get_or_create(stream_id as u64, None)
+                    .last_decrypted > 0 {
+                    true => Some(app_buffers.get_or_create(stream_id as u64, None)),
+                    false => None,
+                },
             )? {
-
                 HandshakePayloadState::Blocked => return Ok(None),
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => {
-                    self.processed_ranges
+                    self.proc_ranges
                         .entry(conn_id)
                         .or_insert_with(Vec::new)
                         .push(start..end);
-                    continue
-                },
+                    continue;
+                }
             }
         };
 
@@ -577,24 +574,23 @@ impl MessageDeframer {
             // Otherwise, we've yielded the last handshake payload in the buffer, so we can
             // discard all of the bytes that we're previously buffered as handshake data.
 
-            self.processed_ranges
+            self.proc_ranges
                 .entry(conn_id)
                 .or_insert_with(Vec::new)
                 .push(meta.message.start..meta.message.end);
 
 
-
             self.joining_hs = None;
 
             //Delete record_info struct of processed records of joined Handshake messages
-           // self.delete_processed();
+            // self.delete_processed();
         }
 
         let message = InboundPlainMessage {
             typ,
             version,
             payload: match record_layer.has_decrypted() {
-                true => core::mem::take(&mut &*app_buffers.get_or_create(hdr_decrypted.stream_id as u64, None).get_mut_total_decrypted()),
+                true => core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).get_mut_total_decrypted()),
                 false => buffer.take(raw_payload),
             },
         };
@@ -628,7 +624,7 @@ impl MessageDeframer {
         end: usize,
         start: usize,
         buffer: &mut B,
-        recv_buf: Option<& RecvBuf>,
+        recv_buf: Option<&RecvBuf>,
     ) -> Result<HandshakePayloadState, Error> {
         let meta = match &mut self.joining_hs {
             Some(meta) => {
@@ -638,7 +634,7 @@ impl MessageDeframer {
                 // Write it into the buffer and update the metadata.
 
                 match recv_buf {
-                    Some(_buf) => {},
+                    Some(_buf) => {}
                     None => buffer.copy(&payload, meta.payload.end),
                 }
 
@@ -651,7 +647,6 @@ impl MessageDeframer {
                     meta.expected_len =
 
                         payload_size(buffer.filled_get(meta.payload.start..meta.payload.end))?;
-
                 }
 
                 meta
@@ -666,7 +661,7 @@ impl MessageDeframer {
                 };
 
                 match recv_buf {
-                    Some(_buf) => {},
+                    Some(_buf) => {}
                     None => buffer.copy(&payload, 0),
                 };
 
@@ -678,7 +673,7 @@ impl MessageDeframer {
                             end: match recv_buf {
                                 Some(buf) => buf.last_decrypted,
                                 None => payload.len(),
-                            } ,
+                            },
                         },
                         version,
                         expected_len,
@@ -694,12 +689,10 @@ impl MessageDeframer {
 
             _ => match recv_buf {
                 Some(_buf) => match buffer.len() > meta.message.end {
-
                     true => HandshakePayloadState::Continue,
                     false => HandshakePayloadState::Blocked,
                 },
                 None => match buffer.len() > meta.message.end {
-
                     true => HandshakePayloadState::Continue,
                     false => HandshakePayloadState::Blocked,
                 },
@@ -715,12 +708,12 @@ impl MessageDeframer {
             return;
         }
         let conn_id = self.current_conn_id;
-        if !self.processed_ranges.contains_key(&conn_id){
+        if !self.proc_ranges.contains_key(&conn_id) {
             return;
         }
-        let mut initial_discard_range: Range::<usize> = { self.discard_range.start.. self.discard_range.end};
+        let mut initial_discard_range: Range::<usize> = { self.discard_range.start..self.discard_range.end };
         loop {
-            for range in self.processed_ranges.get(&conn_id).unwrap().iter() {
+            for range in self.proc_ranges.get(&conn_id).unwrap().iter() {
                 let entry_start = range.start;
                 let entry_end = range.end;
 
@@ -728,69 +721,58 @@ impl MessageDeframer {
                 if self.discard_range.start == 0 && self.discard_range.end == 0 {
                     self.discard_range.start = entry_start;
                     self.discard_range.end = entry_end;
-                    continue
+                    continue;
                 }
                 // expand to the right
-                if entry_start == self.discard_range.end  {
+                if entry_start == self.discard_range.end {
                     self.discard_range.end = entry_end;
-                    continue
+                    continue;
                 }
                 // expand to the left
                 if entry_end == self.discard_range.start {
                     self.discard_range.start = entry_start;
-                    continue
+                    continue;
                 }
             }
             if initial_discard_range.start == self.discard_range.start && initial_discard_range.end == self.discard_range.end {
-                break
-            }else {
+                break;
+            } else {
                 initial_discard_range.start = self.discard_range.start;
                 initial_discard_range.end = self.discard_range.end;
-
             }
         }
-
     }
 
     pub fn rearrange_record_info(&mut self) {
         let conn_id = self.current_conn_id;
         let discard_len = self.discard_range.end - self.discard_range.start;
-        let mut record_info_new: BTreeMap<usize, RangeBufInfo> = BTreeMap::default();
+        let mut unproc_ranges_new: Vec<Range<usize>> = Vec::new();
         let mut processed_ranges_new: Vec<Range<usize>> = Vec::new();
-        if let Some(record_map) = self.record_info.get_mut(&conn_id) {
-            for (offset, info) in record_map.iter().filter(|(&offset, _)| offset < self.discard_range.start || offset >= self.discard_range.end) {
-                record_info_new.insert(
-                    match *offset >= self.discard_range.end {
-                        true => { *offset - discard_len },
-                        false => *offset,
-                    },
-                    RangeBufInfo {
-                        chunk_num: info.chunk_num,
-                        plain_len: info.plain_len,
-                        id: info.id,
-                        header_decrypted: info.header_decrypted,
-                        enc_len: info.enc_len,
-                    },
+        if let Some(connection_ranges) = self.unproc_ranges.get_mut(&conn_id) {
+            for (r) in connection_ranges.iter().filter(|&r| r.end <= self.discard_range.start || r.start >= self.discard_range.end) {
+                unproc_ranges_new.push(match r.start >= self.discard_range.end {
+                    true => Range::from(r.start - discard_len..r.end - discard_len),
+                    false => Range::from(r.start..r.end)
+                }
                 );
             }
-            *record_map = record_info_new;
+            *connection_ranges = unproc_ranges_new;
         }
 
 
-
-        if let Some(ranges) = self.processed_ranges.get_mut(&conn_id) {
-           for range in ranges.iter().filter(|&x| x.end <= self.discard_range.start || x.start >= self.discard_range.end){
-               processed_ranges_new.push(match range.end <= self.discard_range.start {
-                   true => range.start..range.end,
-                   false => range.start - discard_len..range.end - discard_len,
-               })
-           }
+        if let Some(ranges) = self.proc_ranges.get_mut(&conn_id) {
+            for range in ranges.iter().filter(|&x| x.end <= self.discard_range.start || x.start >= self.discard_range.end) {
+                processed_ranges_new.push(match range.end <= self.discard_range.start {
+                    true => range.start..range.end,
+                    false => range.start - discard_len..range.end - discard_len,
+                })
+            }
             *ranges = processed_ranges_new
         }
 
 
         self.discard_range.start = 0;
-        self.discard_range.end   = 0;
+        self.discard_range.end = 0;
     }
 
 
@@ -802,14 +784,14 @@ impl MessageDeframer {
         self.discard_range.is_empty()
     }
 
-    pub fn delete_processed(&mut self) {
+   /* pub fn delete_processed(&mut self) {
         let conn_id = self.current_conn_id;
         if !self.joined_messages.is_empty() {
             for range in self.joined_messages.iter() {
-                if let Some(records) = self.record_info.get_mut(&conn_id) {
+                if let Some(records) = self.reco_info.get_mut(&conn_id) {
                     records.remove(&range.start);
                 }
-                self.processed_ranges
+                self.proc_ranges
                     .entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(range.start..range.end);
@@ -819,8 +801,7 @@ impl MessageDeframer {
         if self.joining_hs.is_none() {
             self.joined_messages.clear();
         }
-    }
-
+    }*/
 }
 
 #[cfg(feature = "std")]
@@ -962,8 +943,8 @@ impl DeframerVecBuffer {
             if (start + taken) == self.used {
                 self.used = start;
             } else {
-                Self::copy_within(self.buf.as_mut_slice(), start + taken ,start, (start + taken..self.used).len());
-               // self.buf.copy_within(start + taken..self.used, start);
+                Self::copy_within(self.buf.as_mut_slice(), start + taken, start, (start + taken..self.used).len());
+                // self.buf.copy_within(start + taken..self.used, start);
                 self.used -= taken;
             }
 
@@ -998,31 +979,13 @@ impl DeframerVecBuffer {
 
     /// Resize the internal `buf` if necessary for reading more bytes.
     fn prepare_read(&mut self, _is_joining_hs: bool) -> Result<(), &'static str> {
-        // We allow a maximum of 64k of buffered data for handshake messages only. Enforce this
-        // by varying the maximum allowed buffer size here based on whether a prefix of a
-        // handshake payload is currently being buffered. Given that the first read of such a
-        // payload will only ever be 4k bytes, the next time we come around here we allow a
-        // larger buffer size. Once the large message and any following handshake messages in
-        // the same flight have been consumed, `pop()` will call `discard()` to reset `used`.
-        // At this point, the buffer resizing logic below should reduce the buffer size.
+
         let allow_max = self.buf.len();
 
         if self.used >= allow_max {
             return Err("message buffer full");
         }
 
-        // If we can and need to increase the buffer size to allow a 4k read, do so. After
-        // dealing with a large handshake message (exceeding `OutboundOpaqueMessage::MAX_WIRE_SIZE`),
-        // make sure to reduce the buffer size again (large messages should be rare).
-        // Also, reduce the buffer size if there are neither full nor partial messages in it,
-        // which usually means that the other side suspended sending data.
-      /*  let need_capacity = Ord::min(allow_max, self.used + READ_SIZE);
-        if need_capacity > self.buf.len() {
-            self.buf.resize(need_capacity, 0);
-        } else if self.used == 0 || self.buf.len() > allow_max {
-            self.buf.resize(need_capacity, 0);
-            self.buf.shrink_to(need_capacity);
-        }*/
 
         Ok(())
     }
@@ -1052,6 +1015,10 @@ impl FilledDeframerBuffer for DeframerVecBuffer {
 
     fn get_mut(&mut self, index: usize) -> &mut [u8] {
         &mut self.buf[index..]
+    }
+
+    fn get_imut_ref(&self) -> &[u8] {
+        &self.buf
     }
 }
 
@@ -1103,7 +1070,6 @@ impl<'a> DeframerSliceBuffer<'a> {
     }
 
 
-
     pub fn get_used(&self) -> usize {
         self.used
     }
@@ -1153,6 +1119,10 @@ impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
 
     fn get_mut(&mut self, index: usize) -> &mut [u8] {
         &mut self.buf[index..]
+    }
+
+    fn get_imut_ref(&self) -> &[u8] {
+            &self.buf
     }
 }
 
@@ -1207,9 +1177,10 @@ trait FilledDeframerBuffer {
 
     fn get_mut(&mut self, index: usize) -> &mut [u8];
 
+    fn get_imut_ref(&self) -> &[u8];
 }
 
-#[derive(Clone, Debug, Default)]
+/*#[derive(Clone, Debug, Default)]
 pub(crate) struct RangeBufInfo {
     /// The id of the stream this record belongs to
     pub(crate) id: u16,
@@ -1225,19 +1196,17 @@ pub(crate) struct RangeBufInfo {
 
 
     pub(crate) header_decrypted: bool,
-}
+}*/
 
-impl RangeBufInfo {
-    pub(crate) fn from(chunk_num: u32, id: u16, plain_len: usize, enc_len: usize, header_decoded: bool) -> Self {
+/*impl RangeBufInfo {
+    pub(crate) fn from(chunk_num: u32, id: u16, enc_len: usize) -> Self {
         Self {
             id,
             chunk_num,
-            plain_len,
             enc_len,
-            header_decrypted: header_decoded,
         }
     }
-}
+}*/
 
 enum HandshakePayloadState {
     /// Waiting for more data.
@@ -1276,7 +1245,6 @@ struct HandshakePayloadMeta {
 /// (`MAX_HANDSHAKE_SIZE`), `Ok(None)` if the buffer is too small to contain a complete header,
 /// and `Ok(Some(len))` otherwise.
 fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
-
     if buf.len() < HANDSHAKE_HEADER_SIZE {
         return Ok(None);
     }
@@ -1325,22 +1293,20 @@ impl MessageDeframerMap {
         match self.deframers.entry(conn_id) {
             hash_map::Entry::Vacant(v) => {
                 v.insert(DeframerVecBuffer::new(conn_id))
-            },
+            }
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
     }
     /// Return ids of deframer buffers that have data received from socket
     pub(crate) fn get_keys(&self) -> Vec<u64> {
         let mut keys: Vec<u64> = Vec::new();
-        for d in &self.deframers{
+        for d in &self.deframers {
             if d.1.used > 0 {
                 keys.push(d.1.id)
             }
         }
         keys
     }
-
-
 }
 
 
@@ -1598,7 +1564,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 inner: MessageDeframer::default(),
-                buffer: DeframerVecBuffer::new(0)
+                buffer: DeframerVecBuffer::new(0),
             }
         }
         fn input_bytes(&mut self, bytes: &[u8]) -> io::Result<usize> {
@@ -1705,5 +1671,4 @@ mod tests {
     const INVALID_VERSION_MESSAGE: &[u8] =
         include_bytes!("../testdata/deframer-invalid-version.bin");
     const INVALID_LENGTH_MESSAGE: &[u8] = include_bytes!("../testdata/deframer-invalid-length.bin");
-
 }

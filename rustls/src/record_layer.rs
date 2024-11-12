@@ -1,13 +1,14 @@
 use alloc::boxed::Box;
 use core::num::NonZeroU64;
 use std::collections::hash_map;
-
+use std::ops::Range;
+use std::prelude::rust_2015::ToString;
 use crate::crypto::cipher::{HeaderProtector, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage};
-use crate::recvbuf::RecvBuf;
+use crate::recvbuf::{RecvBuf, RecvBufMap};
 use crate::tcpls::frame::{Frame, TcplsHeader};
 use crate::tcpls::stream::{SimpleIdHashMap, StreamMap};
 
@@ -35,13 +36,11 @@ pub struct RecordLayer {
     encrypt_state: DirectionState,
     decrypt_state: DirectionState,
     // id of currently used stream
-    stream_in_use: u16,
+    stream_in_use: u32,
     pub streams: StreamMap,
-    /*is_handshaking: bool,*/
     has_decrypted: bool,
 
-    pub write_seq_map: WriteSeqMap,
-    pub read_seq_map: ReadSeqMap,
+
 
     // Message encrypted with other keys may be encountered, so failures
     // should be swallowed by the caller.  This struct tracks the amount
@@ -64,12 +63,10 @@ impl RecordLayer {
             streams: StreamMap::new(),
             /*is_handshaking: true,*/
             has_decrypted: false,
-            write_seq_map: WriteSeqMap::default() ,
             encrypt_state: DirectionState::Invalid,
             decrypt_state: DirectionState::Invalid,
             stream_in_use: 0,
             trial_decryption_len: None,
-            read_seq_map: ReadSeqMap::default(),
             header_encrypter: Default::default(),
             header_decrypter: Default::default(),
             early_data_requested: false,
@@ -133,47 +130,34 @@ impl RecordLayer {
     pub(crate) fn decrypt_incoming_tcpls<'a>(
         &mut self,
         encr: InboundOpaqueMessage<'a>,
-        recv_buf: &'a mut RecvBuf,
-        tcpls_header: &TcplsHeader,
-    ) -> Result<Option<Decrypted<'a>>, Error> {
+        app_bufs: &'a mut RecvBufMap,
+        header_decrypted: bool,
+    ) -> Result<(Option<Decrypted<'a>>, Option<u32>, Option<u32>), Error> {
         if self.decrypt_state != DirectionState::Active {
-            return Ok(Some(Decrypted {
+            return Ok((Some(Decrypted {
                 want_close_before_decrypt: false,
                 plaintext: encr.into_plain_message(),
-            }));
+            }), None, None));
         }
 
-        // Set to `true` if the peer appears to getting close to encrypting
-        // too many messages with this key.
-        //
-        // Perhaps if we send an alert well before their counter wraps, a
-        // buggy peer won't make a terrible mistake here?
-        //
-        // Note that there's no reason to refuse to decrypt: the security
-        // failure has already happened.
-        self.stream_in_use = tcpls_header.stream_id;
-        let read_seq = self.read_seq_map.get_or_create(self.stream_in_use as u64).read_seq;
-        let want_close_before_decrypt = read_seq == SEQ_SOFT_LIMIT;
-
         let encrypted_len = encr.payload.len();
-        recv_buf.next_recv_pkt_num += 1;
         match self
             .message_decrypter
-            .decrypt_tcpls(encr, read_seq, self.stream_in_use as u32, recv_buf, tcpls_header)
+            .decrypt_tcpls(encr, app_bufs, header_decrypted, self.header_decrypter.as_mut().unwrap())
         {
-            Ok(plaintext) => {
-                self.read_seq_map.get_or_create(self.stream_in_use as u64).read_seq += 1;
+            Ok((plaintext, read_seq, chunk_num, stream_id)) => {
+                self.stream_in_use = stream_id;
+                self.message_decrypter.increase_read_seq(stream_id);
                 if !self.has_decrypted {
                     self.has_decrypted = true;
                 }
-                Ok(Some(Decrypted {
-                    want_close_before_decrypt,
+                Ok((Some(Decrypted {
+                    want_close_before_decrypt: read_seq == SEQ_SOFT_LIMIT,
                     plaintext,
-                }))
+                }), Some(chunk_num), Some(stream_id)))
             }
             Err(Error::DecryptError) if self.doing_trial_decryption(encrypted_len) => {
-                trace!("Dropping undecryptable message after aborted early_data");
-                Ok(None)
+                Err(Error::General("Dropping undecryptable message after aborted early_data".to_string()))?
             }
             Err(err) => Err(err),
         }
@@ -190,8 +174,8 @@ impl RecordLayer {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(!self.encrypt_exhausted());
         let stream_id = self.stream_in_use;
-        let seq = self.write_seq_map.get_or_create(stream_id as u64).write_seq;
-        self.write_seq_map.get_or_create(stream_id as u64).write_seq += 1;
+        let seq = self.message_encrypter.get_write_seq(stream_id);
+        self.message_encrypter.increase_write_seq(stream_id);
         self.message_encrypter
             .encrypt(plain, seq)
             .unwrap()
@@ -210,10 +194,10 @@ impl RecordLayer {
         debug_assert!(self.encrypt_state == DirectionState::Active);
         assert!(!self.encrypt_exhausted());
         let stream_id = self.stream_in_use;
-        let seq = self.write_seq_map.get_or_create(stream_id as u64).write_seq;
-        self.write_seq_map.get_or_create(stream_id as u64).write_seq += 1;
+        let seq = self.message_encrypter.get_write_seq(stream_id);
+        self.message_encrypter.increase_write_seq(stream_id);
         self.message_encrypter
-            .encrypt_tcpls(plain, seq, stream_id as u32, tcpls_header, frame_header, self.header_encrypter.as_mut().unwrap())
+            .encrypt_tcpls(plain, seq, stream_id, tcpls_header, frame_header, self.header_encrypter.as_mut().unwrap())
             .unwrap()
     }
 
@@ -250,7 +234,7 @@ impl RecordLayer {
     /// It is not used until you call `start_encrypting`.
     pub(crate) fn prepare_message_encrypter(&mut self, cipher: Box<dyn MessageEncrypter>) {
         self.message_encrypter = cipher;
-        self.write_seq_map.reset_write_seq();
+        self.message_encrypter.reset_write_seq();
         self.encrypt_state = DirectionState::Prepared;
     }
 
@@ -258,7 +242,7 @@ impl RecordLayer {
     /// It is not used until you call `start_decrypting`.
     pub(crate) fn prepare_message_decrypter(&mut self, cipher: Box<dyn MessageDecrypter>) {
         self.message_decrypter = cipher;
-        self.read_seq_map.reset_read_seq();
+        self.message_decrypter.reset_read_seq();
         self.decrypt_state = DirectionState::Prepared;
     }
 
@@ -311,13 +295,13 @@ impl RecordLayer {
     /// Return true if we are getting close to encrypting too many
     /// messages with our encryption key.
     pub(crate) fn wants_close_before_encrypt(&mut self) -> bool {
-        self.write_seq_map.get_or_create(self.stream_in_use as u64).write_seq == SEQ_SOFT_LIMIT
+        self.message_encrypter.get_or_create_write_seq(self.stream_in_use) == SEQ_SOFT_LIMIT
     }
 
     /// Return true if we outright refuse to do anything with the
     /// encryption key.
     pub(crate) fn encrypt_exhausted(&mut self) -> bool {
-        self.write_seq_map.get_or_create(self.stream_in_use as u64).write_seq >= SEQ_HARD_LIMIT
+        self.message_encrypter.get_or_create_write_seq(self.stream_in_use) >= SEQ_HARD_LIMIT
     }
 
     pub(crate) fn is_encrypting(&self) -> bool {
@@ -335,21 +319,21 @@ impl RecordLayer {
     }
 
     pub(crate) fn write_seq(& self) -> u64 {
-        self.write_seq_map.get(self.stream_in_use as u64).write_seq
+        self.message_encrypter.get_write_seq(self.stream_in_use)
     }
     ///Get id of stream in use
-    pub fn get_stream_id(& self) -> u16 {
+    pub fn get_stream_id(& self) -> u32 {
         self.stream_in_use
     }
     /// Returns the number of remaining write sequences
     pub(crate) fn remaining_write_seq(&mut self) -> Option<NonZeroU64> {
         SEQ_SOFT_LIMIT
-            .checked_sub( self.write_seq_map.get_or_create(self.stream_in_use as u64).write_seq)
+            .checked_sub( self.message_encrypter.get_write_seq(self.stream_in_use))
             .and_then(NonZeroU64::new)
     }
 
     pub(crate) fn read_seq(& self) -> u64 {
-        self.read_seq_map.get(self.stream_in_use as u64).read_seq
+        self.message_decrypter.get_read_seq(self.stream_in_use)
     }
 
     pub(crate) fn encrypted_len(&self, payload_len: usize) -> usize {
@@ -374,7 +358,7 @@ impl RecordLayer {
         self.is_handshaking = false;
     }*/
 
-    pub(crate) fn encrypt_for_stream(&mut self, stream_id: u16) {
+    pub(crate) fn encrypt_for_stream(&mut self, stream_id: u32) {
         self.stream_in_use = stream_id;
     }
 }
@@ -387,84 +371,9 @@ pub(crate) struct Decrypted<'a> {
     /// The decrypted message.
     pub(crate) plaintext: InboundPlainMessage<'a>,
 }
-#[derive(Default)]
-pub struct WriteSeqMap {
-    map: SimpleIdHashMap<WriteSeq>,
-}
 
-impl WriteSeqMap {
-    pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut WriteSeq {
-        match self.map.entry(stream_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(WriteSeq::new())
-            },
-            hash_map::Entry::Occupied(v) => v.into_mut(),
-        }
-    }
 
-    pub(crate) fn get(&self, stream_id: u64) -> & WriteSeq {
-        self.map.get(&stream_id).unwrap()
-    }
 
-    pub(crate) fn reset_write_seq(&mut self) {
-        for seq in self.map.iter_mut() {
-            seq.1.write_seq = 0;
-        }
-    }
-
-}
-
-#[derive(Default)]
-pub struct ReadSeqMap {
-    map: SimpleIdHashMap<ReadSeq>,
-}
-
-impl ReadSeqMap {
-    pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut ReadSeq {
-        match self.map.entry(stream_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(ReadSeq::new())
-            },
-            hash_map::Entry::Occupied(v) => v.into_mut(),
-        }
-    }
-
-    pub(crate) fn get(&self, stream_id: u64) -> & ReadSeq {
-        self.map.get(&stream_id).unwrap()
-    }
-
-    pub(crate) fn reset_read_seq(&mut self) {
-        for seq in self.map.iter_mut() {
-            seq.1.read_seq = 0;
-        }
-    }
-
-}
-#[derive(Default)]
-pub(crate) struct WriteSeq {
-    write_seq: u64,
-}
-
-impl WriteSeq {
-    pub(crate) fn new() -> Self {
-        Self {
-            write_seq: 0,
-        }
-    }
-
-}
-pub(crate) struct ReadSeq {
-    read_seq: u64,
-}
-
-impl ReadSeq {
-    pub(crate) fn new() -> Self {
-        Self {
-            read_seq: 0,
-        }
-    }
-
-}
 
 #[cfg(test)]
 mod tests {
@@ -487,7 +396,10 @@ mod tests {
                 Ok(m.into_plain_message())
             }
 
-            fn decrypt_tcpls<'a, 'b>(&mut self, msg: InboundOpaqueMessage<'a>, seq: u64, stream_id: u32, recv_buf: &'b mut RecvBuf, tcpls_header: &TcplsHeader) -> Result<InboundPlainMessage<'b>, Error> {
+            fn decrypt_tcpls<'a, 'b>(&mut self,
+                                     msg: InboundOpaqueMessage<'a>,
+                                     app_bufs: &'a mut RecvBufMap,
+                                     header_decrypted: bool) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
                 Ok(InboundPlainMessage{
                     version: ProtocolVersion::TLSv1_3,
                     payload: &[],
@@ -506,7 +418,7 @@ mod tests {
             record_layer.decrypt_state,
             DirectionState::Invalid
         ));
-        assert_eq!(record_layer.read_seq_map.get_or_create(0).read_seq, 0);
+        assert_eq!(record_layer.message_decrypter.get_read_seq(0), 0);
         assert!(!record_layer.has_decrypted());
 
         // Preparing the record layer should update the decrypt state, but shouldn't affect whether it
@@ -516,13 +428,13 @@ mod tests {
             record_layer.decrypt_state,
             DirectionState::Prepared
         ));
-        assert_eq!(record_layer.read_seq_map.get_or_create(0).read_seq, 0);
+        assert_eq!(record_layer.message_decrypter.get_read_seq(0), 0);
         assert!(!record_layer.has_decrypted());
 
         // Starting decryption should update the decrypt state, but not affect whether it has decrypted.
         record_layer.start_decrypting();
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
-        assert_eq!(record_layer.read_seq_map.get_or_create(0).read_seq, 0);
+        assert_eq!(record_layer.message_decrypter.get_read_seq(0), 0);
         assert!(!record_layer.has_decrypted());
 
         // Decrypting a message should update the read_seq and track that we have now performed
@@ -535,14 +447,14 @@ mod tests {
             ), &mut rev_buf, &TcplsHeader::default())
             .unwrap();
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
-        assert_eq!(record_layer.read_seq_map.get_or_create(0).read_seq, 1);
+        assert_eq!(record_layer.message_decrypter.get_read_seq(0), 1);
         assert!(record_layer.has_decrypted());
 
         // Resetting the record layer message decrypter (as if a key update occurred) should reset
         // the read_seq number, but not our knowledge of whether we have decrypted previously.
         record_layer.set_message_decrypter(Box::new(PassThroughDecrypter));
         assert!(matches!(record_layer.decrypt_state, DirectionState::Active));
-        assert_eq!(record_layer.read_seq_map.get_or_create(0).read_seq, 0);
+        assert_eq!(record_layer.message_decrypter.get_read_seq(0), 0);
         assert!(record_layer.has_decrypted());
     }
 }

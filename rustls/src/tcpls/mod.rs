@@ -219,7 +219,7 @@ impl TcplsSession {
         Ok(conn_id)
     }
     /// Store data in send buffer
-    pub fn stream_send(&mut self, str_id: u16, input: &[u8]) -> Result<usize, Error> {
+    pub fn stream_send(&mut self, str_id: u32, input: &[u8]) -> Result<usize, Error> {
 
         self.tls_conn.as_mut().unwrap().write_to = str_id;
         let buffered = self.tls_conn.as_mut().unwrap().writer().write(input).expect("Could not write data to stream");
@@ -244,24 +244,24 @@ impl TcplsSession {
 
 
         for id in stream_ids {
-            match tls_conn.record_layer.streams.get_mut(id as u16) {
+            match tls_conn.record_layer.streams.get_mut(id as u32) {
                 Some(_stream) => {},
                 None => return Err(Error::BufNotFound),
             };
 
 
-            let mut len = tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.len();
+            let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
             let mut sent;
 
 
             while len > 0 {
                 for conn_id in &conn_ids {
-                    let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u16).unwrap().get_conn(){
+                    let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_conn(){
                         Some(id) => id,
                         None => *conn_id,
                     };
                     let socket = &mut self.tcp_connections.get_mut(&conn_to_use).unwrap().socket;
-                    let chunk = match tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.get_chunk(){
+                    let chunk = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.get_chunk(){
                         Some(ch) => ch,
                         None => {
                             break
@@ -271,18 +271,18 @@ impl TcplsSession {
                     sent = match socket.write(chunk.as_slice()) {
                             Ok(0) => return Ok(done),
                             Ok(sent) => {
-                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.consume_chunk(sent, chunk);
+                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
                                 if sent < chunk_len {
-                                    tls_conn.record_layer.streams.get_mut(id as u16).unwrap().set_conn(Some(conn_to_use));
+                                    tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(Some(conn_to_use));
                                 }else {
-                                    tls_conn.record_layer.streams.get_mut(id as u16).unwrap().set_conn(None);
+                                    tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(None);
                                 }
                                 sent
                             },
 
                             Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
                                 sent = 0;
-                                tls_conn.record_layer.streams.get_mut(id as u16).unwrap().send.consume_chunk(sent, chunk);
+                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
                                return Ok(done)
                             },
                             _error => {

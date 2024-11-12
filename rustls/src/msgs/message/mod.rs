@@ -238,3 +238,11 @@ pub(crate) const MAX_PAYLOAD: u16 = 16_384 + 2048;
 pub(crate) const MAX_WIRE_SIZE: usize = MAX_PAYLOAD as usize + HEADER_SIZE;
 pub(crate) const MAX_RECORDS: usize = 300;
 pub(crate) const MAX_DEFRAMER_CAP: usize = MAX_WIRE_SIZE * MAX_RECORDS;
+
+pub(crate) const STREAM_ID_OFFSET: usize = 9;
+
+pub(crate) const STREAM_ID_SIZE: usize = 4;
+
+pub(crate) const CHUNK_NUM_OFFSET: usize = 5;
+
+pub(crate) const CHUNK_NUM_SIZE: usize = 4;

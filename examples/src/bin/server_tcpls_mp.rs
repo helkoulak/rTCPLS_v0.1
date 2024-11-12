@@ -131,7 +131,7 @@ impl TlsServer {
 
 
         for id in recv_map.readable() {
-            let stream = recv_map.get_mut(id as u16).unwrap();
+            let stream = recv_map.get_mut(id as u32).unwrap();
 
             if !stream.complete {
                 continue
@@ -145,7 +145,7 @@ impl TlsServer {
 
 
             assert_eq!(&stream.as_ref_consumed()[hash_index..], self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4]).as_ref());
-            print!("\n \n Bytes received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
+            print!("\n \n Received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
                 id,
                 &stream.as_ref_consumed()[hash_index..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>(),
                    stream.as_ref_consumed()[..hash_index - 4].len());

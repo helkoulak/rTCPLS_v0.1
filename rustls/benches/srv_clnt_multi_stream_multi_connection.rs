@@ -1,7 +1,9 @@
 use std::io;
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
+use bencher::black_box;
 
+mod perf;
 
 #[path = "../tests/common/mod.rs"]
 mod test_utils;
@@ -137,7 +139,7 @@ pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
                 pipe.sess.set_connection_in_use(*id);
                 pipe.sess.process_new_packets(app_bufs).unwrap();
             }
-            if app_bufs.get(str_id as u16).unwrap().data_length() >= data_len { break }
+            if app_bufs.get(str_id).unwrap().complete { break }
         }
     }
 
@@ -150,7 +152,7 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
     let sendbuf2 = vec![2u8; data_len];
     let mut group = c.benchmark_group("Data_recv");
     group.throughput(Throughput::Bytes((data_len + data_len) as u64));
-    group.bench_with_input(BenchmarkId::new("Data_recv_single_stream_multi_connection", data_len+data_len), &sendbuf1,
+    group.bench_with_input(BenchmarkId::new("Data_recv_multi_stream_multi_connection", data_len+data_len), &sendbuf1,
                            |b, sendbuf| {
 
                                b.iter_batched_ref(|| {
@@ -174,7 +176,7 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    for str_id in stream_ids {
                                        while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(str_id)) {
                                            pipe.sess.set_connection_in_use(conn_id);
-                                           tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id as u16).unwrap();
+                                           tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id).unwrap();
                                            conn_id += 1;
                                            if conn_id == 3 {
                                                conn_id = 0;
@@ -215,3 +217,20 @@ criterion_group! {
     targets = criterion_benchmark
 }
 criterion_main!(benches);
+
+
+
+
+/*criterion_group!{
+    name = benches;
+    // This can be any expression that returns a `Criterion` object.
+    config = Criterion::default()
+        .measurement_time(std::time::Duration::from_secs(1))
+        .with_measurement(CPUTime)
+        //.with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)))
+         .with_profiler(perf::FlamegraphProfiler::new(100))
+        //.with_profiler(PProfProfiler::new(100, Output::Flamegraph(Some(pprof::flamegraph::Options::default()))))
+        .sample_size(5000);
+    targets = criterion_benchmark
+}
+criterion_main!(benches);*/

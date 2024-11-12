@@ -158,7 +158,7 @@ impl TlsClient {
     }
 
 
-    fn send_data(&mut self, input: &[u8], stream: u16) -> io::Result<()> {
+    fn send_data(&mut self, input: &[u8], stream: u32) -> io::Result<()> {
         let mut data = Vec::new();
 
         // Calculate the hash of input using SHA-256

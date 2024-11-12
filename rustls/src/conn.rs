@@ -6,6 +6,7 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "std")]
 use std::io;
+use std::println;
 use crate::common_state::{CommonState, Context, IoState, PlainBufsMap, State};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
@@ -57,11 +58,11 @@ mod connection {
         /// Writes TLS messages to `wr`.
         ///
         /// See [`ConnectionCommon::write_tls()`] for more information.
-        pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u16) -> Result<usize, io::Error> {
+        pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<usize, io::Error> {
             self.record_layer.streams.get_or_create(id).unwrap().send.write_to(wr)
         }
 
-        pub fn write_chunk(&mut self, wr: &mut dyn io::Write, id: u16) -> Result<(), io::Error> {
+        pub fn write_chunk(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<(), io::Error> {
             self.record_layer.streams.get_or_create(id).unwrap().send.write_chunk_to(wr)
         }
 
@@ -146,7 +147,7 @@ mod connection {
         /// Sets a limit on the internal buffers
         ///
         /// See [`ConnectionCommon::set_buffer_limit()`] for more information.
-        pub fn set_buffer_limit(&mut self, limit: Option<usize>, id: u16) {
+        pub fn set_buffer_limit(&mut self, limit: Option<usize>, id: u32) {
             match self {
                 Self::Client(client) => client.set_buffer_limit(limit, id),
                 Self::Server(server) => server.set_buffer_limit(limit, id),
@@ -518,7 +519,7 @@ impl<Data> ConnectionCommon<Data> {
     /// [`Connection::writer`]: crate::Connection::writer
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
-    pub fn set_buffer_limit(&mut self, limit: Option<usize>, id: u16) {
+    pub fn set_buffer_limit(&mut self, limit: Option<usize>, id: u32) {
         self.sendable_plaintext.get_or_create_plain_buf(id).unwrap().send_plain_buf.set_limit(limit);
         self.record_layer.streams.get_or_create(id).unwrap().send.set_limit(limit);
     }
@@ -743,7 +744,7 @@ impl<Data> ConnectionCommon<Data> {
     /// After this function returns, the connection buffer may not yet be fully flushed. The
     /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
 
-    pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u16) -> Result<usize, io::Error> {
+    pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<usize, io::Error> {
         self.record_layer.streams.get_or_create(id).unwrap().send.write_to(wr)
     }
 }

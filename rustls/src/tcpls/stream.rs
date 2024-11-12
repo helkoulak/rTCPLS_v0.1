@@ -38,12 +38,12 @@ use crate::tcpls::frame::TcplsHeader;
 use crate::vecbuf::ChunkVecBuffer;
 
 pub const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
-pub const DEFAULT_STREAM_ID:u16 = 0;
+pub const DEFAULT_STREAM_ID:u32 = 0;
 
 
 pub struct Stream {
 
-    pub id: u16,
+    pub id: u32,
 
     /// buffers encrypted TLS records that to be sent on the TCP socket
     pub(crate) send: ChunkVecBuffer,
@@ -55,7 +55,7 @@ pub struct Stream {
 }
 
 impl Stream {
-    pub fn new(id: u16) -> Self {
+    pub fn new(id: u32) -> Self {
         Self{
             id,
             send: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
@@ -87,7 +87,6 @@ impl Stream {
     pub fn build_header(&mut self, len: u16) -> TcplsHeader {
         let header = TcplsHeader {
             chunk_num: self.next_snd_pkt_num,
-            offset_step: len,
             stream_id: self.id,
         };
 
@@ -181,7 +180,7 @@ impl StreamMap {
 
     /// Returns the mutable stream with the given ID if it exists.
     #[inline]
-    pub fn get_mut(&mut self, id: u16) -> Option<&mut Stream> {
+    pub fn get_mut(&mut self, id: u32) -> Option<&mut Stream> {
         self.streams.get_mut(&(id as u64))
     }
 
@@ -199,7 +198,7 @@ impl StreamMap {
     /// error is returned.
     #[inline]
     pub fn get_or_create(
-        &mut self, stream_id: u16,
+        &mut self, stream_id: u32,
     ) -> Result<&mut Stream, Error> {
         let (stream, is_new_and_writable) = match self.streams.entry(stream_id as u64) {
             hash_map::Entry::Vacant(v) => {
@@ -354,7 +353,7 @@ impl StreamMap {
     pub fn reset_stream(&mut self, id: u32) {
         self.remove_flushable(id as u64);
         self.insert_writable(id as u64);
-        self.get_mut(id as u16).unwrap().reset_stream()
+        self.get_mut(id).unwrap().reset_stream()
     }
 }
 

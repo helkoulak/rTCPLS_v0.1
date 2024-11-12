@@ -58,7 +58,7 @@ pub struct CommonState {
     pub(crate) conn_in_use: u32,
 
     ///Id of stream to write to
-    pub write_to: u16,
+    pub write_to: u32,
 
     queued_key_update_message: Option<Vec<u8>>,
 
@@ -301,7 +301,7 @@ impl CommonState {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage, id: u16) {
+    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage, id: u32) {
         let iter = self
             .message_fragmenter
             .fragment_message(&m);
@@ -312,7 +312,7 @@ impl CommonState {
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
 
-    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u16) -> usize {
+    fn send_appdata_encrypt(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {
         // Here, the limit on sendable_tls applies to encrypted data,
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
@@ -364,7 +364,7 @@ impl CommonState {
     }
 
 
-    fn send_single_fragment(&mut self, m: OutboundPlainMessage, id: u16, fin: bool) {
+    fn send_single_fragment(&mut self, m: OutboundPlainMessage, id: u32, fin: bool) {
         self.record_layer.streams.get_or_create(id).unwrap();
         // set id of stream to decide on crypto context and record seq space
         self.record_layer.encrypt_for_stream(id);
@@ -403,7 +403,7 @@ impl CommonState {
         self.queue_message(em.encode(), id);
     }
 
-    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u16) -> usize {
+    fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {
         debug_assert!(self.may_send_application_data);
         debug_assert!(self.record_layer.is_encrypting());
 
@@ -465,7 +465,7 @@ impl CommonState {
     }*/
 
     /// Send a raw TLS message, fragmenting it if needed.
-    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool, id: u16) {
+    pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool, id: u32) {
         {
             if let Protocol::Quic = self.protocol {
                 if let MessagePayload::Alert(alert) = m.payload {
@@ -698,7 +698,7 @@ impl CommonState {
             && (self.may_send_application_data || self.record_layer.streams.all_empty())
     }
 
-    pub fn shuffle_records(&mut self, id: u16, n: usize) {
+    pub fn shuffle_records(&mut self, id: u32, n: usize) {
         self.record_layer.streams.get_mut(id).unwrap().send.shuffle_records(n);
     }
 
@@ -763,13 +763,13 @@ impl CommonState {
         &mut self,
         payload: OutboundChunks<'_>,
         sendable_plaintext: &mut PlainBufsMap,
-        id: u16,
+        id: u32,
     ) -> usize {
         self.perhaps_write_key_update();
         self.send_plain(payload, Limit::No, Some(sendable_plaintext), id)
     }
 
-    pub(crate) fn send_early_plaintext(&mut self, data: &[u8], id: u16) -> usize {
+    pub(crate) fn send_early_plaintext(&mut self, data: &[u8], id: u32) -> usize {
         debug_assert!(self.early_traffic);
         debug_assert!(self.record_layer.is_encrypting());
 
@@ -791,7 +791,7 @@ impl CommonState {
         payload: OutboundChunks<'_>,
         limit: Limit,
         sendable_plaintext: Option<&mut PlainBufsMap>,
-        id: u16,
+        id: u32,
     ) -> usize {
         if !self.may_send_application_data {
             // If we haven't completed handshaking, buffer
@@ -822,7 +822,7 @@ impl CommonState {
         }
     }
     // Put m into sendable_tls for writing.
-    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u16) {
+    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32) {
         self.record_layer.streams.get_or_create(id).unwrap().send.append(msg);
         self.record_layer.streams.insert_flushable(id as u64);
     }
@@ -831,7 +831,7 @@ impl CommonState {
 
 pub(crate) struct SendPlainTextBuf {
     pub(crate) send_plain_buf: ChunkVecBuffer,
-    pub(crate) id: u16,
+    pub(crate) id: u32,
 }
 #[derive(Default)]
 pub(crate) struct PlainBufsMap {
@@ -840,7 +840,7 @@ pub(crate) struct PlainBufsMap {
 
 impl PlainBufsMap {
     pub(crate) fn get_or_create_plain_buf(
-        &mut self, stream_id: u16,
+        &mut self, stream_id: u32,
     ) -> Result<&mut SendPlainTextBuf, Error> {
         let stream = match self.plain_map.entry(stream_id as u64) {
             hash_map::Entry::Vacant(v) => {

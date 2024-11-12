@@ -15,7 +15,7 @@ pub use crate::msgs::message::{
     BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
     OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
-use crate::recvbuf::RecvBuf;
+use crate::recvbuf::{RecvBuf, RecvBufMap};
 use crate::suites::ConnectionTrafficSecrets;
 use crate::tcpls::frame::{Frame, TcplsHeader};
 
@@ -151,11 +151,18 @@ pub trait MessageDecrypter: Send + Sync {
     fn decrypt_tcpls<'a>(
         &mut self,
         msg: InboundOpaqueMessage<'a>,
-        seq: u64,
-        stream_id: u32,
-        recv_buf: &'a mut RecvBuf,
-        tcpls_header: &TcplsHeader,
-    ) -> Result<InboundPlainMessage<'a>, Error>;
+        app_bufs: &'a mut RecvBufMap,
+        header_decrypted: bool,
+        header_decrypter: &mut HeaderProtector,
+    ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error>;
+
+    fn increase_read_seq(&mut self, stream_id: u32);
+
+    fn get_read_seq(&self, stream_id: u32) -> u64;
+
+    fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64;
+
+    fn reset_read_seq(&mut self);
 
 }
 
@@ -184,6 +191,16 @@ pub trait MessageEncrypter: Send + Sync {
     fn encrypted_payload_len_tcpls(&self, payload_len: usize, header_len: usize) -> (usize, usize);
 
     fn get_tag_length(&self) -> usize;
+
+    fn increase_write_seq(&mut self, stream_id: u32);
+
+    fn get_write_seq(&self, stream_id: u32) -> u64;
+
+
+    fn reset_write_seq(&mut self);
+    fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64;
+
+
 }
 
 impl dyn MessageEncrypter {
@@ -289,8 +306,8 @@ pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13
         (header.chunk_num >> 16) as u8,
         (header.chunk_num >> 8) as u8,
         (header.chunk_num & 0xff) as u8,
-        (header.offset_step >> 8) as u8,
-        (header.offset_step & 0xff) as u8,
+        (header.stream_id >> 24) as u8,
+        (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
         (header.stream_id & 0xff) as u8
     ]
@@ -472,6 +489,22 @@ impl MessageEncrypter for InvalidMessageEncrypter {
     fn get_tag_length(&self) -> usize {
         0
     }
+
+    fn increase_write_seq(&mut self, _stream_id: u32) {
+        todo!()
+    }
+
+    fn get_write_seq(&self, stream_id: u32) -> u64 {
+        todo!()
+    }
+
+    fn reset_write_seq(&mut self) {
+        todo!()
+    }
+
+    fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64 {
+        todo!()
+    }
 }
 
 /// A `MessageDecrypter` which doesn't work.
@@ -486,8 +519,27 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         Err(Error::DecryptError)
     }
 
-    fn decrypt_tcpls<'a>(&mut self, _msg: InboundOpaqueMessage<'a>, _seq: u64, _stream_id: u32, _recv_buf: &'a mut RecvBuf, _tcpls_header: &TcplsHeader) -> Result<InboundPlainMessage<'a>, Error> {
+    fn decrypt_tcpls<'a>(&mut self,
+                         _msg: InboundOpaqueMessage<'a>,
+                         _app_bufs: &'a mut RecvBufMap,
+                         _header_decrypted: bool, _header_decrypter: &mut HeaderProtector) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
         Err(Error::DecryptError)
+    }
+
+    fn increase_read_seq(&mut self, _stream_id: u32) {
+        todo!()
+    }
+
+    fn get_read_seq(&self, stream_id: u32) -> u64 {
+        todo!()
+    }
+
+    fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64 {
+        todo!()
+    }
+
+    fn reset_read_seq(&mut self) {
+        todo!()
     }
 }
 #[test]
