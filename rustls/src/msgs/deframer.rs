@@ -11,13 +11,15 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Range;
 use core::slice::SliceIndex;
-use std::collections::{hash_map, BTreeMap};
+use std::collections::{hash_map, BTreeSet};
 #[cfg(feature = "std")]
 use std::io;
 
 use super::codec::Codec;
 use crate::msgs::message::{CHUNK_NUM_OFFSET, CHUNK_NUM_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
 use core::ptr;
+use std::println;
+use std::time::SystemTime;
 
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///
@@ -284,60 +286,45 @@ impl MessageDeframer {
         // For records that decrypt as `Handshake`, we keep the current state of the joined
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
-            start = match self.unproc_ranges.get(&conn_id) {
-                // If no records exist for conn_id
-                None => {
-                    self.proc_ranges
-                        .get(&conn_id)
-                        .and_then(|ranges| ranges.last())
-                        .map(|range| range.end)
-                        .unwrap_or(0)
-                }
+            start = if self.unproc_ranges.get(&conn_id).is_some_and(|unranges| !unranges.is_empty()) {
 
-                // If records exist but are empty
-                Some(unranges) if unranges.is_empty() => {
-                    self.proc_ranges
-                        .get(&conn_id)
-                        .and_then(|ranges| ranges.last())
-                        .map(|range| range.end)
-                        .unwrap_or(0)
-                }
-
-                // If records exist and are non-empty, check for a match or fallback to the last range's end
-                Some(unranges) => {
-                    let mut pos = None;
-                    let mut next: usize = 0;
-                    for (unrange) in unranges.iter() {
-                        if let Some(rev_buf) = app_buffers
-                            .get(u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
-                                .try_into()
-                                .unwrap()))
-                        {
-                            if rev_buf.next_recv_pkt_num == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
-                                .try_into()
-                                .unwrap()) {
-                                pos = Some(unrange.start);
-                                header_decrypted = true;
-                                break;
-                            } else {
-                                next = unrange.start + (unrange.end - unrange.start);
-                            }
+                let mut pos = None;
+                let mut next: usize = 0;
+                for (unrange) in self.unproc_ranges.get(&conn_id).unwrap() {
+                    if let Some(rev_buf) = app_buffers
+                        .get(u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
+                            .try_into()
+                            .unwrap()))
+                    {
+                        if rev_buf.next_recv_pkt_num == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
+                            .try_into()
+                            .unwrap()) {
+                            pos = Some(unrange.start);
+                            header_decrypted = true;
+                            break;
+                        } else {
+                            next = unrange.start + (unrange.end - unrange.start);
                         }
                     }
-
-                    let last_processed_end = self.proc_ranges
-                        .get(&conn_id)
-                        .and_then(|ranges| ranges.last())
-                        .map(|range| range.end)
-                        .unwrap_or(0);
-
-
-                    match pos {
-                        None => core::cmp::max(next, last_processed_end),
-                        Some(p) => p,
-                    }
                 }
-            };
+
+                let last_processed_end = self
+                    .proc_ranges
+                    .get(&conn_id)
+                    .map(|ranges| ranges.iter().map(|range| range.end).max().unwrap_or(0))
+                    .unwrap_or(0);
+
+
+                match pos {
+                    None => core::cmp::max(next, last_processed_end),
+                    Some(p) => p,
+                }
+
+            } else { self
+                .proc_ranges
+                .get(&conn_id)
+                .map(|ranges| ranges.iter().map(|range| range.end).max().unwrap_or(0))
+                .unwrap_or(0) };
 
             // Does our `buf` contain a full message?  It does if it is big enough to
             // contain a header, and that header has a length which falls within `buf`.
