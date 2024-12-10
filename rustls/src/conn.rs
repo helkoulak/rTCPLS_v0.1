@@ -6,7 +6,10 @@ use core::mem;
 use core::ops::{Deref, DerefMut};
 #[cfg(feature = "std")]
 use std::io;
-use std::println;
+use std::io::Write;
+use std::{println, vec};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use libc::send;
 use crate::common_state::{CommonState, Context, IoState, PlainBufsMap, State};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
@@ -15,7 +18,7 @@ use crate::log::trace;
 
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer, MessageDeframerMap};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
+use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload, OutboundPlainMessage};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 
 pub(crate) mod unbuffered;
@@ -34,6 +37,8 @@ mod connection {
     use crate::vecbuf::ChunkVecBuffer;
     use crate::ConnectionCommon;
     use crate::recvbuf::RecvBufMap;
+    use crate::tcpls::stream::SimpleIdHashMap;
+    use crate::tcpls::TcpConnection;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -85,10 +90,10 @@ mod connection {
         /// Processes any new packets read by a previous call to [`Connection::read_tls`].
         ///
         /// See [`ConnectionCommon::process_new_packets()`] for more information.
-        pub fn process_new_packets(&mut self, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
+        pub fn process_new_packets(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
             match self {
-                Self::Client(conn) => conn.process_new_packets(app_buffers),
-                Self::Server(conn) => conn.process_new_packets(app_buffers),
+                Self::Client(conn) => conn.process_new_packets(tcp_conns, app_buffers),
+                Self::Server(conn) => conn.process_new_packets(tcp_conns, app_buffers),
             }
         }
 
@@ -368,9 +373,14 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
+use crate::ContentType::ApplicationData;
+use crate::crypto::cipher::OutboundChunks;
+use crate::Error::Done;
+use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::{ReaderAppBufs, RecvBufMap};
-use crate::tcpls::frame::{Frame, STREAM_FRAME_HEADER_SIZE};
-use crate::tcpls::stream::DEFAULT_STREAM_ID;
+use crate::tcpls::frame::{Frame, PROBE_FRAME_SIZE, STREAM_FRAME_HEADER_SIZE};
+use crate::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
+use crate::tcpls::TcpConnection;
 
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
@@ -420,9 +430,9 @@ impl<Data> ConnectionCommon<Data> {
     /// [`read_tls`]: Connection::read_tls
     /// [`process_new_packets`]: Connection::process_new_packets
     #[inline]
-    pub fn process_new_packets(&mut self, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
+    pub fn process_new_packets(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
         self.core
-            .process_new_packets(self.deframers_map.get_or_create_def_vec_buff(self.conn_in_use as u64),
+            .process_new_packets(tcp_conns, self.deframers_map.get_or_create_def_vec_buff(self.conn_in_use as u64),
                                  &mut self.sendable_plaintext, app_buffers)
     }
     /// Get ids of deframer buffers that have data received from socket
@@ -601,6 +611,7 @@ impl<Data> ConnectionCommon<Data> {
 
         let empty_map = &mut RecvBufMap::new();
         let recv = recv_map.unwrap_or(empty_map);
+        let mut tcp_conns = SimpleIdHashMap::default();
 
         let _until_handshaked = self.is_handshaking();
         let mut eof = false;
@@ -640,7 +651,7 @@ impl<Data> ConnectionCommon<Data> {
             }
 
 
-            match self.process_new_packets(recv) {
+            match self.process_new_packets(&mut tcp_conns, recv) {
                 Ok(_) => {}
                 Err(e) => {
                     // In case we have an alert to send describing this error,
@@ -820,6 +831,7 @@ impl<Data> ConnectionCore<Data> {
 
     pub(crate) fn process_new_packets(
         &mut self,
+        tcp_conns: &mut SimpleIdHashMap<TcpConnection>,
         deframer_buffer: &mut DeframerVecBuffer,
         sendable_plaintext: &mut PlainBufsMap,
         app_buffers: &mut RecvBufMap,
@@ -863,7 +875,7 @@ impl<Data> ConnectionCore<Data> {
             };
 
             if msg.typ == ContentType::ApplicationData {
-                self.process_tcpls_payload(app_buffers);
+                self.process_tcpls_payload(tcp_conns, app_buffers);
                 continue;
             }
 
@@ -898,7 +910,8 @@ impl<Data> ConnectionCore<Data> {
 
 
     ///TODO: Add process functionality to other TCPLS control frames
-    fn process_tcpls_payload(&mut self, app_buffers: &mut RecvBufMap) {
+    fn process_tcpls_payload(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) {
+        let conn_id = self.message_deframer.current_conn_id;
         let app_buffer = app_buffers.get_mut(self.common_state.record_layer.get_stream_id()).unwrap();
         let offset = app_buffer.get_offset();
 
@@ -933,6 +946,36 @@ impl<Data> ConnectionCore<Data> {
                     next_record_stream_id: _,
                     next_offset: _,
                 } => {},
+                Frame::Probe {
+                    random,
+                } => {
+                    if tcp_conns.get(&conn_id).unwrap().probe_initiated {
+                        if tcp_conns.get(&conn_id).unwrap().probe_rand.unwrap() == random {
+                            tcp_conns.get_mut(&conn_id).unwrap().rtt = tcp_conns
+                                .get(&conn_id)
+                                .unwrap()
+                                .probe_sent_at
+                                .unwrap()
+                                .elapsed();
+                            tcp_conns.get_mut(&conn_id).unwrap().probe_initiated = false;
+                            tcp_conns.get_mut(&conn_id).unwrap().probe_sent_at = None;
+                            tcp_conns.get_mut(&conn_id).unwrap().probe_rand = None;
+                        }
+                    } else {
+                        app_buffer.offset -= PROBE_FRAME_SIZE as u64;
+                        match self.common_state.send_single_probe(OutboundPlainMessage {
+                            typ: ApplicationData,
+                            version: TLSv1_2,
+                            payload: OutboundChunks::Single(&app_buffer.get_ref()[(app_buffer.offset+1) as usize..=(app_buffer.offset+4) as usize])
+                        }) {
+                            Some(enc_probe_reply) =>
+                                tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_probe_reply.encode()).unwrap(),
+                            None => {0},
+                        };
+
+                    }
+                    break
+                }
             }
         }
     }
@@ -1129,6 +1172,27 @@ impl<Data> ConnectionCore<Data> {
                 .map(|_| output),
             Err(e) => Err(e.clone()),
         }
+    }
+
+    pub(crate) fn bytes_to_system_time(bytes: &[u8]) -> SystemTime {
+        // Deserialize seconds and nanoseconds
+        let secs = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
+        let nanos = u32::from_be_bytes(bytes[8..12].try_into().unwrap());
+
+        // Reconstruct SystemTime
+        UNIX_EPOCH + Duration::new(secs, nanos)
+    }
+
+    pub(crate) fn system_time_to_bytes(system_time: SystemTime) -> Vec<u8> {
+        let duration = system_time
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+
+        // Serialize seconds and nanoseconds
+        let mut bytes = Vec::with_capacity(12);
+        bytes.extend_from_slice(&duration.as_secs().to_be_bytes()); // 8 bytes for seconds
+        bytes.extend_from_slice(&duration.subsec_nanos().to_be_bytes()); // 4 bytes for nanoseconds
+        bytes
     }
 }
 

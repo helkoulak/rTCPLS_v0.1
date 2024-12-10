@@ -9,14 +9,18 @@ use std::net::{Shutdown, SocketAddr};
 
 use std::prelude::rust_2021::{ToString, Vec};
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime};
 use log::trace;
 
 use mio::net::{TcpListener, TcpStream};
 use rand::Rng;
+use ring::rand::{SecureRandom, SystemRandom};
 use crate::{CipherSuite, ClientConfig, ClientConnection,
             Connection, ContentType, Error, HandshakeType, InvalidMessage, IoState,
             NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, Side, SignatureScheme};
 use crate::AlertDescription::IllegalParameter;
+use crate::ContentType::ApplicationData;
+use crate::crypto::cipher::OutboundChunks;
 use crate::InvalidMessage::{InvalidContentType, InvalidEmptyPayload};
 use crate::msgs::codec;
 use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType};
@@ -24,8 +28,9 @@ use crate::msgs::handshake::{ClientExtension, ClientHelloPayload,
                              HandshakeMessagePayload, HandshakePayload,
                              KeyShareEntry, Random,
                              ServerExtension, ServerHelloPayload, SessionId};
-use crate::msgs::message::{InboundOpaqueMessage, Message, MessageError, MessagePayload, PlainMessage};
+use crate::msgs::message::{InboundOpaqueMessage, Message, MessageError, MessagePayload, OutboundPlainMessage, PlainMessage};
 use crate::PeerMisbehaved::{InvalidTcplsJoinToken, TcplsJoinExtensionNotFound};
+use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::RecvBufMap;
 use crate::tcpls::network_address::AddressMap;
 use crate::tcpls::outstanding_conn::OutstandingTcpConn;
@@ -72,9 +77,9 @@ impl TcplsSession {
         is_server: bool,
     ) {
         assert_ne!(is_server, true);
-
+        let t = Instant::now();
         let socket = TcpStream::connect(dest_address).expect("TCP connection establishment failed");
-
+        let initial_rtt = t.elapsed();
         if self.next_conn_id == DEFAULT_CONNECTION_ID {
             match config {
                 Some(ref _client_config) => (),
@@ -85,13 +90,13 @@ impl TcplsSession {
             let _ = self.tls_conn.insert(Connection::from(client_conn));
             let _ = self.tls_config.insert(TlsConfig::Client(config.unwrap()));
 
-            self.create_tcpls_connection_object(socket);
+            self.create_tcpls_connection_object(socket, initial_rtt);
         } else {
             self.tls_conn.as_mut()
                 .unwrap()
                 .outstanding_tcp_conns
                 .as_mut_ref()
-                .insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket));
+                .insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket, initial_rtt));
             self.next_conn_id += 1;
         }
 
@@ -168,7 +173,7 @@ impl TcplsSession {
     }
 
 
-    pub fn create_tcpls_connection_object(&mut self, socket: TcpStream) -> u32 {
+    pub fn create_tcpls_connection_object(&mut self, socket: TcpStream, rrt: Duration) -> u32 {
         let mut tcp_conn = TcpConnection::new(socket, self.next_conn_id, TcplsConnectionState::CONNECTED);
 
         let new_id = self.next_conn_id;
@@ -178,6 +183,7 @@ impl TcplsSession {
         if tcp_conn.connection_id == DEFAULT_CONNECTION_ID {
             tcp_conn.is_primary = true;
         }
+        tcp_conn.rtt = rrt;
 
         self.tcp_connections.insert(new_id as u64, tcp_conn);
 
@@ -194,8 +200,13 @@ impl TcplsSession {
         config: Arc<ServerConfig>,
     ) -> Result<u32, io::Error> {
         let conn_id;
+        let t = Instant::now();
+        let mut initial_rtt = Duration::default();
         let (socket, _remote_add) = match listener.accept() {
-            Ok((socket, remote_add)) => (socket, remote_add),
+            Ok((socket, remote_add)) => {
+                initial_rtt = t.elapsed();
+                (socket, remote_add)
+            },
             Err(err) => return Err(err),
         };
 
@@ -206,12 +217,12 @@ impl TcplsSession {
                 .expect("Establishing a TLS session has failed");
             let _ = self.tls_conn.insert(Connection::from(server_conn));
             let _ = self.tls_config.insert(TlsConfig::from(config));
-            conn_id = self.create_tcpls_connection_object(socket);
+            conn_id = self.create_tcpls_connection_object(socket, initial_rtt);
         }else {
             self.tls_conn
                 .as_mut()
                 .unwrap()
-                .outstanding_tcp_conns.as_mut_ref().insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket));
+                .outstanding_tcp_conns.as_mut_ref().insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket, initial_rtt));
             conn_id = self.next_conn_id;
             self.next_conn_id += 1;
         }
@@ -234,6 +245,7 @@ impl TcplsSession {
             return Err(Error::General("No connection ids provided".to_string()));
         }
 
+
         //Flush streams selected by the app or flush all
         let stream_ids = match flushable_streams {
             Some(set) => StreamIter::from(&set),
@@ -251,8 +263,10 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
+            let chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
             let mut sent;
 
+            let mut conn_shares = self.calculate_conn_shares(chunk_num, &conn_ids);
 
             while len > 0 {
                 for conn_id in &conn_ids {
@@ -260,9 +274,18 @@ impl TcplsSession {
                         Some(id) => id,
                         None => *conn_id,
                     };
+                    let mut conn_share = conn_shares.get_mut(&conn_to_use).unwrap();
                     let socket = &mut self.tcp_connections.get_mut(&conn_to_use).unwrap().socket;
                     let chunk = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.get_chunk(){
-                        Some(ch) => ch,
+                        Some(ch) => {
+                            if *conn_share == 0 {
+                                break
+                            }else {
+                                *conn_share -= 1;
+                                ch
+                            }
+
+                        },
                         None => {
                             break
                         },
@@ -328,7 +351,7 @@ impl TcplsSession {
         loop {
             for def_id in &def_ids {
                 self.tls_conn.as_mut().unwrap().set_connection_in_use(*def_id as u32);
-                io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(app_buffers) {
+                io_state = match self.tls_conn.as_mut().unwrap().process_new_packets(&mut self.tcp_connections, app_buffers) {
                     Ok(io_state) => io_state,
                     Err(err) => return Err(err),
                 };
@@ -414,6 +437,8 @@ impl TcplsSession {
     }
 
     fn join_conn_to_session(&mut self, id: u64) {
+        let rtt = self.tls_conn.as_mut()
+            .unwrap().outstanding_tcp_conns.as_mut_ref().remove(&id).unwrap().rtt;
         let socket = self.tls_conn.as_mut()
             .unwrap().outstanding_tcp_conns.as_mut_ref().remove(&id).unwrap().socket;
         self.tcp_connections.insert(id, TcpConnection {
@@ -425,6 +450,10 @@ impl TcplsSession {
             nbr_records_received: 0,
             is_primary: false,
             state: TcplsConnectionState::CONNECTED,
+            probe_initiated: false,
+            probe_rand: None,
+            probe_sent_at: None,
+            rtt,
         });
     }
     fn handle_fake_client_hello(&mut self,  m: &Message, id: u64) -> Result<(), Error>{
@@ -518,6 +547,66 @@ impl TcplsSession {
         }
     }
 
+    pub fn probe_rtt(&mut self) -> Result<(), Error> {
+        if self.tls_conn.as_ref().unwrap().is_handshaking(){
+            return Err(Error::General("Still handshaking".to_string()))
+        }
+        let mut rng = SystemRandom::new();
+        let mut buf = [0u8; 5];
+        buf[4] = 0x0a;
+
+        for conn in self.tcp_connections.iter_mut(){
+            rng.fill(&mut buf[0..4]).unwrap();
+            match self.tls_conn.as_mut().unwrap().send_single_probe(OutboundPlainMessage{
+                typ: ApplicationData,
+                version: TLSv1_2,
+                payload: OutboundChunks::Single(&buf)
+            }){
+                Some(enc_probe) => {
+                    conn.1.probe_rand = Some(u32::from_be_bytes([buf[0],buf[1],buf[2],buf[3]]));
+                    conn.1.probe_initiated = true;
+                    conn.1.probe_sent_at = Some(Instant::now());
+                    conn.1.socket.write(&enc_probe.encode()).unwrap();
+                },
+                None => {},
+            };
+        }
+
+       Ok(())
+
+    }
+
+    pub fn calculate_conn_shares(&self, chunks_num: usize, conn_ids: &Vec<u64>) -> SimpleIdHashMap<usize> {
+        let mut shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+        let mut weights: SimpleIdHashMap<f64> = SimpleIdHashMap::default();
+        let mut weight_sum: f64 = 0.0;
+
+        // Calculate weights and their sum
+        for &id in &conn_ids {
+            if let Some(connection) = self.tcp_connections.get(&id) {
+                let latency_ms = connection.rtt.as_millis() as f64;
+
+                let weight = if latency_ms > 0.0 { 1.0 / latency_ms } else { 1.0 };
+
+                weights.insert(id, weight);
+                weight_sum += weight;
+            }
+        }
+
+        // Distribute chunks proportionally based on weights
+        for &id in &conn_ids {
+            if let Some(&weight) = weights.get(&id) {
+                // Calculate proportion and allocate chunks
+                let proportion = weight / weight_sum;
+                let share = (proportion * chunks_num as f64).round() as usize;
+                shares.insert(id, share);
+            }
+        }
+
+        shares
+    }
+
+
 }
 
 
@@ -552,6 +641,11 @@ pub struct TcpConnection {
     pub is_primary: bool,
     // Is this connection the default one?
     pub state: TcplsConnectionState,
+    pub probe_initiated: bool,
+    pub probe_rand: Option<u32>,
+    pub probe_sent_at: Option<Instant>,
+    pub rtt: Duration,
+
 }
 
 impl TcpConnection {
@@ -565,6 +659,10 @@ impl TcpConnection {
             nbr_records_received: 0,
             is_primary: false,
             state,
+            probe_initiated: false,
+            probe_rand: None,
+            probe_sent_at: None,
+            rtt: Default::default(),
         }
     }
 }

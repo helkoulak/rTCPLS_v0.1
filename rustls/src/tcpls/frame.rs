@@ -11,6 +11,8 @@ pub const SAMPLE_PAYLOAD_LENGTH: usize = 16;
 
 pub const STREAM_FRAME_HEADER_SIZE: usize = 3;
 
+pub const PROBE_FRAME_SIZE: usize = 5;
+
 pub const MAX_TCPLS_FRAGMENT_LEN: usize = MAX_FRAGMENT_LEN - TCPLS_OVERHEAD;
 
 pub const TCPLS_OVERHEAD: usize = TCPLS_HEADER_SIZE + STREAM_FRAME_HEADER_SIZE;
@@ -57,6 +59,10 @@ pub enum Frame {
         next_record_stream_id: u64,
         next_offset: u64,
     },
+
+    Probe {
+        random: u32,
+    }
 }
 
 impl Frame {
@@ -81,6 +87,8 @@ impl Frame {
             0x08 => parse_remove_address_frame(b).unwrap(),
 
             0x09 => parse_stream_change_frame(b).unwrap(),
+
+            0x0a => parse_probe_frame(b).unwrap(),
 
             _ => return Err(InvalidMessage::InvalidFrameType),
         };
@@ -156,6 +164,13 @@ impl Frame {
                 b.put_varint_reverse(*next_offset).unwrap();
                 b.put_varint(0x09).unwrap();
             }
+
+            Self::Probe {
+                random,
+            } => {
+                b.put_u32(*random).unwrap();
+                b.put_u8(0x0a).unwrap();
+            }
         }
 
         Ok(before - b.cap())
@@ -223,7 +238,7 @@ impl Frame {
 
 fn parse_stream_frame(frame_type: u8, b: &mut octets::Octets) -> octets::Result<Frame> {
 
-    let length = b.get_u16_reverse().unwrap();
+    let length = b.get_u16_reverse()?;
 
     let fin = match frame_type {
         2 => 0,
@@ -238,9 +253,9 @@ fn parse_stream_frame(frame_type: u8, b: &mut octets::Octets) -> octets::Result<
 }
 
 fn parse_ack_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let connection_id = b.get_varint_reverse().unwrap();
+    let connection_id = b.get_varint_reverse()?;
 
-    let highest_record_seq_received = b.get_varint_reverse().unwrap();
+    let highest_record_seq_received = b.get_varint_reverse()?;
 
     Ok(Frame::ACK {
         highest_record_sn_received: highest_record_seq_received,
@@ -249,9 +264,9 @@ fn parse_ack_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_new_token_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let sequence = b.get_varint_reverse().unwrap();
+    let sequence = b.get_varint_reverse()?;
 
-    let token = b.get_bytes_reverse(32).unwrap().buf();
+    let token = b.get_bytes_reverse(32)?.buf();
 
     Ok(Frame::NewToken {
         token: <[u8; 32]>::try_from(token).unwrap(),
@@ -260,23 +275,23 @@ fn parse_new_token_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_connection_reset_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let connection_id = b.get_varint_reverse().unwrap();
+    let connection_id = b.get_varint_reverse()?;
 
     Ok(Frame::ConnectionReset { connection_id })
 }
 
 fn parse_new_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let address_id = b.get_varint_reverse().unwrap();
+    let address_id = b.get_varint_reverse()?;
 
-    let address_version = b.get_varint_reverse().unwrap();
+    let address_version = b.get_varint_reverse()?;
 
     let address = match address_version {
-        4 => b.get_bytes_reverse(4).unwrap().to_vec(),
-        6 => b.get_bytes_reverse(16).unwrap().to_vec(),
+        4 => b.get_bytes_reverse(4)?.to_vec(),
+        6 => b.get_bytes_reverse(16)?.to_vec(),
         _ => panic!("Wrong ip address version"),
     };
 
-    let port = b.get_varint_reverse().unwrap();
+    let port = b.get_varint_reverse()?;
 
     Ok(Frame::NewAddress {
         port,
@@ -287,15 +302,21 @@ fn parse_new_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_remove_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let address_id = b.get_varint_reverse().unwrap();
+    let address_id = b.get_varint_reverse()?;
 
     Ok(Frame::RemoveAddress { address_id })
 }
 
-fn parse_stream_change_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let next_offset = b.get_varint_reverse().unwrap();
+fn parse_probe_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
+    let random = b.get_u32_reverse()?;
 
-    let next_record_stream_id = b.get_varint_reverse().unwrap();
+    Ok(Frame::Probe {random})
+}
+
+fn parse_stream_change_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
+    let next_offset = b.get_varint_reverse()?;
+
+    let next_record_stream_id = b.get_varint_reverse()?;
 
     Ok(Frame::StreamChange {
         next_record_stream_id,

@@ -128,7 +128,7 @@ impl TlsServer {
 
 
         for id in recv_map.readable() {
-            let mut stream = recv_map.get_mut(id as u16).unwrap();
+            let mut stream = recv_map.get_mut(id as u32).unwrap();
 
 
 

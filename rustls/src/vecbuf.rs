@@ -83,6 +83,11 @@ impl ChunkVecBuffer {
         len
     }
 
+    /// How many chunks this stream has
+    pub(crate) fn chunks_num(&self) -> usize {
+        self.chunks.len()
+    }
+
     /// For a proposed append of `len` bytes, how many
     /// bytes should we actually append to adhere to the
     /// currently set `limit`?

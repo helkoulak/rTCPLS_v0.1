@@ -377,8 +377,8 @@ mod connection {
                 plaintext,
                 &mut self.deframer_buffer,
             )?;
-            self.core
-                .process_new_packets(&mut self.deframer_buffer, &mut PlainBufsMap::default(), &mut RecvBufMap::new())?;
+            /*self.core
+                .process_new_packets(&mut self.deframer_buffer, &mut PlainBufsMap::default(), &mut RecvBufMap::new())?;*/
             Ok(())
         }
 

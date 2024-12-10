@@ -1,7 +1,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use std::collections::hash_map;
+use std::collections::{hash_map, VecDeque};
 
 use pki_types::CertificateDer;
 
@@ -14,10 +14,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{CertificateChain, TcplsToken};
-use crate::msgs::message::{
-    Message, MessagePayload, OutboundChunks, OutboundPlainMessage,
-    PlainMessage,
-};
+use crate::msgs::message::{Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage};
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
@@ -401,6 +398,34 @@ impl CommonState {
 
         let em = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header);
         self.queue_message(em.encode(), id);
+    }
+
+    pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{
+
+        // set id of stream to decide on crypto context and record seq space
+        self.record_layer.encrypt_for_stream(DEFAULT_STREAM_ID);
+        // Close connection once we start to run out of
+        // sequence space.
+        if self
+            .record_layer
+            .wants_close_before_encrypt()
+        {
+            self.send_close_notify();
+        }
+
+        if self.record_layer.encrypt_exhausted() {
+            return None;
+        }
+
+        let tcpls_header = self.record_layer
+            .streams
+            .get_mut(DEFAULT_STREAM_ID)
+            .unwrap()
+            .build_header(m.payload.len() as u16);
+
+
+        Some(self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, None))
+
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {

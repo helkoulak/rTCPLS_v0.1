@@ -1,6 +1,7 @@
 use std::{io, vec};
 use std::io::Read;
 use std::prelude::rust_2021::Vec;
+use std::time::Duration;
 use mio::net::TcpStream;
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::tcpls::stream::SimpleIdHashMap;
@@ -15,16 +16,19 @@ pub struct OutstandingTcpConn {
     pub used: usize,
 
     pub request_sent: bool,
+
+    pub rtt: Duration,
 }
 
 impl OutstandingTcpConn {
 
-    pub fn new(socket: TcpStream) -> Self {
+    pub fn new(socket: TcpStream, rtt: Duration) -> Self {
         Self{
             socket,
             rcv_buf: vec![0u8; MAX_FRAGMENT_LEN],
             used: 0,
             request_sent: false,
+            rtt,
         }
     }
 
