@@ -2,7 +2,7 @@
 #![allow(unused_qualifications)]
 
 /// This module contains optional APIs for implementing TCPLS.
-use std::{io, u32, vec};
+use std::{io, println, u32, vec};
 
 use std::io::Write;
 use std::net::{Shutdown, SocketAddr};
@@ -247,7 +247,7 @@ impl TcplsSession {
             Some(ids) => ids,
         };
 
-        let mut conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+
 
         //Flush streams selected by the app or flush all
         let stream_ids = match flushable_streams {
@@ -257,7 +257,10 @@ impl TcplsSession {
 
         let mut done = 0;
         let mut chunk_num: usize = 0;
-
+        let mut prev_chunk_num: usize = 0;
+        let mut sorted_keys: Vec<u64> = Vec::default();
+        let mut conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+        let mut prev_conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
 
         for id in stream_ids {
             match tls_conn.record_layer.streams.get_mut(id as u32) {
@@ -270,10 +273,20 @@ impl TcplsSession {
             chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
             let mut sent;
 
-            conn_shares = tls_conn.calculate_conn_shares(chunk_num, &conn_ids);
+            if prev_chunk_num != chunk_num {
+                conn_shares = tls_conn.calculate_conn_shares(chunk_num, &conn_ids);
+                prev_conn_shares = conn_shares.clone();
+
+                //Sort conn ids from the fastest connection to the lowest.
+                let mut sorted_conn: Vec<(&u64, &usize)> = conn_shares.iter().collect();
+                sorted_conn.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending value
+
+                sorted_keys = sorted_conn.into_iter().map(|(key, _)| *key).collect();
+            }
+
 
             while len > 0 {
-                for conn_id in &conn_ids {
+                for conn_id in &sorted_keys {
                     let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_conn() {
                         Some(id) => id,
                         None => *conn_id,
@@ -322,6 +335,8 @@ impl TcplsSession {
             }
 
             if len == 0 {
+                prev_chunk_num = chunk_num;
+                conn_shares = prev_conn_shares.clone();
                 tls_conn.record_layer.streams.reset_stream(id as u32);
             }
         }
