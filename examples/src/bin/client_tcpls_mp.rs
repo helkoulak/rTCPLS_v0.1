@@ -62,19 +62,16 @@ impl TlsClient {
 
                 if self.tcpls_session.tcp_connections.len() == 3 &&
                     !self.data_sent
-                     {
+                {
+                    self.tcpls_session.probe_rtt().unwrap();
                     self.send_data(vec![1u8; 64000].as_slice(), 0).expect("");
                     self.send_data(vec![2u8; 64000].as_slice(), 1).expect("");
                     self.send_data(vec![3u8; 64000].as_slice(), 2).expect("");
                     self.send_data(vec![3u8; 64000].as_slice(), 3).expect("");
 
-                    let mut conn_ids = Vec::new();
-                    conn_ids.push(0);
-                    conn_ids.push(1);
-                    conn_ids.push(2);
-                    self.tcpls_session.send_on_connection(conn_ids, None).expect("Sending on connection failed");
-                    self.data_sent = true;
 
+                    self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
+                    self.data_sent = true;
                 }
             }
         }
@@ -144,10 +141,7 @@ impl TlsClient {
     fn do_write(&mut self, id: u64) {
 
         if self.tcpls_session.tcp_connections.contains_key(&id) {
-
-            let mut conn_ids = Vec::new();
-            conn_ids.push(id);
-            self.tcpls_session.send_on_connection(conn_ids, None).expect("Send on connection failed");
+            self.tcpls_session.send_on_connection(None, None).expect("Send on connection failed");
         }
 
     }

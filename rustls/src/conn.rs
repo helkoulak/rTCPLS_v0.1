@@ -951,12 +951,12 @@ impl<Data> ConnectionCore<Data> {
                 } => {
                     if tcp_conns.get(&conn_id).unwrap().probe_initiated {
                         if tcp_conns.get(&conn_id).unwrap().probe_rand.unwrap() == random {
-                            tcp_conns.get_mut(&conn_id).unwrap().rtt = tcp_conns
+                            self.common_state.conns_rtts.insert(conn_id, tcp_conns
                                 .get(&conn_id)
                                 .unwrap()
                                 .probe_sent_at
                                 .unwrap()
-                                .elapsed();
+                                .elapsed());
                             tcp_conns.get_mut(&conn_id).unwrap().probe_initiated = false;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_sent_at = None;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_rand = None;
@@ -966,7 +966,7 @@ impl<Data> ConnectionCore<Data> {
                         match self.common_state.send_single_probe(OutboundPlainMessage {
                             typ: ApplicationData,
                             version: TLSv1_2,
-                            payload: OutboundChunks::Single(&app_buffer.get_ref()[(app_buffer.offset+1) as usize..=(app_buffer.offset+4) as usize])
+                            payload: OutboundChunks::Single(&app_buffer.get_ref()[app_buffer.offset as usize..=(app_buffer.offset+4) as usize])
                         }) {
                             Some(enc_probe_reply) =>
                                 tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_probe_reply.encode()).unwrap(),
@@ -1174,7 +1174,7 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
-    pub(crate) fn bytes_to_system_time(bytes: &[u8]) -> SystemTime {
+   /* pub(crate) fn bytes_to_system_time(bytes: &[u8]) -> SystemTime {
         // Deserialize seconds and nanoseconds
         let secs = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
         let nanos = u32::from_be_bytes(bytes[8..12].try_into().unwrap());
@@ -1193,7 +1193,7 @@ impl<Data> ConnectionCore<Data> {
         bytes.extend_from_slice(&duration.as_secs().to_be_bytes()); // 8 bytes for seconds
         bytes.extend_from_slice(&duration.subsec_nanos().to_be_bytes()); // 4 bytes for nanoseconds
         bytes
-    }
+    }*/
 }
 
 /// Data specific to the peer's side (client or server).

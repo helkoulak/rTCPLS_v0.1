@@ -2,7 +2,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use std::collections::{hash_map, VecDeque};
-
+use std::time::Duration;
 use pki_types::CertificateDer;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -65,6 +65,7 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
+    pub(crate) conns_rtts: SimpleIdHashMap<Duration>
 }
 
 impl CommonState {
@@ -101,6 +102,7 @@ impl CommonState {
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
+            conns_rtts: SimpleIdHashMap::default(),
         }
     }
     /// sets the id of the currently active tcp connection
@@ -426,6 +428,36 @@ impl CommonState {
 
         Some(self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, None))
 
+    }
+
+    pub fn calculate_conn_shares(& self, chunks_num: usize, conn_ids: &Vec<u64>) -> SimpleIdHashMap<usize> {
+        let mut shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+        let mut weights: SimpleIdHashMap<f64> = SimpleIdHashMap::default();
+        let mut weight_sum: f64 = 0.0;
+
+        // Calculate weights and their sum
+        for id in conn_ids {
+            if let Some(conn_rtt) = self.conns_rtts.get(&id) {
+                let latency_ns = conn_rtt.as_nanos() as f64;
+
+                let weight = if latency_ns > 0.0 { 1.0 / latency_ns } else { 1.0 };
+
+                weights.insert(*id, weight);
+                weight_sum += weight;
+            }
+        }
+
+        // Distribute chunks proportionally based on weights
+        for id in conn_ids {
+            if let Some(&weight) = weights.get(&id) {
+                // Calculate proportion and allocate chunks
+                let proportion = weight / weight_sum;
+                let share = (proportion * chunks_num as f64).ceil() as usize; // ensure each connection gets at least one chunk
+                shares.insert(*id, share);
+            }
+        }
+
+        shares
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {

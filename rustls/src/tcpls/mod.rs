@@ -90,16 +90,18 @@ impl TcplsSession {
             let _ = self.tls_conn.insert(Connection::from(client_conn));
             let _ = self.tls_config.insert(TlsConfig::Client(config.unwrap()));
 
-            self.create_tcpls_connection_object(socket, initial_rtt);
+            self.create_tcpls_connection_object(socket);
         } else {
+
             self.tls_conn.as_mut()
                 .unwrap()
                 .outstanding_tcp_conns
                 .as_mut_ref()
-                .insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket, initial_rtt));
-            self.next_conn_id += 1;
-        }
+                .insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket));
 
+        }
+        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, initial_rtt);
+        self.next_conn_id += 1;
     }
 
     pub fn join_tcp_connection(&mut self,  id: u64) -> Result<(), Error> {
@@ -173,7 +175,7 @@ impl TcplsSession {
     }
 
 
-    pub fn create_tcpls_connection_object(&mut self, socket: TcpStream, rrt: Duration) -> u32 {
+    pub fn create_tcpls_connection_object(&mut self, socket: TcpStream) -> u32 {
         let mut tcp_conn = TcpConnection::new(socket, self.next_conn_id, TcplsConnectionState::CONNECTED);
 
         let new_id = self.next_conn_id;
@@ -183,11 +185,9 @@ impl TcplsSession {
         if tcp_conn.connection_id == DEFAULT_CONNECTION_ID {
             tcp_conn.is_primary = true;
         }
-        tcp_conn.rtt = rrt;
 
         self.tcp_connections.insert(new_id as u64, tcp_conn);
 
-        self.next_conn_id += 1;
         self.address_map.next_local_address_id += 1;
         self.address_map.next_peer_address_id += 1;
 
@@ -217,16 +217,17 @@ impl TcplsSession {
                 .expect("Establishing a TLS session has failed");
             let _ = self.tls_conn.insert(Connection::from(server_conn));
             let _ = self.tls_config.insert(TlsConfig::from(config));
-            conn_id = self.create_tcpls_connection_object(socket, initial_rtt);
+            conn_id = self.create_tcpls_connection_object(socket);
         }else {
             self.tls_conn
                 .as_mut()
                 .unwrap()
-                .outstanding_tcp_conns.as_mut_ref().insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket, initial_rtt));
+                .outstanding_tcp_conns.as_mut_ref().insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket));
             conn_id = self.next_conn_id;
-            self.next_conn_id += 1;
-        }
 
+        }
+        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, initial_rtt);
+        self.next_conn_id += 1;
         Ok(conn_id)
     }
     /// Store data in send buffer
@@ -238,13 +239,15 @@ impl TcplsSession {
     }
 
     /// Flush bytes of a certain stream or a set of streams on specified byte-oriented sink.
-    pub fn send_on_connection(&mut self, conn_ids: Vec<u64>, flushable_streams: Option<SimpleIdHashSet>) -> Result<usize, Error> {
+    pub fn send_on_connection(&mut self, ids: Option<Vec<u64>>, flushable_streams: Option<SimpleIdHashSet>) -> Result<usize, Error> {
         let tls_conn = self.tls_conn.as_mut().unwrap();
 
-        if conn_ids.is_empty(){
-            return Err(Error::General("No connection ids provided".to_string()));
-        }
+        let conn_ids: Vec<u64> = match ids {
+            None => self.tcp_connections.keys().cloned().collect(),
+            Some(ids) => ids,
+        };
 
+        let mut conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
 
         //Flush streams selected by the app or flush all
         let stream_ids = match flushable_streams {
@@ -253,6 +256,7 @@ impl TcplsSession {
         };
 
         let mut done = 0;
+        let mut chunk_num: usize = 0;
 
 
         for id in stream_ids {
@@ -263,62 +267,57 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
-            let chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
+            chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
             let mut sent;
 
-            let mut conn_shares = self.calculate_conn_shares(chunk_num, &conn_ids);
+            conn_shares = tls_conn.calculate_conn_shares(chunk_num, &conn_ids);
 
             while len > 0 {
                 for conn_id in &conn_ids {
-                    let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_conn(){
+                    let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_conn() {
                         Some(id) => id,
                         None => *conn_id,
                     };
                     let mut conn_share = conn_shares.get_mut(&conn_to_use).unwrap();
                     let socket = &mut self.tcp_connections.get_mut(&conn_to_use).unwrap().socket;
-                    let chunk = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.get_chunk(){
-                        Some(ch) => {
-                            if *conn_share == 0 {
-                                break
-                            }else {
-                                *conn_share -= 1;
-                                ch
-                            }
+                    if *conn_share == 0 {
+                        continue
+                    }
 
-                        },
+                    let chunk = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.get_chunk() {
+                        Some(ch) => ch,
                         None => {
                             break
                         },
                     };
                     let chunk_len = chunk.len();
                     sent = match socket.write(chunk.as_slice()) {
-                            Ok(0) => return Ok(done),
-                            Ok(sent) => {
-                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
-                                if sent < chunk_len {
-                                    tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(Some(conn_to_use));
-                                }else {
-                                    tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(None);
-                                }
-                                sent
-                            },
+                        Ok(0) => return Ok(done),
+                        Ok(sent) => {
+                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
+                            if sent < chunk_len {
+                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(Some(conn_to_use));
+                            } else {
+                                *conn_share -= 1;
+                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(None);
+                            }
+                            sent
+                        },
 
-                            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                                sent = 0;
-                                tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
-                               return Ok(done)
-                            },
-                            _error => {
-                                return Err(Error::General("Data sending on socket failed".to_string()))
-                            },
-                        };
+                        Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                            sent = 0;
+                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
+                            return Ok(done)
+                        },
+                        _error => {
+                            return Err(Error::General("Data sending on socket failed".to_string()))
+                        },
+                    };
 
 
                     len -= sent;
-                    if len == 0 {break}
+                    if len == 0 { break }
                     done += sent;
-
-
                 }
             }
 
@@ -437,8 +436,6 @@ impl TcplsSession {
     }
 
     fn join_conn_to_session(&mut self, id: u64) {
-        let rtt = self.tls_conn.as_mut()
-            .unwrap().outstanding_tcp_conns.as_mut_ref().remove(&id).unwrap().rtt;
         let socket = self.tls_conn.as_mut()
             .unwrap().outstanding_tcp_conns.as_mut_ref().remove(&id).unwrap().socket;
         self.tcp_connections.insert(id, TcpConnection {
@@ -453,7 +450,6 @@ impl TcplsSession {
             probe_initiated: false,
             probe_rand: None,
             probe_sent_at: None,
-            rtt,
         });
     }
     fn handle_fake_client_hello(&mut self,  m: &Message, id: u64) -> Result<(), Error>{
@@ -551,7 +547,7 @@ impl TcplsSession {
         if self.tls_conn.as_ref().unwrap().is_handshaking(){
             return Err(Error::General("Still handshaking".to_string()))
         }
-        let mut rng = SystemRandom::new();
+        let rng = SystemRandom::new();
         let mut buf = [0u8; 5];
         buf[4] = 0x0a;
 
@@ -576,35 +572,7 @@ impl TcplsSession {
 
     }
 
-    pub fn calculate_conn_shares(&self, chunks_num: usize, conn_ids: &Vec<u64>) -> SimpleIdHashMap<usize> {
-        let mut shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
-        let mut weights: SimpleIdHashMap<f64> = SimpleIdHashMap::default();
-        let mut weight_sum: f64 = 0.0;
 
-        // Calculate weights and their sum
-        for &id in &conn_ids {
-            if let Some(connection) = self.tcp_connections.get(&id) {
-                let latency_ms = connection.rtt.as_millis() as f64;
-
-                let weight = if latency_ms > 0.0 { 1.0 / latency_ms } else { 1.0 };
-
-                weights.insert(id, weight);
-                weight_sum += weight;
-            }
-        }
-
-        // Distribute chunks proportionally based on weights
-        for &id in &conn_ids {
-            if let Some(&weight) = weights.get(&id) {
-                // Calculate proportion and allocate chunks
-                let proportion = weight / weight_sum;
-                let share = (proportion * chunks_num as f64).round() as usize;
-                shares.insert(id, share);
-            }
-        }
-
-        shares
-    }
 
 
 }
@@ -644,7 +612,6 @@ pub struct TcpConnection {
     pub probe_initiated: bool,
     pub probe_rand: Option<u32>,
     pub probe_sent_at: Option<Instant>,
-    pub rtt: Duration,
 
 }
 
@@ -662,7 +629,6 @@ impl TcpConnection {
             probe_initiated: false,
             probe_rand: None,
             probe_sent_at: None,
-            rtt: Default::default(),
         }
     }
 }

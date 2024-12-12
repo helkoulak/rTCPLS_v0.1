@@ -10,7 +10,7 @@ use std::str;
 use std::sync::Arc;
 
 use docopt::Docopt;
-use log::LevelFilter;
+use log::{trace, LevelFilter};
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 
@@ -64,6 +64,7 @@ impl TlsClient {
                 if self.tcpls_session.tcp_connections.len() == 3 &&
                     !self.data_sent
                      {
+                         self.tcpls_session.probe_rtt().unwrap();
                          let num_of_buf:u32 = 10000;
                          //Send three byte arrays on three streams
                          let mut id_set = SimpleIdHashSet::default();
@@ -72,11 +73,7 @@ impl TlsClient {
                              id_set.insert(i as u64);
                          }
 
-                        let mut conn_ids = Vec::new();
-                        conn_ids.push(0);
-                        conn_ids.push(1);
-                        conn_ids.push(2);
-                        self.tcpls_session.send_on_connection(conn_ids, Some(id_set)).expect("Sending on connection failed");
+                        self.tcpls_session.send_on_connection(None, Some(id_set)).expect("Sending on connection failed");
                         self.data_sent = true;
 
                 }
@@ -149,9 +146,7 @@ impl TlsClient {
 
         if self.tcpls_session.tcp_connections.contains_key(&id) {
 
-            let mut conn_ids = Vec::new();
-            conn_ids.push(id);
-            self.tcpls_session.send_on_connection(conn_ids, None).expect("Send on connection failed");
+            self.tcpls_session.send_on_connection(None, None).expect("Send on connection failed");
         }
 
     }

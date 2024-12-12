@@ -16,19 +16,16 @@ pub struct OutstandingTcpConn {
     pub used: usize,
 
     pub request_sent: bool,
-
-    pub rtt: Duration,
 }
 
 impl OutstandingTcpConn {
 
-    pub fn new(socket: TcpStream, rtt: Duration) -> Self {
+    pub fn new(socket: TcpStream) -> Self {
         Self{
             socket,
             rcv_buf: vec![0u8; MAX_FRAGMENT_LEN],
             used: 0,
             request_sent: false,
-            rtt,
         }
     }
 

@@ -103,7 +103,7 @@ impl TlsServer {
 
 
         if ev.is_writable() {
-            self.do_tls_write_and_handle_error(token);
+            self.do_tls_write_and_handle_error();
         }
 
         if self.closing {
@@ -241,14 +241,12 @@ impl TlsServer {
     }
 
 
-    fn tcpls_write(&mut self, token: &Token) -> Result<usize, Error> {
-        let mut conn_ids = Vec::new();
-        conn_ids.push(token.0 as u64);
-        self.tcpls_session.send_on_connection(conn_ids, None)
+    fn tcpls_write(&mut self) -> Result<usize, Error> {
+        self.tcpls_session.send_on_connection(None, None)
     }
 
-    fn do_tls_write_and_handle_error(&mut self, token: &Token) {
-        let rc = self.tcpls_write(token);
+    fn do_tls_write_and_handle_error(&mut self) {
+        let rc = self.tcpls_write();
         if rc.is_err() {
             error!("write failed {:?}", rc);
             self.closing = true;
