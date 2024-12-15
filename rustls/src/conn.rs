@@ -960,6 +960,7 @@ impl<Data> ConnectionCore<Data> {
                             tcp_conns.get_mut(&conn_id).unwrap().probe_initiated = false;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_sent_at = None;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_rand = None;
+                            println!("Probed latency for conn {:?} is {:?}", conn_id, self.common_state.conns_rtts.get(&conn_id))
                         }
                     } else {
                         app_buffer.offset -= PROBE_FRAME_SIZE as u64;

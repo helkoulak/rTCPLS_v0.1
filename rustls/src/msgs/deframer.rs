@@ -820,10 +820,15 @@ impl MessageDeframer {
         rd: &mut dyn io::Read,
         buffer: &mut DeframerVecBuffer,
     ) -> io::Result<usize> {
-        if let Err(err) = buffer.prepare_read(self.joining_hs.is_some()) {
+        match buffer.prepare_read(self.joining_hs.is_some()) {
 
-            return Err(io::Error::new(io::ErrorKind::InvalidData, err));
-        }
+            Err("message buffer full") => {
+                self.calculate_discard_range();
+                buffer.discard(self.discard_range.start, self.discard_range.end - self.discard_range.start);
+            }
+            Err(err) => return Err(io::Error::new(io::ErrorKind::InvalidData, err)),
+            _ => {}
+        };
 
         // Try to do the largest reads possible. Note that if
         // we get a message with a length field out of range here,
