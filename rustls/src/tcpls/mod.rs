@@ -154,22 +154,29 @@ impl TcplsSession {
             .encode();
 
 
-            self.tls_conn.as_mut()
+          match self.tls_conn.as_mut()
                 .unwrap()
                 .outstanding_tcp_conns
                 .as_mut_ref()
                 .get_mut(&id)
                 .unwrap()
                 .socket
-                .write(request.as_slice())
-                .expect("Sending fake client hello failed");
-        self.tls_conn.as_mut()
-            .unwrap()
-            .outstanding_tcp_conns
-            .as_mut_ref()
-            .get_mut(&id)
-            .unwrap()
-            .request_sent = true;
+                .write(request.as_slice()) {
+              Ok(n) => {
+                  self.tls_conn.as_mut()
+                      .unwrap()
+                      .outstanding_tcp_conns
+                      .as_mut_ref()
+                      .get_mut(&id)
+                      .unwrap()
+                      .request_sent = true;
+              }
+              Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+              Err(_err) => {
+                  return Err(Error::General("Send fake CH failed".to_string()));
+              }
+          };
+
 
         Ok(())
     }
