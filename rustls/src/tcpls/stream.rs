@@ -51,7 +51,9 @@ pub struct Stream {
     pub next_snd_pkt_num: u32,
 
     /// Dictates tcp connection to send on in case a record was partially sent in previous sending trial
-    pub(crate) conn_to_use: Option<u64>
+    pub(crate) conn_to_use: Option<u64>,
+
+    pub(crate) conn_shares: Option<SimpleIdHashMap<usize>>,
 }
 
 impl Stream {
@@ -61,6 +63,7 @@ impl Stream {
             send: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             next_snd_pkt_num: 0,
             conn_to_use: None,
+            conn_shares: None,
         }
     }
 
@@ -81,6 +84,8 @@ impl Stream {
 
     #[inline]
     pub fn reset_stream(&mut self) {
+        self.conn_shares = None;
+        self.conn_to_use = None;
         self.send.reset();
     }
     #[inline]
@@ -104,6 +109,17 @@ impl Stream {
         self.conn_to_use
     }
 
+    pub fn shares_already_calculated(&self) -> bool {
+        self.conn_shares.is_some()
+    }
+
+    pub fn insert_conn_share(&mut self, conn_id: u64, share: usize) {
+        self.conn_shares.get_or_insert_with(SimpleIdHashMap::default).insert(conn_id, share);
+    }
+
+    pub fn get_share(&mut self, conn_id: u64) -> &mut usize {
+        self.conn_shares.as_mut().unwrap().get_mut(&conn_id).unwrap()
+    }
 
 }
 

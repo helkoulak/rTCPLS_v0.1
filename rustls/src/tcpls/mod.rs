@@ -77,9 +77,9 @@ impl TcplsSession {
         is_server: bool,
     ) {
         assert_ne!(is_server, true);
-        let t = Instant::now();
+
         let socket = TcpStream::connect(dest_address).expect("TCP connection establishment failed");
-        let initial_rtt = t.elapsed();
+
         if self.next_conn_id == DEFAULT_CONNECTION_ID {
             match config {
                 Some(ref _client_config) => (),
@@ -100,7 +100,7 @@ impl TcplsSession {
                 .insert(self.next_conn_id as u64, OutstandingTcpConn::new(socket));
 
         }
-        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, initial_rtt);
+        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, Duration::default());
         self.next_conn_id += 1;
     }
 
@@ -207,11 +207,8 @@ impl TcplsSession {
         config: Arc<ServerConfig>,
     ) -> Result<u32, io::Error> {
         let conn_id;
-        let t = Instant::now();
-        let mut initial_rtt = Duration::default();
         let (socket, _remote_add) = match listener.accept() {
             Ok((socket, remote_add)) => {
-                initial_rtt = t.elapsed();
                 (socket, remote_add)
             },
             Err(err) => return Err(err),
@@ -233,7 +230,7 @@ impl TcplsSession {
             conn_id = self.next_conn_id;
 
         }
-        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, initial_rtt);
+        self.tls_conn.as_mut().unwrap().conns_rtts.insert(self.next_conn_id as u64, Duration::default());
         self.next_conn_id += 1;
         Ok(conn_id)
     }
@@ -264,10 +261,8 @@ impl TcplsSession {
 
         let mut done = 0;
         let mut chunk_num: usize = 0;
-        let mut prev_chunk_num: usize = 0;
-        let mut sorted_keys: Vec<u64> = Vec::default();
-        let mut conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
-        let mut prev_conn_shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+
+
 
         for id in stream_ids {
             match tls_conn.record_layer.streams.get_mut(id as u32) {
@@ -280,30 +275,24 @@ impl TcplsSession {
             chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
             let mut sent;
 
-            if prev_chunk_num != chunk_num {
-                conn_shares = tls_conn.calculate_conn_shares(chunk_num, &conn_ids);
-                prev_conn_shares = conn_shares.clone();
+            if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
+                tls_conn.calculate_conn_shares(chunk_num, &conn_ids, id);
+                println!("Shares {:?}", tls_conn.record_layer.streams.get_mut(id as u32).unwrap().conn_shares);
 
-                //Sort conn ids from the fastest connection to the lowest.
-                let mut sorted_conn: Vec<(&u64, &usize)> = conn_shares.iter().collect();
-                sorted_conn.sort_by(|a, b| b.1.cmp(a.1)); // Sort by descending value
-
-                sorted_keys = sorted_conn.into_iter().map(|(key, _)| *key).collect();
             }
 
 
             while len > 0 {
-                for conn_id in &sorted_keys {
+                for conn_id in &conn_ids {
                     let conn_to_use = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_conn() {
                         Some(id) => id,
                         None => *conn_id,
                     };
-                    let mut conn_share = conn_shares.get_mut(&conn_to_use).unwrap();
-                    let socket = &mut self.tcp_connections.get_mut(&conn_to_use).unwrap().socket;
-                    if *conn_share == 0 {
+
+                    if *tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_share(conn_to_use) == 0 {
                         continue
                     }
-
+                    let socket = &mut self.tcp_connections.get_mut(&conn_to_use).unwrap().socket;
                     let chunk = match tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.get_chunk() {
                         Some(ch) => ch,
                         None => {
@@ -318,7 +307,7 @@ impl TcplsSession {
                             if sent < chunk_len {
                                 tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(Some(conn_to_use));
                             } else {
-                                *conn_share -= 1;
+                                *tls_conn.record_layer.streams.get_mut(id as u32).unwrap().get_share(conn_to_use) -= 1;
                                 tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(None);
                             }
                             sent
@@ -342,8 +331,6 @@ impl TcplsSession {
             }
 
             if len == 0 {
-                prev_chunk_num = chunk_num;
-                conn_shares = prev_conn_shares.clone();
                 tls_conn.record_layer.streams.reset_stream(id as u32);
             }
         }

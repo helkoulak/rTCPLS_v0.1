@@ -430,8 +430,7 @@ impl CommonState {
 
     }
 
-    pub fn calculate_conn_shares(& self, chunks_num: usize, conn_ids: &Vec<u64>) -> SimpleIdHashMap<usize> {
-        let mut shares: SimpleIdHashMap<usize> = SimpleIdHashMap::default();
+    pub fn calculate_conn_shares(&mut self, chunks_num: usize, conn_ids: &Vec<u64>, stream_id: u64)  {
         let mut weights: SimpleIdHashMap<f64> = SimpleIdHashMap::default();
         let mut weight_sum: f64 = 0.0;
 
@@ -453,11 +452,9 @@ impl CommonState {
                 // Calculate proportion and allocate chunks
                 let proportion = weight / weight_sum;
                 let share = (proportion * chunks_num as f64).ceil() as usize; // ensure each connection gets at least one chunk
-                shares.insert(*id, share);
+                self.record_layer.streams.get_mut(stream_id as u32).unwrap().insert_conn_share(*id, share);
             }
         }
-
-        shares
     }
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {
