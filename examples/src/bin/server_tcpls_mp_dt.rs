@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate log;
 
-use std::{fs, io};
+use std::{fs, io, thread};
 use std::io::{BufReader, Read};
 use std::net;
 use std::sync::Arc;
-
+use std::time::Duration;
 
 #[macro_use]
 extern crate serde_derive;
@@ -21,12 +21,13 @@ use ring::digest;
 
 use rustls::crypto::{ring as provider, CryptoProvider};
 
-use rustls::{self, RootCertStore};
+use rustls::{self, Connection, RootCertStore, ServerConnection};
 
 use rustls::recvbuf::RecvBufMap;
 use rustls::server::WebPkiClientVerifier;
-use rustls::tcpls::{server_create_listener, TcplsSession};
-use rustls::tcpls::stream::SimpleIdHashMap;
+use rustls::tcpls::{server_create_listener, TcplsSession, TlsConfig, DEFAULT_CONNECTION_ID};
+use rustls::tcpls::outstanding_conn::OutstandingTcpConn;
+use rustls::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 
 // Token for our listening socket.
 const LISTENER1: mio::Token = mio::Token(100);
@@ -39,7 +40,6 @@ const LISTENER2: mio::Token = mio::Token(101);
 /// This binds together a TCP listening socket, some outstanding
 /// connections, and a TLS server configuration.
 struct TlsServer {
-    listeners: SimpleIdHashMap<TcpListener>,
     tls_config: Arc<rustls::ServerConfig>,
 
     closing: bool,
@@ -49,12 +49,12 @@ struct TlsServer {
     poll: mio::Poll,
     total_streams_received: usize,
     download_req_received: bool,
+    conns_probed: bool,
 }
 
 impl TlsServer {
     fn new(cfg: Arc<rustls::ServerConfig>) -> Self {
         Self {
-            listeners: SimpleIdHashMap::default(),
             tls_config: cfg,
             back: None,
             closing: false,
@@ -63,37 +63,15 @@ impl TlsServer {
             poll: mio::Poll::new().unwrap(),
             total_streams_received: 0,
             download_req_received: false,
+            conns_probed: false,
         }
     }
 
-    fn accept(&mut self, recv_map: &RecvBufMap, listener: Token) -> Result<(), io::Error> {
-        loop {
-            match self.tcpls_session.server_accept_connection(self.listeners.get_mut(&(listener.0 as u64)).unwrap(), self.tls_config.clone()) {
-                Ok(conn_id) => {
-                    debug!("Accepting new connection of id {:?}", conn_id);
 
-                    let token = Token(conn_id as usize);
-
-                    self.register(recv_map, token)
-                }
-                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
-                Err(err) => {
-                    println!(
-                        "encountered error while accepting connection; err={:?}",
-                        err
-                    );
-                    return Err(err);
-                }
-            }
-        }
-    }
 
     fn conn_event(&mut self, event: &mio::event::Event, recv_map: &mut RecvBufMap) {
         self.handle_event(event, recv_map);
 
-        /*if self.is_closed() {
-                self.connections.remove(&token);
-            }*/
     }
 
     fn handle_event(&mut self, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
@@ -104,16 +82,22 @@ impl TlsServer {
         if ev.is_readable() {
             self.do_read(recv_map, token.0 as u64);
 
-            if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking(){
-                if self.tcpls_session.tcp_connections.len() == 2 && self.download_req_received
-                {
+            if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() && self.tcpls_session.tcp_connections.len() == 2 {
+
+                /*if !self.conns_probed && !self.download_req_received {
+                    println!("Probing connections");
                     self.tcpls_session.probe_rtt().unwrap();
+                    self.conns_probed = true;
+                    return;
+                }*/
 
-                    self.tcpls_session.stream_send(1, vec![2u8; 100 * 1024 * 1024].as_slice()).unwrap();
-                    self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
+                 if self.download_req_received {
+                     println!("Sending data");
+                     self.tcpls_session.stream_send(1, vec![2u8; 70* 1024 * 1024].as_slice()).unwrap();
+                     self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
+                     self.download_req_received = false;
+                 }
 
-                    self.download_req_received = false;
-                }
             }
 
 
@@ -123,7 +107,7 @@ impl TlsServer {
             self.do_tls_write_and_handle_error();
         }
 
-        if self.closing {
+        if ev.is_read_closed() {
             let _ = self
                 .tcpls_session
                 .tcp_connections
@@ -131,9 +115,9 @@ impl TlsServer {
                 .unwrap()
                 .socket
                 .shutdown(net::Shutdown::Both);
-            self.close_back();
-            self.closed = true;
             self.deregister(token.0 as u64);
+            self.closing = true;
+            return;
         } else {
             self.reregister(recv_map, token);
         }
@@ -189,6 +173,7 @@ impl TlsServer {
         };
 
         if app_buffers.get_or_create(1, None).complete {
+            println!("Download request received");
             self.download_req_received = true;
             app_buffers.get_mut(1).unwrap().reset_stream();
         }
@@ -202,27 +187,44 @@ impl TlsServer {
         self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
     }
 
-    fn register(&mut self, app_buf: &RecvBufMap, token: Token) {
-        let event_set = self.event_set(app_buf, token.0 as u64 );
+    fn register(&mut self, socket: TcpStream, app_buf: &RecvBufMap) {
+       let mut conn_id: u32 = 0;
 
-        let socket = self.tcpls_session.get_socket(token.0 as u64);
+        if self.tcpls_session.next_conn_id == DEFAULT_CONNECTION_ID {
+            self.tcpls_session.is_server = true;
+
+            println!("create a TLS server connection");
+            let server_conn = ServerConnection::new(self.tls_config.clone())
+                .expect("Establishing a TLS session has failed");
+            let _ = self.tcpls_session.tls_conn.insert(Connection::from(server_conn));
+            let _ = self.tcpls_session.tls_config.insert(TlsConfig::from(self.tls_config.clone()));
+
+            conn_id = self.tcpls_session.create_tcpls_connection_object(socket);
+        }else {
+            self.tcpls_session.tls_conn
+                .as_mut()
+                .unwrap()
+                .outstanding_tcp_conns.as_mut_ref().insert(self.tcpls_session.next_conn_id as u64, OutstandingTcpConn::new(socket));
+            conn_id = self.tcpls_session.next_conn_id;
+
+        }
+        self.tcpls_session.tls_conn.as_mut().unwrap().insert_conn_rtt(self.tcpls_session.next_conn_id as u64, Duration::default());
+        self.tcpls_session.next_conn_id += 1;
+
+
+        let event_set = self.event_set(app_buf, conn_id as u64);
+
+        let socket = self.tcpls_session.get_socket(conn_id as u64);
 
         match self.poll.registry()
-            .register(socket, token, event_set) {
+            .register(socket, Token(conn_id as usize), event_set) {
             Ok(()) => (),
             Err(ref err) if err.kind() == io::ErrorKind::AlreadyExists => return (),
             Err(_err) => { panic!("encountered error while registering source") }
         }
 
-        if self.back.is_some() {
-            self.poll.registry()
-                .register(
-                    self.back.as_mut().unwrap(),
-                    Token(4000),
-                    mio::Interest::READABLE,
-                )
-                .unwrap();
-        }
+
+
     }
 
     fn reregister(&mut self, app_buf: &RecvBufMap, token: Token) {
@@ -290,6 +292,52 @@ impl TlsServer {
         };
     }
 }
+
+
+struct MainServer {
+    listeners: SimpleIdHashMap<TcpListener>,
+    incoming_sockets: Option<SimpleIdHashMap<TcpStream>>,
+    next_id: u64,
+}
+
+impl MainServer {
+    fn new() -> Self{
+        Self {
+            listeners: SimpleIdHashMap::default(),
+            incoming_sockets: Some(SimpleIdHashMap::default()),
+            next_id: 0,
+        }
+    }
+    fn accept_main(&mut self, listener: Token, args: &Args) -> Result<(), io::Error> {
+        loop {
+            match self.listeners.get_mut(&(listener.0 as u64)).unwrap().accept() {
+                Ok((sock, add)) => {
+                    println!("Accepting new connection from {:?}", add);
+                    self.incoming_sockets.as_mut().unwrap().insert(self.next_id, sock);
+                    self.next_id +=1;
+                    if self.incoming_sockets.as_ref().unwrap().len() == self.listeners.len() {
+                        let incoming = self.incoming_sockets.take();
+                        self.incoming_sockets = Some(SimpleIdHashMap::default());
+                        let arg_cloned = args.clone();
+                        // Spawn a thread for the client
+                        thread::spawn(move || {
+                            run_server(incoming.unwrap(), arg_cloned);
+                        });
+                    }
+                }
+                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => return Ok(()),
+                Err(err) => {
+                    println!(
+                        "encountered error while accepting connection; err={:?}",
+                        err
+                    );
+                    return Err(err);
+                }
+            }
+        }
+    }
+}
+
 
 
 pub fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
@@ -360,7 +408,7 @@ Options:
     --help, -h          Show this screen.
 ";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Args {
     flag_port: Option<u16>,
     flag_verbose: bool,
@@ -409,7 +457,6 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
             _ => panic!(
                 "cannot look up version '{}', valid are '1.2' and '1.3'",
@@ -477,6 +524,10 @@ fn load_crls(filenames: &[String]) -> Vec<CertificateRevocationListDer<'static>>
         .collect()
 }
 
+fn take_vec_ownership(socks: Vec<TcpStream>) -> Vec<TcpStream> {
+    let sock_clone: Vec<TcpStream> = socks;
+    sock_clone
+}
 fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
     let client_auth = if args.flag_auth.is_some() {
         let roots = load_certs(args.flag_auth.as_ref().unwrap());
@@ -578,37 +629,67 @@ fn main() {
             .init();
     }
 
-    //Map of application controlled receive buffers
-    let mut recv_map = RecvBufMap::new();
 
-    let config = make_config(&args, 5);
+    let mut main_server = MainServer::new();
 
     let mut listener1 = server_create_listener("0.0.0.0:8443", Some(args.flag_port.unwrap()));
     let mut listener2 = server_create_listener("0.0.0.0:8444", Some(args.flag_port.unwrap() + 1));
 
-
-
-    let mut tcpls_server = TlsServer::new(config);
-
-    tcpls_server.poll.registry()
+    let mut poll = mio::Poll::new().unwrap();
+    poll.registry()
         .register(&mut listener1, LISTENER1, mio::Interest::READABLE)
         .unwrap();
 
-    tcpls_server.poll.registry()
+    poll.registry()
         .register(&mut listener2, LISTENER2, mio::Interest::READABLE)
         .unwrap();
 
+    main_server.listeners.insert(LISTENER1.0 as u64, listener1);
+    main_server.listeners.insert(LISTENER2.0 as u64, listener2);
+
+    let mut events = mio::Events::with_capacity(256);
+
+    loop {
+        match poll.poll(&mut events, None) {
+            Ok(_) => {}
+            // Polling can be interrupted (e.g. by a debugger) - retry if so.
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                panic!("poll failed: {:?}", e)
+            }
+        }
+        'Evenloop: for event in events.iter() {
+            match event.token() {
+                LISTENER1 | LISTENER2  => {
+                    main_server
+                        .accept_main(event.token(), &args)
+                        .expect("error accepting socket");
+                }
+                _ => break 'Evenloop
+            }
+        }
+    }
+
+   
+}
 
 
+fn run_server(mut socks: SimpleIdHashMap<TcpStream>, arg: Args) {
+    println!("New server started");
+    let mut recv_map = RecvBufMap::new();
 
+    let config = make_config(&arg, 5);
 
-    tcpls_server.listeners.insert(LISTENER1.0 as u64, listener1);
-    tcpls_server.listeners.insert(LISTENER2.0 as u64, listener2);
+    let mut tcpls_server = TlsServer::new(config);
 
+    for sock in socks.drain(){
+        tcpls_server.register(sock.1, &recv_map);
+    }
 
 
     let mut events = mio::Events::with_capacity(256);
     loop {
+        if tcpls_server.closing {return;}
         match tcpls_server.poll.poll(&mut events, None){
             Ok(_) => {}
             // Polling can be interrupted (e.g. by a debugger) - retry if so.
@@ -620,19 +701,12 @@ fn main() {
 
         for event in events.iter() {
             match event.token() {
-                LISTENER1 | LISTENER2  => {
-                    tcpls_server
-                        .accept(&recv_map, event.token())
-                        .expect("error accepting socket");
-                }
                 _ => {
                     tcpls_server.conn_event(event, &mut recv_map);
-                    if !tcpls_server.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking(){
-                    }
                 },
             }
         }
     }
-   
+
 }
 

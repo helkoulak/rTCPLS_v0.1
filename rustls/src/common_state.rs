@@ -110,6 +110,10 @@ impl CommonState {
         self.conn_in_use = conn_id;
     }
 
+    pub fn insert_conn_rtt(&mut self, conn_id: u64, rtt: Duration) {
+        self.conns_rtts.insert(conn_id, rtt);
+    }
+
     /// Returns true if the caller should call [`send_on_connection`] as soon as possible.
     ///
     /// [`send_on_connection`]: crate::tcpls::s

@@ -1,24 +1,27 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::io;
+use std::{io, net, thread};
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
 
 use std::str;
 use std::sync::Arc;
 use std::{fs, process};
+use std::ops::DerefMut;
 use std::time::{Duration, Instant};
 use docopt::Docopt;
 use log::{trace, LevelFilter};
+use mio::net::TcpStream;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 
 use ring::digest;
 use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::TcplsSession;
-use rustls::RootCertStore;
+use rustls::tcpls::{TcplsSession, TlsConfig, DEFAULT_CONNECTION_ID};
+use rustls::{ClientConnection, Connection, RootCertStore};
+use rustls::tcpls::outstanding_conn::OutstandingTcpConn;
 
 const CONNECTION1: mio::Token = mio::Token(0);
 
@@ -32,6 +35,7 @@ struct TlsClient {
     poll: mio::Poll,
     down_req_sent: bool,
     download_time: Instant,
+    reg_conns: Vec<usize>,
 }
 
 impl TlsClient {
@@ -45,6 +49,7 @@ impl TlsClient {
             poll: mio::Poll::new().unwrap(),
             down_req_sent:false,
             download_time: Instant::now(),
+            reg_conns: Vec::default(),
         }
     }
 
@@ -59,13 +64,18 @@ impl TlsClient {
                 if self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.has_otustanding_requests() {
                     let keys: Vec<u64> = self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().keys().cloned().collect();
                     for id in keys {
-                        self.register(recv_map, Token(id as usize));
+                        if !self.reg_conns.contains(&token.0){
+                            self.register(recv_map, Token(id as usize));
+                            self.reg_conns.push(token.0);
+                        }
+
                         self.join_outstanding(id);
+
                     }
                 }
 
                 if self.tcpls_session.tcp_connections.len() == 2 && !self.down_req_sent {
-
+                    println!("Send download request");
                     self.tcpls_session.stream_send(1, b"GET DATA".as_slice()).expect("buffering failed");
                     self.download_time.clone_from(&Instant::now());
                     self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
@@ -132,7 +142,8 @@ impl TlsClient {
         };
 
         if app_buffers.get(1).unwrap().complete {
-            trace!("Time taken to download {} MB is {:?} ", app_buffers.get(1).unwrap().offset, self.download_time.elapsed())
+            println!("Time taken to download {} Bytes is {:?} ", app_buffers.get(1).unwrap().offset, self.download_time.elapsed());
+            self.close_connection();
         }
 
         // If wethat fails, the peer might have started a clean TLS-level
@@ -149,6 +160,12 @@ impl TlsClient {
             self.tcpls_session.send_on_connection(None, None).expect("Send on connection failed");
         }
 
+    }
+
+    fn close_connection(&mut self) {
+        for conn in self.tcpls_session.tcp_connections.iter_mut() {
+            conn.1.socket.shutdown(net::Shutdown::Both).expect("TODO: panic message");
+        }
     }
 
     /// Registers self as a 'listener' in mio::Registry
@@ -547,9 +564,6 @@ fn main() {
         .unwrap();
 
 
-
-
-
     let mut client = TlsClient::new();
 
     let config = make_config(&args);
@@ -558,12 +572,27 @@ fn main() {
         .expect("invalid DNS name")
         .to_owned();
 
-    client.tcpls_session.tcpls_connect(dest_add1, Some(config), Some(server_name), false);
-    // Create second tcp conection
-    client.tcpls_session.tcpls_connect(dest_add2, None, None, false);
+    let socket1 = TcpStream::connect(dest_add1).expect("TCP connection establishment failed");
+    let socket2 = TcpStream::connect(dest_add2).expect("TCP connection establishment failed");
+
+    thread::sleep(Duration::from_secs(1));
+
+    let client_conn = ClientConnection::new(config.clone(), server_name)
+        .expect("Establishment of TLS session failed");
+
+    let _ = client.tcpls_session.tls_conn.insert(Connection::from(client_conn));
+    let _ = client.tcpls_session.tls_config.insert(TlsConfig::Client(config));
+
+    let conn_id = client.tcpls_session.create_tcpls_connection_object(socket1);
+    client.tcpls_session.tls_conn.as_mut()
+            .unwrap()
+            .outstanding_tcp_conns
+            .as_mut_ref()
+            .insert((conn_id + 1) as u64, OutstandingTcpConn::new(socket2));
 
 
-
+    client.tcpls_session.tls_conn.as_mut().unwrap().insert_conn_rtt(conn_id as u64, Duration::default());
+    client.tcpls_session.tls_conn.as_mut().unwrap().insert_conn_rtt((conn_id + 1) as u64, Duration::default());
 
 
     let mut events = mio::Events::with_capacity(50);

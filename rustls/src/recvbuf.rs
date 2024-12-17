@@ -1,4 +1,4 @@
-use std::{cmp, io, vec};
+use std::{cmp, io, println, vec};
 use std::collections::hash_map;
 use std::collections::hash_map::{Iter, IterMut};
 use std::io::Error;
@@ -286,10 +286,18 @@ impl RecvBufMap {
     pub fn bytes_to_read(&self) -> usize {
         let mut bytes = 0;
         for stream in &self.readable {
-            bytes += self.buffers.get(stream).unwrap().as_ref_consumed().len()
+            bytes += self.buffers.get(stream)
+                .map(|buffer| buffer.as_ref_consumed().len())
+                .unwrap_or(0);
         }
         bytes
     }
+
+    pub fn clear_map(&mut self) {
+        self.buffers = SimpleIdHashMap::default();
+        self.readable = SimpleIdHashSet::default();
+    }
+
 
     /*pub(crate) fn read_mut(&mut self, stream_id: u64, stream: &mut Stream) -> Result<&mut [u8], Error> {
         let buf = match self.buffers.entry(stream_id) {

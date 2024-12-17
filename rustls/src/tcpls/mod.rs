@@ -2,7 +2,7 @@
 #![allow(unused_qualifications)]
 
 /// This module contains optional APIs for implementing TCPLS.
-use std::{io, println, u32, vec};
+use std::{io, print, println, u32, vec};
 
 use std::io::Write;
 use std::net::{Shutdown, SocketAddr};
@@ -581,7 +581,15 @@ impl TcplsSession {
 
     }
 
-
+    pub fn free_session_resources(&mut self) {
+        self.tls_config = None;
+        self.tls_conn = None;
+        self.tcp_connections = SimpleIdHashMap::default();
+        self.next_conn_id = DEFAULT_CONNECTION_ID;
+        self.address_map = AddressMap::new();
+        self.is_closed = false;
+        self.tls_hs_completed = false;
+    }
 
 
 }
