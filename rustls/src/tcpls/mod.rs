@@ -20,7 +20,7 @@ use crate::{CipherSuite, ClientConfig, ClientConnection,
             NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, Side, SignatureScheme};
 use crate::AlertDescription::IllegalParameter;
 use crate::ContentType::ApplicationData;
-use crate::crypto::cipher::OutboundChunks;
+use crate::crypto::cipherx::OutboundChunks;
 use crate::InvalidMessage::{InvalidContentType, InvalidEmptyPayload};
 use crate::msgs::codec;
 use crate::msgs::enums::{Compression, ECPointFormat, ExtensionType};

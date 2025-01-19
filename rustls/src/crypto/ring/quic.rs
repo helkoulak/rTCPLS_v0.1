@@ -3,7 +3,7 @@
 use alloc::boxed::Box;
 
 use super::ring_like::aead;
-use crate::crypto::cipher::{AeadKey, Iv, Nonce};
+use crate::crypto::cipherx::{AeadKey, Iv, Nonce};
 use crate::error::Error;
 use crate::quic;
 

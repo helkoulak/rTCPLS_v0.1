@@ -1,13 +1,16 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::fmt;
-use siphasher::sip::SipHasher;
+
 use std::vec;
+use aes::Aes128;
+use cipher::generic_array::GenericArray;
+use cipher::{BlockEncrypt, KeyInit};
 
 use crate::crypto::tls13::HkdfExpander;
 
 use zeroize::Zeroize;
-
+use ring::rand::SecureRandom;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
@@ -332,9 +335,9 @@ pub fn make_tls12_aad(
 }
 
 
-#[derive(Default)]
+
 pub struct HeaderProtector{
-    sip_hasher: SipHasher
+    aes_cipher: Aes128
 }
 
 impl HeaderProtector {
@@ -344,14 +347,16 @@ impl HeaderProtector {
         expander.expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice()).unwrap();
         let mut key = [0; 16];
         key.copy_from_slice(&derived_key[..16]);
+        let key = GenericArray::from_slice(&key);
         Self{
-            sip_hasher: SipHasher::new_with_key(&key),
+            aes_cipher: Aes128::new(&key),
         }
     }
 
     pub fn new_with_key(key: [u8; 16]) -> Self {
+        let key = GenericArray::from_slice(&key);
         Self{
-            sip_hasher: SipHasher::new_with_key(&key),
+            aes_cipher: Aes128::new(&key),
         }
     }
 
@@ -360,51 +365,34 @@ impl HeaderProtector {
     /// `input` references the calculated tag bytes
     ///
     /// `header` references the header slice of the encrypted TLS record
-   /* #[inline]
-    pub(crate) fn encrypt_in_place(
-        &mut self,
-        input: &[u8],
-        header: &mut [u8],
-    ) -> Result<(), Error> {
-        self.xor_in_place(input, header)
-    }*/
-
-    /*fn xor_in_place(
-        &mut self,
-        input: &[u8],
-        header: &mut [u8],
-    ) -> Result<(), Error> {
-        let out = self.sip_hasher.hash(input).to_be_bytes();
-        for i in 0..header.len() {
-            header[i] ^= out[i];
-        }
-        Ok(())
-    }*/
 
 
     #[inline]
     pub fn decrypt_in_output(
         &mut self,
-        input: &[u8],
+        sample: &[u8],
         header: &[u8],
     ) -> Result<[u8; 8], Error> {
-        self.xor_in_output(input, header)
+        self.xor_in_output(sample, header)
     }
 
     fn xor_in_output(
         &mut self,
-        input: &[u8],
+        sample: &[u8],
         header: & [u8],
     ) -> Result<[u8; 8], Error> {
-        let mut out = self.calculate_hash(input);
-        for i in 0..header.len() {
-            out[i] ^= header[i];
+        let mut out = [0u8; 8];
+        for (i, byte) in self.generate_mask(sample).into_iter().enumerate() {
+            out[i] = header[i] ^ byte;
+            if i == 7 {break}
         }
         Ok(out)
     }
 
-    pub fn calculate_hash(&mut self, input: &[u8]) -> [u8;8] {
-        self.sip_hasher.hash(input).to_be_bytes()
+    pub fn generate_mask(&mut self, input: &[u8]) -> [u8; 16]{
+        let mut mask =  GenericArray::default();
+        self.aes_cipher.encrypt_block_b2b(GenericArray::from_slice(&input), &mut mask);
+        mask.into()
     }
 
 }
@@ -548,28 +536,23 @@ fn test_header_enc_dec() {
     let rng = SystemRandom::new();
     const INPUT_SIZE: usize = 16;
     const HEADER_SIZE: usize = 8;
-    let mut input = [0u8; INPUT_SIZE];
+    let mut sample = [0u8; INPUT_SIZE];
     let mut header = [0u8; HEADER_SIZE];
     let mut output = [0u8; HEADER_SIZE];
     let mut key = [0u8; INPUT_SIZE];
     rng.fill(&mut key).unwrap();
 
-    let mut header_enc_dec = HeaderProtector {
-        sip_hasher:SipHasher::new_with_key(&key),
-    };
-
-
-
+    let mut header_enc_dec = HeaderProtector::new_with_key(key);
 
     for i in 1..10000 {
-        rng.fill(&mut input).unwrap();
+        rng.fill(&mut sample).unwrap();
         rng.fill(&mut header).unwrap();
 
-        output = header_enc_dec.calculate_hash(&input);
-        for i in 0..header.len() {
-            output[i] ^= header[i];
+        for (i, byte) in header_enc_dec.generate_mask(&sample).into_iter().enumerate() {
+            output[i] = header[i] ^ byte;
+            if i == 7 {break}
         }
-      assert_eq!(header_enc_dec.decrypt_in_output(&input, &output).unwrap(), header)
+      assert_eq!(header_enc_dec.decrypt_in_output(&sample, &output).unwrap(), header)
 
     }
 }

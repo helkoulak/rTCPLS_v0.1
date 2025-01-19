@@ -9,7 +9,7 @@ use std::io;
 use std::io::Write;
 use std::{println, vec};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use libc::send;
+use libc::{read, send};
 use crate::common_state::{CommonState, Context, IoState, PlainBufsMap, State};
 use crate::enums::{AlertDescription, ContentType};
 use crate::error::{Error, PeerMisbehaved};
@@ -374,7 +374,7 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
 use crate::ContentType::ApplicationData;
-use crate::crypto::cipher::OutboundChunks;
+use crate::crypto::cipherx::OutboundChunks;
 use crate::Error::Done;
 use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::{ReaderAppBufs, RecvBufMap};

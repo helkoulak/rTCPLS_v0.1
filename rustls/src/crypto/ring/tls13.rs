@@ -1,26 +1,23 @@
+use crate::crypto::cipherx::{make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
+use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
+use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
+use crate::error::Error;
 use alloc::boxed::Box;
 use std::collections::hash_map;
 use std::prelude::rust_2018::ToString;
 use std::vec;
 
-
-
-use crate::crypto::cipher::{make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
-use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
-use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
-use crate::error::Error;
-
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_OFFSET, CHUNK_NUM_SIZE, HEADER_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
-use crate::recvbuf::{RecvBuf, RecvBufMap};
+use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_SIZE, HEADER_SIZE, STREAM_ID_SIZE};
+use crate::recvbuf::RecvBufMap;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tcpls::frame::{Frame, TcplsHeader, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE};
 use crate::tls13::Tls13CipherSuite;
 use crate::{crypto, PeerMisbehaved};
 
-use crate::tcpls::stream::SimpleIdHashMap;
 use super::ring_like::hkdf::KeyType;
 use super::ring_like::{aead, hkdf, hmac};
+use crate::tcpls::stream::SimpleIdHashMap;
 
 /// The TLS1.3 ciphersuite TLS_CHACHA20_POLY1305_SHA256
 pub static TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
@@ -307,10 +304,10 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         // Take the LSBs of calculated tag as input sample for hash function
         let sample = payload.as_mut_tcpls_payload().rchunks(tag_len).next().unwrap();
 
-
-        // Calculate hash(sample) XOR TCPLS header
-        for (i, byte) in header_encrypter.calculate_hash(sample).into_iter().enumerate(){
+        // Encrypt sample AES(sample) and XOR with TCPLS header
+        for (i, byte) in header_encrypter.generate_mask(sample).into_iter().enumerate(){
             payload.as_mut_tcpls_header()[i] ^= byte;
+            if i == 7 {break}
         }
 
         Ok(OutboundOpaqueMessage::new(
@@ -393,8 +390,9 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
 
                 // Calculate hash(sample) XOR TCPLS header
-                for (i, byte) in header_decrypter.calculate_hash(sample).into_iter().enumerate(){
+                for (i, byte) in header_decrypter.generate_mask(sample).into_iter().enumerate(){
                     payload[..TCPLS_HEADER_SIZE][i] ^= byte;
+                    if i == 7 {break}
                 }
             },
         }

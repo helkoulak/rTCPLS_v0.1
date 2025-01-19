@@ -25,9 +25,9 @@ pub struct Tls13CipherSuite {
     /// How to produce a [MessageDecrypter] or [MessageEncrypter]
     /// from raw key material.
     ///
-    /// [MessageDecrypter]: crate::crypto::cipher::MessageDecrypter
-    /// [MessageEncrypter]: crate::crypto::cipher::MessageEncrypter
-    pub aead_alg: &'static dyn crypto::cipher::Tls13AeadAlgorithm,
+    /// [MessageDecrypter]: crate::crypto::cipherx::MessageDecrypter
+    /// [MessageEncrypter]: crate::crypto::cipherx::MessageEncrypter
+    pub aead_alg: &'static dyn crypto::cipherx::Tls13AeadAlgorithm,
 
     /// How to create QUIC header and record protection algorithms
     /// for this suite.

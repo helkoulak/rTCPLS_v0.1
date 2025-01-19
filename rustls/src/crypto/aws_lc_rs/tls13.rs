@@ -4,7 +4,7 @@ use aws_lc_rs::hkdf::KeyType;
 use aws_lc_rs::{aead, hkdf, hmac};
 
 use crate::crypto;
-use crate::crypto::cipher::{
+use crate::crypto::cipherx::{
     make_tls13_aad, AeadKey, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce,
     Tls13AeadAlgorithm, UnsupportedOperationError,
 };

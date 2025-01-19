@@ -32,7 +32,7 @@ pub mod ring;
 pub mod aws_lc_rs;
 
 /// TLS message encryption/decryption interfaces.
-pub mod cipher;
+pub mod cipherx;
 
 /// Hashing interfaces.
 pub mod hash;

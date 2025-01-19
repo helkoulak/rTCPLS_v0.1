@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 
 use super::ring_like::aead;
-use crate::crypto::cipher::{make_tls12_aad, AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN, HeaderProtector};
+use crate::crypto::cipherx::{make_tls12_aad, AeadKey, InboundOpaqueMessage, Iv, KeyBlockShape, MessageDecrypter, MessageEncrypter, Nonce, Tls12AeadAlgorithm, UnsupportedOperationError, NONCE_LEN, HeaderProtector};
 use crate::crypto::tls12::PrfUsingHmac;
 use crate::crypto::KeyExchangeAlgorithm;
 use crate::enums::{CipherSuite, SignatureScheme};

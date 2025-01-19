@@ -3,7 +3,7 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 
 use crate::common_state::{CommonState, Side};
-use crate::crypto::cipher::{AeadKey, HeaderProtector, Iv, MessageDecrypter};
+use crate::crypto::cipherx::{AeadKey, HeaderProtector, Iv, MessageDecrypter};
 use crate::crypto::tls13::{expand, Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::crypto::{hash, hmac, ActiveKeyExchange};
 use crate::error::Error;

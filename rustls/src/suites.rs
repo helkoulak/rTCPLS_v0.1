@@ -2,7 +2,7 @@
 use core::fmt;
 
 use crate::common_state::Protocol;
-use crate::crypto::cipher::{AeadKey, Iv};
+use crate::crypto::cipherx::{AeadKey, Iv};
 use crate::crypto::{self, KeyExchangeAlgorithm};
 use crate::enums::{CipherSuite, SignatureAlgorithm, SignatureScheme};
 use crate::msgs::handshake::ALL_KEY_EXCHANGE_ALGORITHMS;

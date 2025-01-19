@@ -34,6 +34,8 @@ if-addrs = "0.11.1"
 either = "1.10.0"
 criterion = "0.5.1"
 libc = "0.2.154"
+aes = "0.8"
+cipher = "0.4"
 
 [features]
 default = ["ring", "logging", "std", "tls12"]
@@ -56,6 +58,7 @@ webpki-roots = "0.26"
 cpu-time = "1.0.0"
 criterion = { version = "0.5.1" }
 pprof = { version = "0.13.0", features = ["flamegraph", "criterion"] }
+
 
 [[example]]
 name = "bogo_shim"
