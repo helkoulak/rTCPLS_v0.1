@@ -1,15 +1,20 @@
-
+use alloc::collections::btree_map::IterMut;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
+use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
 use std::io::Read;
-
-
+use std::time::Instant;
+use crate::common_state::OutboundTlsMessage;
+use crate::ContentType;
+use crate::ContentType::{ApplicationData, Handshake};
+use crate::msgs::message::MessagePayload::ChangeCipherSpec;
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
+use crate::tcpls::frame::TcplsHeader;
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
@@ -18,7 +23,8 @@ use crate::msgs::message::OutboundChunks;
 /// where the next chunk will be appended
 #[derive(Default)]
 pub(crate) struct ChunkVecBuffer {
-    chunks: VecDeque<Vec<u8>>,
+    chunks: VecDeque<OutboundTlsMessage>,
+    not_acked: VecDeque<OutboundTlsMessage>,
     limit: Option<usize>,
     /// where the next chunk will be appended
     current_offset: u64,
@@ -74,11 +80,16 @@ impl ChunkVecBuffer {
         self.chunks.rotate_left(n)
     }
 
+    #[inline]
+    pub(crate) fn mut_iter_not_ack(&mut self) -> alloc::collections::vec_deque::IterMut<'_, OutboundTlsMessage> {
+        self.not_acked.iter_mut()
+    }
+
     /// How many bytes we're storing
     pub(crate) fn len(&self) -> usize {
         let mut len = 0;
         for ch in &self.chunks {
-            len += ch.len();
+            len += ch.data.len();
         }
         len
     }
@@ -103,11 +114,15 @@ impl ChunkVecBuffer {
 
 
     /// Take and append the given `bytes`.
-    pub(crate) fn append(&mut self, bytes: Vec<u8>) -> usize {
+    pub(crate) fn append(&mut self, bytes: Vec<u8>, tcpls_header: Option<&TcplsHeader>, data_type: ContentType) -> usize {
         let len = bytes.len();
+        let chunk_num = match tcpls_header {
+            Some(hdr) => hdr.chunk_num,
+            None => 0,
+        };
 
         if !bytes.is_empty() {
-            self.chunks.push_back(bytes);
+            self.chunks.push_back(OutboundTlsMessage::new(bytes, chunk_num, None, data_type));
         }
         len
     }
@@ -115,7 +130,17 @@ impl ChunkVecBuffer {
     /// Take one of the chunks from this object.  This
     /// function panics if the object `is_empty`.
     pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
-        self.chunks.pop_front()
+        match self.chunks.pop_front() {
+            Some(chunk) => Some(chunk.data),
+            None => None
+        }
+    }
+
+    pub(crate) fn pop_clone(&mut self) -> Option<Vec<u8>> {
+        match self.chunks.pop_front() {
+            Some(chunk) => chunk.get_payload(),
+            None => None,
+        }
     }
 
     pub(crate) fn reset(&mut self) {
@@ -123,6 +148,10 @@ impl ChunkVecBuffer {
         self.limit = None;
         self.previous_offset = 0;
         self.current_offset = 0;
+    }
+
+    pub(crate) fn remove_ack(&mut self, chunk_num: u32) {
+        self.not_acked.remove(chunk_num as usize);
     }
 
 
@@ -152,7 +181,7 @@ impl ChunkVecBuffer {
     /// we're near the limit.
     pub(crate) fn append_limited_copy(&mut self, payload: OutboundChunks<'_>) -> usize {
         let take = self.apply_limit(payload.len());
-        self.append(payload.split_at(take).0.to_vec());
+        self.append(payload.split_at(take).0.to_vec(), None, ApplicationData);
         take
     }
 
@@ -163,6 +192,7 @@ impl ChunkVecBuffer {
 
         while offs < buf.len() && !self.is_empty() {
             let used = self.chunks[0]
+                .data
                 .as_slice()
                 .read(&mut buf[offs..])?;
 
@@ -176,21 +206,28 @@ impl ChunkVecBuffer {
 
     fn consume(&mut self, mut used: usize) {
         while let Some(mut buf) = self.chunks.pop_front() {
-            if used < buf.len() {
-                buf.drain(..used);
+            if used < buf.data.len() {
+                buf.data.drain(..used);
                 self.chunks.push_front(buf);
                 break;
             } else {
-                used -= buf.len();
+                used -= buf.data.len();
             }
         }
     }
 
 
-    pub(crate) fn consume_chunk(&mut self, used: usize, chunk: Vec<u8>) {
-        let mut buf = chunk;
+    pub(crate) fn consume_chunk(&mut self, used: usize, chunk: OutboundTlsMessage) {
+        let mut buf = chunk.data;
         if used < buf.len() {
-            self.chunks.push_front(buf.split_off(used));
+            self.chunks.push_front(OutboundTlsMessage::new(buf.split_off(used), chunk.chunk_num, None, chunk.typ));
+        } else {
+            match chunk.typ {
+                Handshake | ContentType::ChangeCipherSpec => {},
+                _ => self.not_acked.push_back(OutboundTlsMessage::new(buf, chunk.chunk_num, Some(Instant::now()), chunk.typ)),
+
+            }
+
         }
     }
 
@@ -202,7 +239,7 @@ impl ChunkVecBuffer {
 
         let mut bufs = [io::IoSlice::new(&[]); 64];
         for (iov, chunk) in bufs.iter_mut().zip(self.chunks.iter()) {
-            *iov = io::IoSlice::new(chunk);
+            *iov = io::IoSlice::new(chunk.data.as_slice());
         }
         let len = cmp::min(bufs.len(), self.chunks.len());
         let used = wr.write_vectored(&bufs[..len])?;
@@ -213,11 +250,11 @@ impl ChunkVecBuffer {
     #[inline]
     pub(crate) fn write_chunk_to(&mut self, wr: &mut dyn io::Write) -> io::Result<()> {
         let chunk = self.chunks.pop_front().unwrap();
-        wr.write_all(chunk.as_slice()).unwrap();
+        wr.write_all(chunk.data.as_slice()).unwrap();
         Ok(())
     }
 
-    pub(crate) fn get_chunk(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn get_chunk(&mut self) -> Option<OutboundTlsMessage> {
         if self.is_empty() {
             None
         } else {

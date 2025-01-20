@@ -198,6 +198,9 @@ pub struct ClientConfig {
     pub enable_early_data: bool,
     /// exchange TCPLS extra client extensions if true
     pub enable_tcpls: bool,
+
+    /// Enable Acknowledgements
+    pub enable_ack: bool,
     
     /// If set to `true`, requires the server to support the extended
     /// master secret extraction method defined in [RFC 7627].
@@ -402,6 +405,7 @@ impl Clone for ClientConfig {
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
             time_provider: Arc::clone(&self.time_provider),
+            enable_ack: true,
         }
     }
 }
@@ -780,6 +784,7 @@ impl ConnectionCore<ClientConnectionData> {
         common_state.set_max_fragment_size(config.max_fragment_size)?;
         common_state.protocol = proto;
         common_state.enable_secret_extraction = config.enable_secret_extraction;
+        common_state.enable_ack = config.enable_ack;
         let mut data = ClientConnectionData::new();
 
         let mut cx = hs::ClientContext {

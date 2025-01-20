@@ -474,6 +474,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         let current_offset = recv_buf.offset;
 
+        recv_buf.highest_record_sn_received = chunk_num;
         recv_buf.last_decrypted = payload_len_no_type;
         recv_buf.total_decrypted += payload_len_no_type;
         recv_buf.offset += payload_len_no_type as u64;

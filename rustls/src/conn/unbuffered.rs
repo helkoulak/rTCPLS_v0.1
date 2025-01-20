@@ -57,7 +57,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 .core
                 .common_state
                 .received_plaintext
-                .pop()
+                .pop_clone()
             {
                 break (
                     buffer.pending_discard(),
@@ -73,7 +73,7 @@ impl<Data> UnbufferedConnectionCommon<Data> {
                 .get_or_create(DEFAULT_STREAM_ID)
                 .unwrap()
                 .send
-                .pop()
+                .pop_clone()
             {
                 break (
                     buffer.pending_discard(),

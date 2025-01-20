@@ -927,12 +927,27 @@ impl<Data> ConnectionCore<Data> {
                 } => {
                     app_buffer.offset -= STREAM_FRAME_HEADER_SIZE as u64;
                     app_buffer.total_decrypted = 0;
+                    if self.common_state.enable_ack {
+                        match self.common_state.send_ack(app_buffer.highest_record_sn_received as u64, app_buffer.id) {
+                            Some(enc_ack) =>
+                                tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_ack.encode()).unwrap(),
+                            None => {0},
+                        };
+                    }
                     break
                 },
                 Frame::ACK {
-                    highest_record_sn_received: _,
-                    connection_id: _,
-                } => {},
+                    highest_record_sn_received,
+                    stream_id,
+                } => {
+                    self.common_state
+                        .record_layer
+                        .streams
+                        .get_mut(stream_id as u32)
+                        .unwrap()
+                        .send.remove_ack(highest_record_sn_received as u32);
+                    break
+                },
                 Frame::NewToken { token: _, sequence: _ } => {},
                 Frame::ConnectionReset { connection_id: _ } => {},
                 Frame::NewAddress {

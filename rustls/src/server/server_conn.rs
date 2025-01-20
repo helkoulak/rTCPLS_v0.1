@@ -331,6 +331,9 @@ pub struct ServerConfig {
     /// The default is false
     pub enable_tcpls: bool,
 
+    ///Enable ack
+    pub enable_ack: bool,
+
     pub max_tcpls_tokens_cap: usize,
 
     /// If set to `true`, requires the client to support the extended
@@ -371,6 +374,7 @@ impl Clone for ServerConfig {
             send_half_rtt_data: self.send_half_rtt_data,
             send_tls13_tickets: self.send_tls13_tickets,
             enable_tcpls: self.enable_tcpls,
+            enable_ack: true,
             max_tcpls_tokens_cap: self.max_tcpls_tokens_cap,
             #[cfg(feature = "tls12")]
             require_ems: self.require_ems,
@@ -853,7 +857,7 @@ mod connection {
 
 #[cfg(feature = "std")]
 pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-
+use crate::ContentType::ApplicationData;
 
 /// Unbuffered version of `ServerConnection`
 ///
@@ -1027,7 +1031,7 @@ impl EarlyDataState {
 
     fn pop(&mut self) -> Option<Vec<u8>> {
         match self {
-            Self::Accepted(ref mut received) => received.pop(),
+            Self::Accepted(ref mut received) => received.pop_clone(),
             _ => None,
         }
     }
@@ -1054,7 +1058,7 @@ impl EarlyDataState {
         let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
-                received.append(bytes.into_vec());
+                received.append(bytes.into_vec(), None, ApplicationData);
                 true
             }
             _ => false,
@@ -1081,6 +1085,7 @@ impl ConnectionCore<ServerConnectionData> {
         let mut common = CommonState::new(Side::Server);
         common.set_max_fragment_size(config.max_fragment_size)?;
         common.enable_secret_extraction = config.enable_secret_extraction;
+        common.enable_ack = config.enable_ack;
         Ok(Self::new(
             Box::new(hs::ExpectClientHello::new(config, extra_exts)),
             ServerConnectionData::default(),

@@ -27,7 +27,7 @@
 
 
 use std::collections::{hash_map, HashMap, HashSet};
-use std::collections::hash_map::Iter;
+use std::collections::hash_map::{Iter, IterMut};
 
 
 use smallvec::SmallVec;
@@ -322,8 +322,8 @@ impl StreamMap {
         id_set
     }
 
-    pub fn iter(&self) -> Iter<'_, u64, Stream> {
-        self.streams.iter()
+    pub fn mut_iter(&mut self) -> IterMut<'_, u64, Stream> {
+        self.streams.iter_mut()
     }
 
         /// Returns true if the stream has been collected.

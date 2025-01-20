@@ -2,7 +2,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use std::collections::{hash_map, VecDeque};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::vec;
 use pki_types::CertificateDer;
 
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
@@ -21,8 +22,10 @@ use crate::tls12::ConnectionSecrets;
 use crate::unbuffered::{EncryptError, InsufficientSizeError};
 use crate::vecbuf::ChunkVecBuffer;
 use crate::{quic, record_layer};
+use crate::ContentType::ApplicationData;
+use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::RecvBufMap;
-use crate::tcpls::frame::Frame;
+use crate::tcpls::frame::{Frame, TcplsHeader};
 use crate::tcpls::outstanding_conn::OutstandingConnMap;
 use crate::tcpls::stream::{DEFAULT_STREAM_ID, SimpleIdHashMap};
 
@@ -60,6 +63,8 @@ pub struct CommonState {
     queued_key_update_message: Option<Vec<u8>>,
 
     pub received_data_processed: bool,
+    
+    pub enable_ack: bool,
 
     /// Protocol whose key schedule should be used. Unused for TLS < 1.3.
     pub(crate) protocol: Protocol,
@@ -99,6 +104,7 @@ impl CommonState {
             queued_key_update_message: None,
 
             received_data_processed: false,
+            enable_ack: false,
             protocol: Protocol::Tcp,
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
@@ -108,6 +114,11 @@ impl CommonState {
     /// sets the id of the currently active tcp connection
     pub fn set_connection_in_use(&mut self, conn_id: u32) {
         self.conn_in_use = conn_id;
+    }
+
+    /// Turn-off/on acknowledgments
+    pub fn activate_ack(&mut self, activate_ack: bool) {
+        self.enable_ack = activate_ack;
     }
 
     pub fn insert_conn_rtt(&mut self, conn_id: u64, rtt: Duration) {
@@ -393,7 +404,7 @@ impl CommonState {
             .build_header(m.payload.len() as u16);
 
         let stream_frame_header = match m.typ {
-            ContentType::ApplicationData => {
+            ApplicationData => {
                 Some(Frame::Stream {
                     length: m.payload.len() as u16,
                     fin: fin.into(),
@@ -402,8 +413,10 @@ impl CommonState {
             _ => None,
         };
 
+        let typ = m.typ;
+
         let em = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header);
-        self.queue_message(em.encode(), id);
+        self.queue_message(em.encode(), id, None, typ);
     }
 
     pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{
@@ -431,6 +444,43 @@ impl CommonState {
 
 
         Some(self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, None))
+
+    }
+
+    pub(crate) fn send_ack(&mut self, chunk_num: u64, stream_id: u64) -> Option<OutboundOpaqueMessage>{
+        let mut ack = vec![0u8; 17];
+        let mut b = octets::OctetsMut::with_slice_at_offset(ack.as_mut(), 0);
+        Frame::ACK {
+            highest_record_sn_received: chunk_num,
+            stream_id,
+        }.encode(&mut b).expect("encoding ack frame failed");
+        // set id of stream to decide on crypto context and record seq space
+        self.record_layer.encrypt_for_stream(DEFAULT_STREAM_ID);
+        // Close connection once we start to run out of
+        // sequence space.
+        if self
+            .record_layer
+            .wants_close_before_encrypt()
+        {
+            self.send_close_notify();
+        }
+
+        if self.record_layer.encrypt_exhausted() {
+            return None;
+        }
+
+        let tcpls_header = self.record_layer
+            .streams
+            .get_mut(DEFAULT_STREAM_ID)
+            .unwrap()
+            .build_header(ack.len() as u16);
+
+
+        Some(self.record_layer.encrypt_outgoing_tcpls(OutboundPlainMessage {
+            typ: ApplicationData,
+            version: TLSv1_2,
+            payload: OutboundChunks::Single(&ack),
+        }, &tcpls_header, None))
 
     }
 
@@ -524,31 +574,14 @@ impl CommonState {
 
     /// Send a raw TLS message, fragmenting it if needed.
     pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool, id: u32) {
-        {
-            if let Protocol::Quic = self.protocol {
-                if let MessagePayload::Alert(alert) = m.payload {
-                    self.quic.alert = Some(alert.description);
-                } else {
-                    debug_assert!(
-                        matches!(m.payload, MessagePayload::Handshake { .. }),
-                        "QUIC uses TLS for the cryptographic handshake only"
-                    );
-                    let mut bytes = Vec::new();
-                    m.payload.encode(&mut bytes);
-                    self.quic
-                        .hs_queue
-                        .push_back((must_encrypt, bytes));
-                }
-                return;
-            }
-        }
+      let typ = m.payload.content_type();
         if !must_encrypt {
             let msg = &m.into();
             let iter = self
                 .message_fragmenter
                 .fragment_message(msg);
             for m in iter {
-                self.queue_message(m.to_unencrypted_opaque().encode(), id);
+                self.queue_message(m.to_unencrypted_opaque().encode(), id, None, typ);
             }
         } else {
             self.send_msg_encrypt(m.into(), id);
@@ -557,7 +590,7 @@ impl CommonState {
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext
-            .append(bytes.into_vec());
+            .append(bytes.into_vec(), None, ApplicationData);
     }
 
     #[cfg(feature = "tls12")]
@@ -866,7 +899,7 @@ impl CommonState {
                     .get_or_create_plain_buf(id)
                     .unwrap()
                     .send_plain_buf
-                    .append(payload.to_vec()),
+                    .append(payload.to_vec(), None, ApplicationData),
             };
             return len;
         }
@@ -876,12 +909,12 @@ impl CommonState {
 
     pub(crate) fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
-            self.queue_message(message, DEFAULT_STREAM_ID);
+            self.queue_message(message, DEFAULT_STREAM_ID, None, ContentType::Alert);
         }
     }
     // Put m into sendable_tls for writing.
-    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32) {
-        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg);
+    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32, tcpls_header: Option<&TcplsHeader>, data_type: ContentType) {
+        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg, tcpls_header, data_type);
         self.record_layer.streams.insert_flushable(id as u64);
     }
 
@@ -1032,6 +1065,38 @@ enum Limit {
     #[cfg(feature = "std")]
     Yes,
     No,
+}
+
+pub(crate)  struct OutboundTlsMessage {
+    pub(crate) data: Vec<u8>,
+    pub(crate) send_time: Option<Instant>,
+    pub(crate) chunk_num: u32,
+    pub(crate) typ: ContentType,
+}
+
+impl OutboundTlsMessage {
+    pub(crate) fn new(data: Vec<u8>, chunk_num: u32, sent_at: Option<Instant>, typ: ContentType) -> Self {
+        Self {
+            data,
+            send_time: sent_at,
+            chunk_num,
+            typ,
+        }
+    }
+
+    pub(crate) fn get_payload_as_ref(&self) -> Option<&Vec<u8>> {
+        match self.data.len() {
+            0 => None,
+            _ => Some(self.data.as_ref())
+        }
+    }
+
+    pub(crate) fn get_payload(&self) -> Option<Vec<u8>> {
+        match self.data.len() {
+            0 => None,
+            _ => Some(self.data.clone())
+        }
+    }
 }
 
 const DEFAULT_RECEIVED_PLAINTEXT_LIMIT: usize = 16 * 1024;

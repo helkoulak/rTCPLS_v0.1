@@ -14,6 +14,8 @@ pub struct RecvBuf {
     /// where the next chunk will be appended
     pub offset: u64,
 
+    pub highest_record_sn_received: u32,
+
     /// Length of last decrypted data chunk
     pub last_decrypted: usize,
 

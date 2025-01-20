@@ -53,6 +53,7 @@ pub struct TcplsSession {
     pub is_server: bool,
     pub is_closed: bool,
     pub tls_hs_completed: bool,
+    pub timeout: Duration,
 }
 
 impl TcplsSession {
@@ -66,7 +67,12 @@ impl TcplsSession {
             is_server,
             is_closed: false,
             tls_hs_completed: false,
+            timeout: Duration::from_secs(5),
         }
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = timeout;
     }
 
     pub fn tcpls_connect(
@@ -299,8 +305,8 @@ impl TcplsSession {
                             break
                         },
                     };
-                    let chunk_len = chunk.len();
-                    sent = match socket.write(chunk.as_slice()) {
+                    let chunk_len = chunk.data.len();
+                    sent = match socket.write(chunk.data.as_slice()) {
                         Ok(0) => return Ok(done),
                         Ok(sent) => {
                             tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
@@ -589,6 +595,18 @@ impl TcplsSession {
         self.address_map = AddressMap::new();
         self.is_closed = false;
         self.tls_hs_completed = false;
+    }
+
+    pub fn on_timeout(&mut self) {
+        let conn_id = *self.tls_conn.as_ref().unwrap().conns_rtts.iter().min_by_key(|(_, &value)| value).unwrap().0;
+        for str in self.tls_conn.as_mut().unwrap().record_layer.streams.mut_iter() {
+            for un_ack_chunk in str.1.send.mut_iter_not_ack(){
+                let time_elapsed  = un_ack_chunk.send_time.unwrap().elapsed();
+                if time_elapsed >= self.timeout {
+                    self.tcp_connections.get_mut(&conn_id).unwrap().socket.write(&un_ack_chunk.data).unwrap();
+                }
+            }
+        }
     }
 
 

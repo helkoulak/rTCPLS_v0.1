@@ -32,7 +32,7 @@ pub enum Frame {
 
     ACK {
         highest_record_sn_received: u64,
-        connection_id: u64,
+        stream_id: u64,
     },
 
     NewToken {
@@ -121,11 +121,11 @@ impl Frame {
 
             Self::ACK {
                 highest_record_sn_received,
-                connection_id,
+                stream_id,
             } => {
-                b.put_varint_reverse(*highest_record_sn_received).unwrap();
-                b.put_varint_reverse(*connection_id).unwrap();
-                b.put_varint(0x04).unwrap();
+                b.put_u64(*highest_record_sn_received).unwrap();
+                b.put_u64(*stream_id).unwrap();
+                b.put_u8(0x04).unwrap();
             }
 
             Self::NewToken { token, sequence } => {
@@ -253,13 +253,13 @@ fn parse_stream_frame(frame_type: u8, b: &mut octets::Octets) -> octets::Result<
 }
 
 fn parse_ack_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let connection_id = b.get_varint_reverse()?;
+    let stream_id = b.get_u64_reverse()?;
 
-    let highest_record_seq_received = b.get_varint_reverse()?;
+    let highest_record_seq_received = b.get_u64_reverse()?;
 
     Ok(Frame::ACK {
         highest_record_sn_received: highest_record_seq_received,
-        connection_id,
+        stream_id,
     })
 }
 
@@ -404,7 +404,7 @@ fn test_encode_decode_ack_frame() {
 
     let ack_frame = Frame::ACK {
         highest_record_sn_received: 1753698,
-        connection_id: 8,
+        stream_id: 8,
     };
 
     let mut d = octets::OctetsMut::with_slice(&mut buf);
