@@ -1,8 +1,7 @@
-use alloc::collections::btree_map::IterMut;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
-use std::collections::BTreeMap;
+
 #[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
@@ -11,7 +10,6 @@ use std::time::Instant;
 use crate::common_state::OutboundTlsMessage;
 use crate::ContentType;
 use crate::ContentType::{ApplicationData, Handshake};
-use crate::msgs::message::MessagePayload::ChangeCipherSpec;
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
 use crate::tcpls::frame::TcplsHeader;

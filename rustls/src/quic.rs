@@ -28,13 +28,13 @@ mod connection {
 
     use super::{DirectionalKeys, KeyChange, Version};
     use crate::client::{ClientConfig, ClientConnectionData};
-    use crate::common_state::{CommonState, Protocol, PlainBufsMap};
+    use crate::common_state::{CommonState, Protocol};
     use crate::conn::{ConnectionCore, SideData};
     use crate::enums::{AlertDescription, ProtocolVersion};
     use crate::error::Error;
     use crate::msgs::deframer::DeframerVecBuffer;
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
-    use crate::recvbuf::RecvBufMap;
+
     use crate::server::{ServerConfig, ServerConnectionData};
 
 

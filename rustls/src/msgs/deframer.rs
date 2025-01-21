@@ -289,7 +289,7 @@ impl MessageDeframer {
 
                 let mut pos = None;
                 let mut next: usize = 0;
-                for (unrange) in self.unproc_ranges.get(&conn_id).unwrap() {
+                for unrange in self.unproc_ranges.get(&conn_id).unwrap() {
                     if let Some(rev_buf) = app_buffers
                         .get(u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
                             .try_into()
@@ -735,7 +735,7 @@ impl MessageDeframer {
         let mut unproc_ranges_new: Vec<Range<usize>> = Vec::new();
         let mut processed_ranges_new: Vec<Range<usize>> = Vec::new();
         if let Some(connection_ranges) = self.unproc_ranges.get_mut(&conn_id) {
-            for (r) in connection_ranges.iter().filter(|&r| r.end <= self.discard_range.start || r.start >= self.discard_range.end) {
+            for r in connection_ranges.iter().filter(|&r| r.end <= self.discard_range.start || r.start >= self.discard_range.end) {
                 unproc_ranges_new.push(match r.start >= self.discard_range.end {
                     true => Range::from(r.start - discard_len..r.end - discard_len),
                     false => Range::from(r.start..r.end)

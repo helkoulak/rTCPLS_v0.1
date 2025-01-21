@@ -10,7 +10,7 @@ use cipher::{BlockEncrypt, KeyInit};
 use crate::crypto::tls13::HkdfExpander;
 
 use zeroize::Zeroize;
-use ring::rand::SecureRandom;
+
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;
@@ -18,7 +18,7 @@ pub use crate::msgs::message::{
     BorrowedPayload, InboundOpaqueMessage, InboundPlainMessage, OutboundChunks,
     OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage, PrefixedPayload,
 };
-use crate::recvbuf::{RecvBuf, RecvBufMap};
+use crate::recvbuf::RecvBufMap;
 use crate::suites::ConnectionTrafficSecrets;
 use crate::tcpls::frame::{Frame, TcplsHeader};
 
@@ -482,7 +482,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         todo!()
     }
 
-    fn get_write_seq(&self, stream_id: u32) -> u64 {
+    fn get_write_seq(&self, _stream_id: u32) -> u64 {
         todo!()
     }
 
@@ -490,7 +490,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         todo!()
     }
 
-    fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64 {
+    fn get_or_create_write_seq(&mut self, _stream_id: u32) -> u64 {
         todo!()
     }
 }
@@ -518,11 +518,11 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         todo!()
     }
 
-    fn get_read_seq(&self, stream_id: u32) -> u64 {
+    fn get_read_seq(&self, _stream_id: u32) -> u64 {
         todo!()
     }
 
-    fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64 {
+    fn get_or_create_read_seq(&mut self, _stream_id: u32) -> u64 {
         todo!()
     }
 

@@ -1,16 +1,16 @@
 use alloc::boxed::Box;
 use core::num::NonZeroU64;
-use std::collections::hash_map;
-use std::ops::Range;
+
+
 use std::prelude::rust_2015::ToString;
 use crate::crypto::cipherx::{HeaderProtector, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 #[cfg(feature = "logging")]
 use crate::log::trace;
 use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage};
-use crate::recvbuf::{RecvBuf, RecvBufMap};
+use crate::recvbuf::RecvBufMap;
 use crate::tcpls::frame::{Frame, TcplsHeader};
-use crate::tcpls::stream::{SimpleIdHashMap, StreamMap};
+use crate::tcpls::stream::StreamMap;
 
 static SEQ_SOFT_LIMIT: u64 = 0x16909E7; //(((2 as f64).powf(24.5) as i64) - 0xFFFF) as u64; //0xffff_ffff_ffff_0000u64;
 static SEQ_HARD_LIMIT: u64 = 0x16A09E6; //((2 as f64).powf(24.5) as i64) as u64; //0xffff_ffff_ffff_fffeu64;
@@ -308,9 +308,9 @@ impl RecordLayer {
         self.encrypt_state == DirectionState::Active
     }
 
-    pub(crate) fn is_decrypting(&self) -> bool {
+   /* pub(crate) fn is_decrypting(&self) -> bool {
         self.decrypt_state == DirectionState::Active
-    }
+    }*/
 
     /// Return true if we have ever decrypted a message. This is used in place
     /// of checking the read_seq since that will be reset on key updates.

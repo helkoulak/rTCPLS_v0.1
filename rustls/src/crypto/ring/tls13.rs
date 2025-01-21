@@ -377,8 +377,8 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         header_decrypter: &mut HeaderProtector,
     ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
 
-        let mut stream_id: u32;
-        let mut chunk_num: u32;
+        let stream_id: u32;
+        let chunk_num: u32;
 
         let payload = &mut msg.payload;
 

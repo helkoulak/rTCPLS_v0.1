@@ -10,7 +10,7 @@ use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 use crate::msgs::message::{
     InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
 };
-use crate::recvbuf::{RecvBuf, RecvBufMap};
+use crate::recvbuf::RecvBufMap;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tcpls::frame::{Frame, TcplsHeader};
 use crate::tls12::Tls12CipherSuite;
@@ -278,23 +278,23 @@ impl MessageDecrypter for GcmMessageDecrypter {
     }
 
     fn decrypt_tcpls<'a, 'b>(&mut self,
-                             msg: InboundOpaqueMessage<'a>,
-                             app_bufs: &'a mut RecvBufMap,
-                             header_decrypted: bool,
-                             header_decrypter: &mut HeaderProtector,
+                             _msg: InboundOpaqueMessage<'a>,
+                             _app_bufs: &'a mut RecvBufMap,
+                             _header_decrypted: bool,
+                             _header_decrypter: &mut HeaderProtector,
     ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
         todo!()
     }
 
-    fn increase_read_seq(&mut self, stream_id: u32){
+    fn increase_read_seq(&mut self, _stream_id: u32){
         todo!()
     }
 
-    fn get_read_seq(&self, stream_id: u32) -> u64{
+    fn get_read_seq(&self, _stream_id: u32) -> u64{
         todo!()
     }
 
-    fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64{
+    fn get_or_create_read_seq(&mut self, _stream_id: u32) -> u64{
         todo!()
     }
 
@@ -343,13 +343,13 @@ impl MessageEncrypter for GcmMessageEncrypter {
         todo!()
     }
 
-    fn increase_write_seq(&mut self, stream_id: u32){todo!()}
+    fn increase_write_seq(&mut self, _stream_id: u32){todo!()}
 
-    fn get_write_seq(&self, stream_id: u32) -> u64{todo!()}
+    fn get_write_seq(&self, _stream_id: u32) -> u64{todo!()}
 
     fn reset_write_seq(&mut self){todo!()}
 
-    fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64{todo!()}
+    fn get_or_create_write_seq(&mut self, _stream_id: u32) -> u64{todo!()}
 }
 
 /// The RFC7905/RFC7539 ChaCha20Poly1305 construction.
@@ -407,15 +407,15 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
 
     fn decrypt_tcpls<'a, 'b>(&mut self,
                              msg: InboundOpaqueMessage<'a>,
-                             app_bufs: &'a mut RecvBufMap,
-                             header_decrypted: bool,
-                             header_decrypter: &mut HeaderProtector,
+                             _app_bufs: &'a mut RecvBufMap,
+                             _header_decrypted: bool,
+                             _header_decrypter: &mut HeaderProtector,
     ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
         todo!()
     }
-    fn increase_read_seq(&mut self, stream_id: u32){todo!()}
-    fn get_read_seq(&self, stream_id: u32) -> u64{todo!()}
-    fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64{todo!()}
+    fn increase_read_seq(&mut self, _stream_id: u32){todo!()}
+    fn get_read_seq(&self, _stream_id: u32) -> u64{todo!()}
+    fn get_or_create_read_seq(&mut self, _stream_id: u32) -> u64{todo!()}
     fn reset_read_seq(&mut self){todo!()}
 
 }
@@ -456,10 +456,10 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         todo!()
     }
 
-    fn increase_write_seq(&mut self, stream_id: u32){todo!()}
-    fn get_write_seq(&self, stream_id: u32) -> u64{todo!()}
+    fn increase_write_seq(&mut self, _stream_id: u32){todo!()}
+    fn get_write_seq(&self, _stream_id: u32) -> u64{todo!()}
     fn reset_write_seq(&mut self){todo!()}
-    fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64{todo!()}
+    fn get_or_create_write_seq(&mut self, _stream_id: u32) -> u64{todo!()}
 
 }
 

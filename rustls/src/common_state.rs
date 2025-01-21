@@ -1,7 +1,7 @@
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use std::collections::{hash_map, VecDeque};
+use std::collections::hash_map;
 use std::time::{Duration, Instant};
 use std::vec;
 use pki_types::CertificateDer;
@@ -15,7 +15,7 @@ use crate::msgs::base::Payload;
 use crate::msgs::enums::{AlertLevel, KeyUpdateRequest};
 use crate::msgs::fragmenter::MessageFragmenter;
 use crate::msgs::handshake::{CertificateChain, TcplsToken};
-use crate::msgs::message::{Message, MessagePayload, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage};
+use crate::msgs::message::{Message, OutboundChunks, OutboundOpaqueMessage, OutboundPlainMessage, PlainMessage};
 use crate::suites::{PartiallyExtractedSecrets, SupportedCipherSuite};
 #[cfg(feature = "tls12")]
 use crate::tls12::ConnectionSecrets;
@@ -1084,12 +1084,12 @@ impl OutboundTlsMessage {
         }
     }
 
-    pub(crate) fn get_payload_as_ref(&self) -> Option<&Vec<u8>> {
+    /*pub(crate) fn get_payload_as_ref(&self) -> Option<&Vec<u8>> {
         match self.data.len() {
             0 => None,
             _ => Some(self.data.as_ref())
         }
-    }
+    }*/
 
     pub(crate) fn get_payload(&self) -> Option<Vec<u8>> {
         match self.data.len() {

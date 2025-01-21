@@ -2,14 +2,14 @@
 #![allow(unused_qualifications)]
 
 /// This module contains optional APIs for implementing TCPLS.
-use std::{io, print, println, u32, vec};
+use std::{io, println, u32, vec};
 
 use std::io::Write;
 use std::net::{Shutdown, SocketAddr};
 
 use std::prelude::rust_2021::{ToString, Vec};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use log::trace;
 
 use mio::net::{TcpListener, TcpStream};
@@ -603,6 +603,7 @@ impl TcplsSession {
             for un_ack_chunk in str.1.send.mut_iter_not_ack(){
                 let time_elapsed  = un_ack_chunk.send_time.unwrap().elapsed();
                 if time_elapsed >= self.timeout {
+                    println!("Resending packet {} of stream {}", un_ack_chunk.chunk_num, str.1.id);
                     self.tcp_connections.get_mut(&conn_id).unwrap().socket.write(&un_ack_chunk.data).unwrap();
                 }
             }

@@ -27,7 +27,7 @@
 
 
 use std::collections::{hash_map, HashMap, HashSet};
-use std::collections::hash_map::{Iter, IterMut};
+use std::collections::hash_map::IterMut;
 
 
 use smallvec::SmallVec;
