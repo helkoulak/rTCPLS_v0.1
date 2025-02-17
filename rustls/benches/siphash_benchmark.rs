@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rand::Rng;
 
 use smallvec::ToSmallVec;
-use rustls::crypto::cipher::HeaderProtector;
+use rustls::crypto::cipherx::HeaderProtector;
 
 
 fn siphash_benchmark(c: &mut Criterion<CPUTime>) {

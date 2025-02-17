@@ -4,22 +4,24 @@ extern crate serde_derive;
 use std::{io, net, thread};
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
+use std::io::Write;
 
 use std::str;
 use std::sync::Arc;
 use std::{fs, process};
+use std::fs::{File, OpenOptions};
 use std::ops::DerefMut;
 use std::time::{Duration, Instant};
 use docopt::Docopt;
-use log::{trace, LevelFilter};
+use log::LevelFilter;
 use mio::net::TcpStream;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 
-use ring::digest;
+
 use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::{TcplsSession, TlsConfig, DEFAULT_CONNECTION_ID};
+use rustls::tcpls::{TcplsSession, TlsConfig};
 use rustls::{ClientConnection, Connection, RootCertStore};
 use rustls::tcpls::outstanding_conn::OutstandingTcpConn;
 
@@ -36,6 +38,7 @@ struct TlsClient {
     down_req_sent: bool,
     download_time: Instant,
     reg_conns: Vec<usize>,
+    output_file: File,
 }
 
 impl TlsClient {
@@ -50,6 +53,11 @@ impl TlsClient {
             down_req_sent:false,
             download_time: Instant::now(),
             reg_conns: Vec::default(),
+            output_file: OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open("output.txt").unwrap(),
         }
     }
 
@@ -142,7 +150,15 @@ impl TlsClient {
         };
 
         if app_buffers.get(1).unwrap().complete {
-            println!("Time taken to download {} Bytes is {:?} ", app_buffers.get(1).unwrap().offset, self.download_time.elapsed());
+            let t = self.download_time.elapsed().as_secs_f64();
+            let mut file =
+
+            // Write the formatted string to the file
+            writeln!(
+                self.output_file,
+                "Time taken to download {} Bytes is {:?}",
+                app_buffers.get(1).unwrap().offset , t
+            ).unwrap();
             self.close_connection();
         }
 
@@ -557,7 +573,7 @@ fn main() {
         .unwrap()
         .next()
         .unwrap();
-    let dest_add2 = (args.arg_hostname.as_str(), args.flag_port.unwrap() + 1)
+    let dest_add2 = ("0.0.0.0", args.flag_port.unwrap() + 1)
         .to_socket_addrs()
         .unwrap()
         .next()

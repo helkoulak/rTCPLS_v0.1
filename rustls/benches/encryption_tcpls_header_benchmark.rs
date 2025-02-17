@@ -10,7 +10,7 @@ use smallvec::ToSmallVec;
 use ring::aead::{LessSafeKey, UnboundKey, AES_256_GCM};
 use ring::rand::SecureRandom;
 use ring::{aead, rand};
-use rustls::crypto::cipher::{make_tls13_aad, HeaderProtector, OutboundChunks, PrefixedPayload, NONCE_LEN};
+use rustls::crypto::cipherx::{make_tls13_aad, HeaderProtector, OutboundChunks, PrefixedPayload, NONCE_LEN};
 
 use rustls::tcpls::frame::{Frame, TcplsHeader};
 
@@ -90,8 +90,8 @@ pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13
         (header.chunk_num >> 16) as u8,
         (header.chunk_num >> 8) as u8,
         (header.chunk_num & 0xff) as u8,
-        (header.offset_step >> 8) as u8,
-        (header.offset_step & 0xff) as u8,
+        (header.stream_id >> 24) as u8,
+        (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
         (header.stream_id & 0xff) as u8
     ]
@@ -136,15 +136,15 @@ fn encrypt_header(
     //Write payload in output buffer
     payload.extend_from_chunks(&OutboundChunks::Single(msg));
     //Write TCPLS header
+    //Write TCPLS header
     payload.as_mut()[0] = (tcpls_header.chunk_num >> 24) as u8;
     payload.as_mut()[1] = (tcpls_header.chunk_num >> 16) as u8;
     payload.as_mut()[2] = (tcpls_header.chunk_num >> 8) as u8;
     payload.as_mut()[3] = (tcpls_header.chunk_num & 0xff) as u8;
-    payload.as_mut()[4] = (tcpls_header.offset_step >> 8) as u8;
-    payload.as_mut()[5] = (tcpls_header.offset_step & 0xff) as u8;
+    payload.as_mut()[4] = (tcpls_header.stream_id >> 24) as u8;
+    payload.as_mut()[5] = (tcpls_header.stream_id >> 16) as u8;
     payload.as_mut()[6] = (tcpls_header.stream_id >> 8) as u8;
     payload.as_mut()[7] = (tcpls_header.stream_id & 0xff) as u8;
-
     // Write frame header and type
     match frame_header {
         Some(ref header) => {
@@ -171,7 +171,7 @@ fn encrypt_header(
 
     let mut i = 0;
     // Calculate hash(sample) XOR TCPLS header
-    for byte in header_encrypter.calculate_hash(sample){
+    for byte in header_encrypter.generate_mask(sample){
         payload.as_mut_tcpls_header()[i] ^= byte;
         i += 1;
     }
@@ -205,9 +205,9 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
     let mut sip_key = [0u8; 16];
     let mut iv = [0u8; 12];
     let enc_tcpls_header = TcplsHeader {
-        offset_step: 46846,
-        stream_id: 64684,
         chunk_num: 636873673,
+        stream_id: 64684,
+
     };
     let frame_header: Option<&Frame> = Some(&Frame::Stream {
         length: MAX_TCPLS_FRAGMENT_LEN as u16,

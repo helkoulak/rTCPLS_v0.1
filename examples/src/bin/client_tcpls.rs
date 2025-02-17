@@ -3,10 +3,10 @@ extern crate serde_derive;
 
 use std::{fs, process};
 use std::io;
-use std::io::{BufReader, Read, Write};
+use std::io::BufReader;
 use std::net::ToSocketAddrs;
 use rustls::crypto::{ring as provider, CryptoProvider};
-use std::ops::{Deref, DerefMut};
+
 use std::str;
 use std::sync::Arc;
 use docopt::Docopt;
@@ -17,7 +17,6 @@ use ring::digest;
 use rustls::recvbuf::RecvBufMap;
 use rustls::RootCertStore;
 use rustls::tcpls::TcplsSession;
-use rustls::tcpls::stream::SimpleIdHashSet;
 
 const CLIENT: Token = Token(0);
 
@@ -58,7 +57,7 @@ impl TlsClient {
         }
 
         if ev.is_writable() {
-            self.do_write(token);
+            self.do_write();
         }
 
 
@@ -225,7 +224,6 @@ Options:
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_port: Option<u16>,
-    flag_http: bool,
     flag_verbose: bool,
     flag_protover: Vec<String>,
     flag_suite: Vec<String>,
@@ -276,7 +274,6 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
             _ => panic!(
                 "cannot look up version '{}', valid are '1.2' and '1.3'",
@@ -513,7 +510,11 @@ fn main() {
     client.register(poll.registry(), &recv_map);
 
     loop {
-     match poll.poll(&mut events, None){
+     match poll.poll(&mut events, Some(client.tcpls_session.timeout)){
+         Ok(()) => {
+             // Timeout occurred (no events triggered)
+             client.tcpls_session.on_timeout();
+         }
         Ok(_) => {}
         // Polling can be interrupted (e.g. by a debugger) - retry if so.
         Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,

@@ -122,7 +122,7 @@ use criterion::{criterion_group, criterion_main, Criterion, Throughput, Benchmar
 use pprof::criterion::{Output, PProfProfiler};
 use rustls::{Connection, ConnectionCommon, ServerConnection, SideData};
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::SimpleIdHashSet;
+use rustls::tcpls::stream::{SimpleIdHashMap, SimpleIdHashSet};
 use rustls::tcpls::TcplsSession;
 use crate::bench_util::CPUTime;
 use rustls::crypto::{ring as provider, CryptoProvider};
@@ -130,14 +130,14 @@ use rustls::server::ServerConnectionData;
 use rustls::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
 
 pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
-    ServerConnectionData>, app_bufs: &mut RecvBufMap, data_len: u64) {
+    ServerConnectionData>, app_bufs: &mut RecvBufMap) {
     let conn_ids: Vec<u32> = vec![0,1,2];
-    let str_ids: Vec<u32> = vec![1,2];
+    let str_ids: Vec<u32> = vec![1];
     for str_id in str_ids{
         loop {
             for id in &conn_ids {
                 pipe.sess.set_connection_in_use(*id);
-                pipe.sess.process_new_packets(app_bufs).unwrap();
+                pipe.sess.process_new_packets(&mut SimpleIdHashMap::default(), app_bufs).unwrap();
             }
             if app_bufs.get(str_id).unwrap().complete { break }
         }
@@ -146,32 +146,34 @@ pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
 }
 mod bench_util;
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 300 * MAX_TCPLS_FRAGMENT_LEN;
-    let capacity = 400 * MAX_TCPLS_FRAGMENT_LEN;
+    let data_len= 54000;
+    let capacity = 100 * MAX_TCPLS_FRAGMENT_LEN;
     let sendbuf1 = vec![1u8; data_len];
-    let sendbuf2 = vec![2u8; data_len];
-    let mut group = c.benchmark_group("Data_recv");
-    group.throughput(Throughput::Bytes((data_len + data_len) as u64));
-    group.bench_with_input(BenchmarkId::new("Data_recv_multi_stream_multi_connection", data_len+data_len), &sendbuf1,
+/*    let sendbuf2 = vec![2u8; data_len];
+*/    let mut group = c.benchmark_group("Data_recv");
+    group.throughput(Throughput::Bytes((data_len) as u64));
+    group.bench_with_input(BenchmarkId::new("Data_recv_single_stream_multi_connection", data_len), &sendbuf1,
                            |b, sendbuf| {
 
                                b.iter_batched_ref(|| {
                                    // Finish handshake
                                    let (mut client, mut server, mut recv_svr, mut recv_clnt) =
                                        make_pair(KeyType::Rsa);
+                                   client.activate_ack(false);
+                                   server.activate_ack(false);
                                    do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
 
                                    let mut tcpls_client = TcplsSession::new(false);
                                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
-                                   tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 2);
+                                  // tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 2);
 
                                    //Encrypt data and buffer it in send buffer
                                    tcpls_client.stream_send(1, sendbuf1.as_slice()).expect("Buffering in send buffer failed");
-                                   tcpls_client.stream_send(2, sendbuf2.as_slice()).expect("Buffering in send buffer failed");
+                                 /*  tcpls_client.stream_send(2, sendbuf2.as_slice()).expect("Buffering in send buffer failed");*/
                                    let mut pipe = OtherSession::new(server);
                                    let mut conn_id: u32 = 0;
-                                   let stream_ids: Vec<u32> = vec![1, 2];
+                                   let stream_ids: Vec<u32> = vec![1];
 
                                    for str_id in stream_ids {
                                        while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(str_id)) {
@@ -187,11 +189,11 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
 
                                    // Create app receive buffer
                                    recv_svr.get_or_create(1, Some(capacity));
-                                   recv_svr.get_or_create(2, Some(capacity));
+                                 //  recv_svr.get_or_create(2, Some(capacity));
                                    (pipe, recv_svr)
                                },
 
-                                                  |(ref mut pipe, recv_svr)| process_received(pipe, recv_svr, data_len as u64),
+                                                  |(ref mut pipe, recv_svr)| process_received(pipe, recv_svr),
                                                   BatchSize::LargeInput)
                            });
     group.finish();
@@ -216,7 +218,7 @@ criterion_group! {
         .sample_size(5000);
     targets = criterion_benchmark
 }
-criterion_main!(benches);
+
 
 
 
@@ -232,5 +234,17 @@ criterion_main!(benches);
         //.with_profiler(PProfProfiler::new(100, Output::Flamegraph(Some(pprof::flamegraph::Options::default()))))
         .sample_size(5000);
     targets = criterion_benchmark
-}
-criterion_main!(benches);*/
+}*/
+
+/*criterion_group!{
+    name = benches;
+    config = Criterion::default()
+    .with_measurement(CPUTime)
+    .sample_size(5000)
+    .with_profiler({
+        let mut options = pprof::flamegraph::Options::default();
+        PProfProfiler::new(200, Output::Flamegraph(Some(options)))
+    });
+    targets = criterion_benchmark
+}*/
+criterion_main!(benches);

@@ -575,6 +575,8 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
         .map(|proto| proto.as_bytes().to_vec())
         .collect::<Vec<_>>();
 
+    config.enable_ack = false;
+
     Arc::new(config)
 }
 

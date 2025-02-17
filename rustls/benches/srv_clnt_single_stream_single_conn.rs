@@ -120,7 +120,7 @@ use criterion::{criterion_group, criterion_main, Criterion, Throughput, Benchmar
 use pprof::criterion::{Output, PProfProfiler};
 use rustls::{Connection, ConnectionCommon, ServerConnection, SideData};
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::SimpleIdHashSet;
+use rustls::tcpls::stream::{SimpleIdHashMap, SimpleIdHashSet};
 use rustls::tcpls::TcplsSession;
 use crate::bench_util::CPUTime;
 use rustls::crypto::{ring as provider, CryptoProvider};
@@ -133,12 +133,12 @@ mod bench_util;
 pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
     ServerConnectionData>, app_bufs: &mut RecvBufMap) {
     loop {
-            pipe.sess.process_new_packets(app_bufs).unwrap();
-        if app_bufs.get(1u16).unwrap().complete { break; }
+            pipe.sess.process_new_packets(&mut SimpleIdHashMap::default(), app_bufs).unwrap();
+        if app_bufs.get(1u16 as u32).unwrap().complete { break; }
     }
 }
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 200 * 1024 * 1024;
+    let data_len= 56000;;
     let sendbuf = vec![1u8; data_len];
     let mut group = c.benchmark_group("Data_recv");
     group.throughput(Throughput::Bytes(data_len as u64));
@@ -150,7 +150,9 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    let (mut client, mut server, mut recv_svr, mut recv_clnt) =
                                        make_pair(KeyType::Rsa);
                                    do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
-                                   server.set_deframer_cap(0, 2 * 1024 * 1024 * 1024);
+                                   client.activate_ack(false);
+                                   server.activate_ack(false);
+                                   server.set_deframer_cap(0, 100 * MAX_TCPLS_FRAGMENT_LEN);
                                    let mut tcpls_client = TcplsSession::new(false);
                                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
@@ -164,11 +166,11 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    };
 
                                    // Create app receive buffer
-                                   recv_svr.get_or_create(1, Some(300 * 1024 * 1024));
+                                   recv_svr.get_or_create(1, Some(100 * MAX_TCPLS_FRAGMENT_LEN));
                                    (pipe, recv_svr)
                                },
 
-                                                  |(ref mut pipe, recv_svr)| pipe.sess.process_new_packets(recv_svr).unwrap(),
+                                                  |(ref mut pipe, recv_svr)| pipe.sess.process_new_packets(&mut SimpleIdHashMap::default(), recv_svr).unwrap(),
                                                   BatchSize::SmallInput)
                            });
     group.finish();

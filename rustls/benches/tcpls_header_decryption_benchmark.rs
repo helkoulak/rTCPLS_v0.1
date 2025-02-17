@@ -1,17 +1,18 @@
-
-use rustls::SideData;
 use crate::bench_util::CPUTime;
+use rustls::SideData;
 
 mod bench_util;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use smallvec::ToSmallVec;
 
-use ring::{hmac, rand};
-use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+use aes::Aes128;
+
+use cipher::{generic_array::GenericArray, BlockCipher, BlockDecrypt, KeyInit};
 use ring::hmac::Key;
 use ring::rand::SecureRandom;
-use rustls::crypto::cipher::HeaderProtector;
+use ring::{hmac, rand};
+use rustls::crypto::cipherx::HeaderProtector;
 
 fn decrypt_header_hmac(sample: &[u8; 16], enc_tcpls_header: &[u8; 8], hmac_key: &Key ) {
     let tag = hmac::sign(hmac_key, sample);
@@ -23,13 +24,13 @@ fn decrypt_header_hmac(sample: &[u8; 16], enc_tcpls_header: &[u8; 8], hmac_key: 
 
 }
 
-fn decrypt_header_aes(sample: &mut Vec<u8>, enc_tcpls_header: &[u8; 8], less_safe_key: &LessSafeKey, aad: Aad<[u8; 0]>, nonce_bytes: [u8; 12]) {
-    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
-    let _ = less_safe_key.seal_in_place_separate_tag(nonce, aad, sample).expect("decryption failed");
-    let first_8_bytes = &sample.as_slice()[..8];
+fn decrypt_header_aes(sample: &mut Vec<u8>, enc_header: &mut Vec<u8>, cipher: &Aes128 ) {
+    let mut mask = GenericArray::default() ;
+    cipher.decrypt_block_b2b(GenericArray::from_slice(sample), &mut mask);
+    let first_8_bytes = &mask.as_slice()[..8];
     let mut output = vec![0u8; 8];
-    for i in 0..enc_tcpls_header.len() {
-        output[i] = first_8_bytes[i] ^ enc_tcpls_header[i];
+    for i in 0..7 {
+        output[i] = first_8_bytes[i] ^ enc_header[i];
     }
 
 }
@@ -44,7 +45,7 @@ fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
     rng.fill(&mut siphash_key).expect("Generate rand failed");
     let key = Key::generate(hmac::HMAC_SHA256, &rng).unwrap();
 
-    c.bench_function("HMAC decoding", |b| {
+    c.bench_function("HMAC_SHA256 decoding", |b| {
        
         b.iter(|| {
           black_box(decrypt_header_hmac(&sample, &enc_tcpls_header, &key))
@@ -59,22 +60,20 @@ fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
         });
     });
 
-    c.bench_function("AES_256_GCM decoding", |b| {
+    c.bench_function("AES_128 decoding", |b| {
         let mut sample = vec![0u8; 16];
-        let mut key_bytes = [0u8; 32];
-        let mut nonce_bytes = [0u8; 12];
+        let mut key_bytes = [0u8; 16];
+        let mut encrypted_header = vec![0u8; 8];
 
         rng.fill(&mut sample).expect("Generate rand failed");
         rng.fill(&mut key_bytes).expect("Generate rand failed");
-        rng.fill(&mut nonce_bytes).expect("Generate rand failed");
+        rng.fill(&mut encrypted_header).expect("Generate rand failed");
 
-        let aad = Aad::empty(); // No additional authenticated data
-
-        let key = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
-        let less_safe_key = LessSafeKey::new(key);
+        let key = GenericArray::from_slice(&key_bytes);
+        let cipher = Aes128::new(key);
 
         b.iter(|| {
-            black_box(decrypt_header_aes(&mut sample, &enc_tcpls_header, &less_safe_key, aad, nonce_bytes))
+            black_box(decrypt_header_aes(&mut sample, &mut encrypted_header, &cipher))
         });
     });
 }

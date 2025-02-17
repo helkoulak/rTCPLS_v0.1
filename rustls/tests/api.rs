@@ -53,7 +53,8 @@ use provider::sign::RsaSigningKey;
 use rustls::internal::msgs::fragmenter::MessageFragmenter;
 use rustls::recvbuf::{ReaderAppBufs, RecvBufMap};
 use rustls::tcpls::frame::{MAX_TCPLS_FRAGMENT_LEN, TCPLS_HEADER_SIZE};
-use rustls::tcpls::TcplsSession;
+use rustls::tcpls::stream::SimpleIdHashMap;
+use rustls::tcpls::{TcpConnection, TcplsSession};
 
 fn alpn_test_error(
     server_protos: Vec<Vec<u8>>,
@@ -356,7 +357,7 @@ fn buffered_client_data_sent() {
 
         do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
         transfer(&mut client, &mut server, None);
-        server.process_new_packets(&mut recv_srv).unwrap();
+        server.process_new_packets(None, &mut recv_srv).unwrap();
 
         check_read_app_buff(&mut server.reader_app_bufs(), b"hello", &mut recv_srv, 0);
     }
@@ -601,7 +602,7 @@ fn server_allow_any_anonymous_or_authenticated_client() {
 
 fn check_read_and_close(reader: &mut ReaderAppBufs, app_bufs: &mut RecvBufMap, expect: &[u8], id: u16) {
     check_read_app_buff(reader, expect, app_bufs, id);
-    assert!(matches!(app_bufs.get_mut(id).unwrap().read(&mut [0u8; 5]), Ok(0)));
+    assert!(matches!(app_bufs.get_mut(id as u32).unwrap().read(&mut [0u8; 5]), Ok(0)));
 }
 
 #[test]
@@ -767,7 +768,7 @@ fn client_closes_uncleanly() {
 
         transfer(&mut client, &mut server, None);
         transfer_eof(&mut server);
-        let io_state = server.process_new_packets(&mut recv_svr).unwrap();
+        let io_state = server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr).unwrap();
         assert!(!io_state.peer_has_closed());
         check_read_app_buff(&mut server.reader_app_bufs(), b"from-client!", &mut recv_svr, 0);
 
@@ -776,7 +777,7 @@ fn client_closes_uncleanly() {
 
         // may still transmit pending frames
         transfer(&mut server, &mut client, None);
-        client.process_new_packets(&mut recv_clnt).unwrap();
+        client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
        check_read_app_buff(&mut client.reader_app_bufs(), b"from-server!", &mut recv_clnt, 0);
     }
 }
@@ -1595,7 +1596,7 @@ fn receive_out_of_order_tls_records_multiple_streams() {
     //Send all data
     for str_id in 0..=2 {
         while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(str_id)) {
-            tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id as u16).unwrap();
+            tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id as u32).unwrap();
             //Process records sent from client to server
             pipe.sess.process_new_packets(&mut recv_svr).expect("TODO: panic message");
         }
@@ -5234,14 +5235,14 @@ fn test_client_rejects_hrr_with_varied_session_id() {
         assert_client_sends_hello_with_secp384,
         &mut server,
     );
-    server.process_new_packets(&mut recv_srv).unwrap();
+    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_srv).unwrap();
     transfer_altered(
         &mut server,
         assert_server_requests_retry_and_echoes_session_id,
         &mut client,
     );
     assert_eq!(
-        client.process_new_packets(&mut recv_clnt),
+        client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt),
         Err(Error::PeerMisbehaved(
             PeerMisbehaved::IllegalHelloRetryRequestWithWrongSessionId
         ))
@@ -5508,7 +5509,7 @@ fn test_server_mtu_reduction() {
     let encryption_overhead = 20 + TCPLS_HEADER_SIZE; // FIXME: see issue #991
 
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut recv_srv).unwrap();
+    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_srv).unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
         pipe.recv_map = recv_clnt;
@@ -5522,9 +5523,9 @@ fn test_server_mtu_reduction() {
 
     }
 
-    client.process_new_packets(&mut recv_clnt).unwrap();
+    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut recv_srv).unwrap();
+    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_srv).unwrap();
     {
         let mut pipe = OtherSession::new(&mut client);
         pipe.recv_map = recv_clnt;
@@ -5537,7 +5538,7 @@ fn test_server_mtu_reduction() {
 
     }
 
-    client.process_new_packets(&mut recv_clnt).unwrap();
+    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
     check_read_app_buff(&mut client.reader_app_bufs(), &big_data, &mut recv_clnt, 0);
 }
 
@@ -5591,13 +5592,13 @@ fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
                 let pattern = (0x00..=0xffu8).collect::<Vec<u8>>();
                 assert_eq!(pattern.len(), server.writer().write(&pattern).unwrap());
                 transfer(&mut server, &mut client, None);
-                client.process_new_packets(&mut recv_clnt).unwrap();
+                client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
                 check_read_app_buff(&mut client.reader_app_bufs(), &pattern, &mut recv_clnt, 0);
 
                 // and client -> server
                 assert_eq!(pattern.len(), client.writer().write(&pattern).unwrap());
                 transfer(&mut client, &mut server, None);
-                server.process_new_packets(&mut recv_srv).unwrap();
+                server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_srv).unwrap();
                 check_read_app_buff(&mut server.reader_app_bufs(), &pattern, &mut recv_srv, 0);
             }
         }
@@ -5700,7 +5701,7 @@ fn test_server_rejects_clients_without_any_kx_groups() {
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, delete_kx_groups, &mut server);
     assert_eq!(
-        server.process_new_packets(&mut recv_srv),
+        server.process_new_packets(None, &mut recv_srv),
         Err(Error::PeerIncompatible(
             PeerIncompatible::NoKxGroupsInCommon
         ))

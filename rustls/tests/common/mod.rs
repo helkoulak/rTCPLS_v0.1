@@ -19,7 +19,7 @@ use rustls::{
 };
 use webpki::anchor_from_trusted_cert;
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::DEFAULT_STREAM_ID;
+use rustls::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 
 use super::provider;
 
@@ -155,7 +155,7 @@ embed_files! {
 pub fn transfer(
     left: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
     right: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
-    id: Option<u16>,
+    id: Option<u32>,
 
 ) -> usize {
     let mut buf = [0u8; 262144];
@@ -625,9 +625,9 @@ pub fn do_handshake(
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server, None);
-        server.process_new_packets(serv).unwrap();
+        server.process_new_packets(&mut SimpleIdHashMap::default(), serv).unwrap();
         to_client += transfer(server, client, None);
-        client.process_new_packets(clnt).unwrap();
+        client.process_new_packets(&mut SimpleIdHashMap::default(), clnt).unwrap();
     }
     (to_server, to_client)
 }
@@ -648,11 +648,11 @@ pub fn do_handshake_until_error(
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server, None);
         server
-            .process_new_packets(serv)
+            .process_new_packets(&mut SimpleIdHashMap::default(), serv)
             .map_err(ErrorFromPeer::Server)?;
         transfer(server, client, None);
         client
-            .process_new_packets(clnt)
+            .process_new_packets(&mut SimpleIdHashMap::default(), clnt)
             .map_err(ErrorFromPeer::Client)?;
     }
 
@@ -671,7 +671,7 @@ pub fn do_handshake_until_both_error(
             let mut errors = vec![server_err];
             transfer(server, client, None);
             let client_err = client
-                .process_new_packets(clnt)
+                .process_new_packets(&mut SimpleIdHashMap::default(), clnt)
                 .map_err(ErrorFromPeer::Client)
                 .expect_err("client didn't produce error after server error");
             errors.push(client_err);
@@ -683,7 +683,7 @@ pub fn do_handshake_until_both_error(
 
             transfer(client, server, None);
             let server_err = server
-                .process_new_packets(serv)
+                .process_new_packets(&mut SimpleIdHashMap::default(), serv)
                 .map_err(ErrorFromPeer::Server)
                 .expect_err("server didn't produce error after client error");
             errors.push(server_err);
@@ -737,7 +737,7 @@ pub fn do_suite_test(
     assert!(server.is_handshaking());
 
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut recv_svr).unwrap();
+    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr).unwrap();
 
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
@@ -747,15 +747,15 @@ pub fn do_suite_test(
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut server, &mut client, None);
-    client.process_new_packets(&mut recv_clnt).unwrap();
+    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
 
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut recv_svr).unwrap();
+    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr).unwrap();
     transfer(&mut server, &mut client, None);
-    client.process_new_packets(&mut recv_clnt).unwrap();
+    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());
