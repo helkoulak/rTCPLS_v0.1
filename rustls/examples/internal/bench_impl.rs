@@ -26,6 +26,7 @@ use rustls::{
     ServerConnection, SideData,
 };
 use rustls::recvbuf::RecvBufMap;
+use rustls::tcpls::stream::SimpleIdHashMap;
 
 pub fn main() {
     let mut args = std::env::args();
@@ -63,6 +64,8 @@ where
     let mut data_left = expect_data;
     let mut data_buf = [0u8; 8192];
     let mut app_bufs = RecvBufMap::new();
+    let mut map = SimpleIdHashMap::default();
+
 
     loop {
         let mut sz = 0;
@@ -87,7 +90,7 @@ where
             let start = Instant::now();
             match right.read_tls(&mut tls_buf[offs..sz].as_ref()) {
                 Ok(read) => {
-                    right.process_new_packets(&mut app_bufs).unwrap();
+                    right.process_new_packets(&mut map, &mut app_bufs).unwrap();
                     offs += read;
                 }
                 Err(err) => {

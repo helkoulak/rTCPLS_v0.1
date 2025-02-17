@@ -443,7 +443,11 @@ impl MessageDeframer {
                                     PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
                                 ));
                             } else {
-                                self.unproc_ranges.get_mut(&conn_id).unwrap().retain(|r| *r != Range::from(start..end));
+                                self.unproc_ranges.get_mut(&conn_id).map(|ranges| {
+                                    ranges.retain(|r| *r != Range::from(start..end));
+                                });
+
+                                // self.unproc_ranges.get_mut(&conn_id).unwrap().retain(|r| *r != Range::from(start..end));
                                 self.proc_ranges.entry(conn_id)
                                     .or_insert_with(Vec::new)
                                     .push(start..end);
@@ -523,7 +527,13 @@ impl MessageDeframer {
                     false => None,
                 },
             )? {
-                HandshakePayloadState::Blocked => return Ok(None),
+                HandshakePayloadState::Blocked => {
+                    self.proc_ranges
+                        .entry(conn_id)
+                        .or_insert_with(Vec::new)
+                        .push(start..end);
+                    return Ok(None)
+                },
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => {
                     self.proc_ranges

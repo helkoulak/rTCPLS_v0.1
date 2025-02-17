@@ -29,6 +29,7 @@ use rustls::{
     SupportedProtocolVersion,
 };
 use rustls::recvbuf::RecvBufMap;
+use rustls::tcpls::stream::SimpleIdHashMap;
 
 static BOGO_NACK: i32 = 89;
 
@@ -811,7 +812,8 @@ const MAX_MESSAGE_SIZE: usize = 0xffff + 5;
 
 fn after_read(sess: &mut Connection, conn: &mut net::TcpStream) {
     let mut app_bufs = RecvBufMap::new();
-    if let Err(err) = sess.process_new_packets(&mut app_bufs) {
+    let mut map = SimpleIdHashMap::default();
+    if let Err(err) = sess.process_new_packets(&mut map, &mut app_bufs) {
         flush(sess, conn); /* send any alerts before exiting */
         handle_err(err);
     }

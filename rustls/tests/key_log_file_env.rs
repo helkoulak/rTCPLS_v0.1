@@ -64,6 +64,9 @@ use common::{
 };
 
 
+use rustls::tcpls::stream::SimpleIdHashMap;
+
+
 #[test]
 fn exercise_key_log_file_for_client() {
     super::serialized(|| {
@@ -75,7 +78,7 @@ fn exercise_key_log_file_for_client() {
 
             let mut client_config = make_client_config_with_versions(KeyType::Rsa, &[version]);
             client_config.key_log = Arc::new(rustls::KeyLogFile::new());
-
+            let mut map = SimpleIdHashMap::default();
             let (mut client, mut server, mut recv_srv, mut recv_clnt) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
 
@@ -83,7 +86,7 @@ fn exercise_key_log_file_for_client() {
 
             do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
             transfer(&mut client, &mut server, None);
-            server.process_new_packets(&mut recv_srv).unwrap();
+            server.process_new_packets(&mut map, &mut recv_srv).unwrap();
         }
     })
 }
@@ -93,7 +96,7 @@ fn exercise_key_log_file_for_server() {
 
     super::serialized(|| {
         let mut server_config = make_server_config(KeyType::Rsa);
-
+        let mut map = SimpleIdHashMap::default();
         env::set_var("SSLKEYLOGFILE", "./sslkeylogfile.txt");
         server_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
@@ -108,7 +111,7 @@ fn exercise_key_log_file_for_server() {
             assert_eq!(5, client.writer().write(b"hello").unwrap());
             do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
             transfer(&mut client, &mut server, None);
-            server.process_new_packets(&mut recv_srv).unwrap();
+            server.process_new_packets(&mut map, &mut recv_srv).unwrap();
         }
     })
 }

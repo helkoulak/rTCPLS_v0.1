@@ -10,7 +10,7 @@ use cipher::{BlockEncrypt, KeyInit};
 use crate::crypto::tls13::HkdfExpander;
 
 use zeroize::Zeroize;
-
+use ring::rand::SecureRandom;
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::Error;
 use crate::msgs::codec;

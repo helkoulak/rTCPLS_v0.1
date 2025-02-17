@@ -382,11 +382,15 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         let payload = &mut msg.payload;
 
+        if payload.len() < self.dec_key.algorithm().tag_len() {
+            return Err(Error::DecryptError);
+        }
+
         match header_decrypted {
             true => {},
             false => {
                 // Take the LSBs of calculated tag as input sample for hash function
-                let sample = payload[HEADER_SIZE + TCPLS_HEADER_SIZE..].rchunks(self.dec_key.algorithm().tag_len()).next().unwrap();
+                let sample = payload[..].rchunks(self.dec_key.algorithm().tag_len()).next().unwrap();
 
 
                 // Calculate hash(sample) XOR TCPLS header
@@ -405,9 +409,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             .unwrap());
 
 
-        if payload.len() < self.dec_key.algorithm().tag_len() {
-            return Err(Error::DecryptError);
-        }
+
 
         let seq = self.read_seq_map.get_or_create(stream_id as u64).read_seq;
 
