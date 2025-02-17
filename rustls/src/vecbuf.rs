@@ -1,7 +1,7 @@
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
-
+use std::collections::BTreeMap;
 #[cfg(feature = "std")]
 use std::io;
 #[cfg(feature = "std")]
@@ -22,7 +22,7 @@ use crate::tcpls::frame::TcplsHeader;
 #[derive(Default)]
 pub(crate) struct ChunkVecBuffer {
     chunks: VecDeque<OutboundTlsMessage>,
-    not_acked: VecDeque<OutboundTlsMessage>,
+    not_acked: BTreeMap<u32, OutboundTlsMessage>,
     limit: Option<usize>,
     /// where the next chunk will be appended
     current_offset: u64,
@@ -79,7 +79,7 @@ impl ChunkVecBuffer {
     }
 
     #[inline]
-    pub(crate) fn mut_iter_not_ack(&mut self) -> alloc::collections::vec_deque::IterMut<'_, OutboundTlsMessage> {
+    pub(crate) fn mut_iter_not_ack(&mut self) -> impl Iterator<Item = (&u32, &mut OutboundTlsMessage)> {
         self.not_acked.iter_mut()
     }
 
@@ -149,7 +149,7 @@ impl ChunkVecBuffer {
     }
 
     pub(crate) fn remove_ack(&mut self, chunk_num: u32) {
-        self.not_acked.remove(chunk_num as usize);
+        self.not_acked.remove(&chunk_num);
     }
 
 
@@ -222,7 +222,9 @@ impl ChunkVecBuffer {
         } else {
             match chunk.typ {
                 Handshake | ContentType::ChangeCipherSpec => {},
-                _ => self.not_acked.push_back(OutboundTlsMessage::new(buf, chunk.chunk_num, Some(Instant::now()), chunk.typ)),
+                _ => {
+                    _ = self.not_acked.insert(chunk.chunk_num, OutboundTlsMessage::new(buf, chunk.chunk_num, Some(Instant::now()), chunk.typ))
+                },
 
             }
 

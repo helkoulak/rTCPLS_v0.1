@@ -8,7 +8,7 @@ use std::prelude::rust_2018::ToString;
 use std::vec;
 
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_SIZE, HEADER_SIZE, STREAM_ID_SIZE};
+use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_SIZE, STREAM_ID_SIZE};
 use crate::recvbuf::RecvBufMap;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tcpls::frame::{Frame, TcplsHeader, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE};
@@ -413,7 +413,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         let seq = self.read_seq_map.get_or_create(stream_id as u64).read_seq;
 
-        let mut recv_buf = app_bufs.get_or_create(stream_id as u64, None);
+        let recv_buf = app_bufs.get_or_create(stream_id as u64, None);
 
 
         if recv_buf.next_recv_pkt_num != chunk_num {

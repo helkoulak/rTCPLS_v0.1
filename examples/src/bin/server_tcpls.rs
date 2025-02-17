@@ -8,7 +8,7 @@ extern crate log;
 use std::{fs, io};
 use std::io::{BufReader, Read, Write};
 use std::net;
-use std::time::Duration;
+
 
 #[macro_use]
 extern crate serde_derive;
@@ -23,7 +23,7 @@ use ring::digest;
 
 use rustls::crypto::{ring as provider, CryptoProvider};
 
-use rustls::{self, Error, RootCertStore, tcpls};
+use rustls::{self, Error, RootCertStore};
 
 use rustls::recvbuf::RecvBufMap;
 use rustls::server::WebPkiClientVerifier;
@@ -43,7 +43,6 @@ struct TlsServer {
     closing: bool,
     closed: bool,
     back: Option<TcpStream>,
-    sent_http_response: bool,
     tcpls_session: TcplsSession,
 
 }
@@ -54,7 +53,6 @@ impl TlsServer {
             listener,
             tls_config: cfg,
             back: None,
-            sent_http_response: false,
 
             closing: false,
             closed: false,
@@ -124,18 +122,16 @@ impl TlsServer {
 
     pub fn verify_received(&mut self, recv_map: &mut RecvBufMap ) {
 
-        let mut hash_index= 0;
-
 
         for id in recv_map.readable() {
-            let mut stream = recv_map.get_mut(id as u32).unwrap();
+            let stream = recv_map.get_mut(id as u32).unwrap();
 
 
             if !stream.complete {
                 continue
             }
 
-            hash_index = match find_pattern(&stream.as_ref_consumed(), vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice()) {
+            let hash_index = match find_pattern(&stream.as_ref_consumed(), vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice()) {
                 Some(n) => n + 4,
                 None => panic!("hash prefix does not exist"),
             };
@@ -304,9 +300,9 @@ impl TlsServer {
         }
     }
 
-    fn is_closed(&self) -> bool {
+    /*fn is_closed(&self) -> bool {
         self.closed
-    }
+    }*/
 }
 
 pub fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
@@ -392,7 +388,7 @@ struct Args {
     flag_require_auth: bool,
     flag_resumption: bool,
     flag_tickets: bool,
-    arg_fport: Option<u16>,
+    /*arg_fport: Option<u16>,*/
 }
 
 
@@ -575,7 +571,7 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
         .map(|proto| proto.as_bytes().to_vec())
         .collect::<Vec<_>>();
 
-    config.enable_ack = false;
+    config.enable_ack = true;
 
     Arc::new(config)
 }

@@ -1,23 +1,21 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::{fs, process};
-use std::io;
-use std::io::{BufReader, Read, Write};
-use std::net::ToSocketAddrs;
-use rustls::crypto::{ring as provider, CryptoProvider};
-use std::ops::{Deref, DerefMut};
-use std::str;
-use std::sync::Arc;
 use docopt::Docopt;
 use log::LevelFilter;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use ring::digest;
+use rustls::crypto::{ring as provider, CryptoProvider};
 use rustls::recvbuf::RecvBufMap;
-use rustls::RootCertStore;
 use rustls::tcpls::TcplsSession;
-use rustls::tcpls::stream::SimpleIdHashSet;
+use rustls::RootCertStore;
+use std::io;
+use std::io::BufReader;
+use std::net::ToSocketAddrs;
+use std::str;
+use std::sync::Arc;
+use std::{fs, process};
 
 const CLIENT: Token = Token(0);
 
@@ -50,8 +48,6 @@ impl TlsClient {
 
             if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() && !self.data_sent{
                 //Send three byte arrays on three streams
-                let mut id_set = SimpleIdHashSet::default();
-
                 self.send_data(vec![0u8; (6 * GIGABYTE) as usize].as_slice(), 0).expect("");
 
                 self.data_sent = true;
@@ -225,7 +221,7 @@ Options:
 #[derive(Debug, Deserialize)]
 struct Args {
     flag_port: Option<u16>,
-    flag_http: bool,
+    // flag_http: bool,
     flag_verbose: bool,
     flag_protover: Vec<String>,
     flag_suite: Vec<String>,
@@ -276,7 +272,6 @@ fn lookup_versions(versions: &[String]) -> Vec<&'static rustls::SupportedProtoco
 
     for vname in versions {
         let version = match vname.as_ref() {
-            "1.2" => &rustls::version::TLS12,
             "1.3" => &rustls::version::TLS13,
             _ => panic!(
                 "cannot look up version '{}', valid are '1.2' and '1.3'",

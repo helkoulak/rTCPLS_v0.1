@@ -32,3 +32,6 @@ libc = "0.2.154"
 [dev-dependencies]
 regex = "1.0"
 
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(read_buf)'] }

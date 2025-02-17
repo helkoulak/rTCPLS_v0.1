@@ -406,7 +406,7 @@ impl MessageDecrypter for ChaCha20Poly1305MessageDecrypter {
     }
 
     fn decrypt_tcpls<'a, 'b>(&mut self,
-                             msg: InboundOpaqueMessage<'a>,
+                             _msg: InboundOpaqueMessage<'a>,
                              _app_bufs: &'a mut RecvBufMap,
                              _header_decrypted: bool,
                              _header_decrypter: &mut HeaderProtector,

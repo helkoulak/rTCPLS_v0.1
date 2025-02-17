@@ -17,8 +17,6 @@ use mio::net::{TcpListener, TcpStream};
 use mio::Token;
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer};
 
-use ring::digest;
-
 use rustls::crypto::{ring as provider, CryptoProvider};
 
 use rustls::{self, Connection, RootCertStore, ServerConnection};
@@ -27,7 +25,7 @@ use rustls::recvbuf::RecvBufMap;
 use rustls::server::WebPkiClientVerifier;
 use rustls::tcpls::{server_create_listener, TcplsSession, TlsConfig, DEFAULT_CONNECTION_ID};
 use rustls::tcpls::outstanding_conn::OutstandingTcpConn;
-use rustls::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
+use rustls::tcpls::stream::SimpleIdHashMap;
 
 // Token for our listening socket.
 const LISTENER1: mio::Token = mio::Token(100);
@@ -43,11 +41,9 @@ struct TlsServer {
     tls_config: Arc<rustls::ServerConfig>,
 
     closing: bool,
-    closed: bool,
     back: Option<TcpStream>,
     tcpls_session: TcplsSession,
     poll: mio::Poll,
-    total_streams_received: usize,
     download_req_received: bool,
     conns_probed: bool,
 }
@@ -58,10 +54,9 @@ impl TlsServer {
             tls_config: cfg,
             back: None,
             closing: false,
-            closed: false,
+
             tcpls_session: TcplsSession::new(true),
             poll: mio::Poll::new().unwrap(),
-            total_streams_received: 0,
             download_req_received: false,
             conns_probed: false,
         }
@@ -124,14 +119,14 @@ impl TlsServer {
     }
 
     /// Close the backend connection for forwarded sessions.
-    fn close_back(&mut self) {
+   /* fn close_back(&mut self) {
         if self.back.is_some() {
             let back = self.back.as_mut().unwrap();
             back.shutdown(net::Shutdown::Both)
                 .unwrap();
         }
         self.back = None;
-    }
+    }*/
 
     fn do_read(&mut self, app_buffers: &mut RecvBufMap, id: u64) {
         if self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().contains_key(&id) {
@@ -188,7 +183,7 @@ impl TlsServer {
     }
 
     fn register(&mut self, socket: TcpStream, app_buf: &RecvBufMap) {
-       let mut conn_id: u32 = 0;
+       let conn_id;
 
         if self.tcpls_session.next_conn_id == DEFAULT_CONNECTION_ID {
             self.tcpls_session.is_server = true;
@@ -524,10 +519,10 @@ fn load_crls(filenames: &[String]) -> Vec<CertificateRevocationListDer<'static>>
         .collect()
 }
 
-fn take_vec_ownership(socks: Vec<TcpStream>) -> Vec<TcpStream> {
+/*fn take_vec_ownership(socks: Vec<TcpStream>) -> Vec<TcpStream> {
     let sock_clone: Vec<TcpStream> = socks;
     sock_clone
-}
+}*/
 fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
     let client_auth = if args.flag_auth.is_some() {
         let roots = load_certs(args.flag_auth.as_ref().unwrap());

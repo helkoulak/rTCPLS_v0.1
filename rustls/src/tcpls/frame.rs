@@ -1,5 +1,4 @@
 use std::prelude::rust_2021::Vec;
-use std::vec;
 use octets::varint_len;
 use crate::{Error, InvalidMessage};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;

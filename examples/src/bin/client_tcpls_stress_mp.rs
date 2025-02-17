@@ -10,7 +10,7 @@ use std::str;
 use std::sync::Arc;
 
 use docopt::Docopt;
-use log::{trace, LevelFilter};
+use log::LevelFilter;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 

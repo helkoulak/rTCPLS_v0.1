@@ -59,7 +59,9 @@
     unsafe_code,
     unused_variables,
     unused_mut,
-    clashing_extern_declarations
+    clashing_extern_declarations,
+    unused_assignments,
+    unused_variables
 )]
 #![deny(variant_size_differences)]
 #![forbid(

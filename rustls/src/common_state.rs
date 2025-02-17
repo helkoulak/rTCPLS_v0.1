@@ -416,7 +416,7 @@ impl CommonState {
         let typ = m.typ;
 
         let em = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header);
-        self.queue_message(em.encode(), id, None, typ);
+        self.queue_message(em.encode(), id, Some(&tcpls_header), typ);
     }
 
     pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{

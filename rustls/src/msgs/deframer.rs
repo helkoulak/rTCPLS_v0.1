@@ -44,8 +44,8 @@ pub struct MessageDeframer {
     /// Range of dicard area in deframer buffer.
     pub(crate) discard_range: Range<usize>,
 
-    ///Range of joined Handshake message in the deframer buffer
-    pub(crate)  joined_messages: Vec<Range<usize>>,
+   /* ///Range of joined Handshake message in the deframer buffer
+    pub(crate)  joined_messages: Vec<Range<usize>>,*/
 
     pub(crate) current_conn_id: u64,
 
@@ -277,7 +277,6 @@ impl MessageDeframer {
         let mut end;
         let mut header_decrypted = false;
         let mut stream_id: u32 = 0;
-        let mut chunk_num: u32 = 0;
         let conn_id = self.current_conn_id;
 
 
@@ -402,11 +401,11 @@ impl MessageDeframer {
             // Decrypt the encrypted message (if necessary).
             let (typ, version, plain_payload_slice) =
                 match record_layer.decrypt_incoming_tcpls(m, app_buffers, header_decrypted) {
-                    Ok((Some(decrypted), chunk, strm_id)) => {
+                    Ok((Some(decrypted), _chunk, strm_id)) => {
                         header_decrypted = false;
-                        if let Some(ch_num) = chunk {
+                       /* if let Some(ch_num) = chunk {
                             chunk_num = ch_num;
-                        }
+                        }*/
 
                         if let Some(id) = strm_id {
                             stream_id = id;

@@ -10,7 +10,6 @@ use std::str;
 use std::sync::Arc;
 use std::{fs, process};
 use std::fs::{File, OpenOptions};
-use std::ops::DerefMut;
 use std::time::{Duration, Instant};
 use docopt::Docopt;
 use log::LevelFilter;
@@ -33,7 +32,7 @@ struct TlsClient {
     clean_closure: bool,
     tcpls_session: TcplsSession,
     all_joined: bool,
-    data_sent: bool,
+    // data_sent: bool,
     poll: mio::Poll,
     down_req_sent: bool,
     download_time: Instant,
@@ -48,7 +47,7 @@ impl TlsClient {
             clean_closure: false,
             tcpls_session: TcplsSession::new(false),
             all_joined: false,
-            data_sent: false,
+            // data_sent: false,
             poll: mio::Poll::new().unwrap(),
             down_req_sent:false,
             download_time: Instant::now(),
@@ -151,7 +150,7 @@ impl TlsClient {
 
         if app_buffers.get(1).unwrap().complete {
             let t = self.download_time.elapsed().as_secs_f64();
-            let mut file =
+            let _file =
 
             // Write the formatted string to the file
             writeln!(

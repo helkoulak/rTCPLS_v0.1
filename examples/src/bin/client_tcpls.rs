@@ -515,7 +515,6 @@ fn main() {
              // Timeout occurred (no events triggered)
              client.tcpls_session.on_timeout();
          }
-        Ok(_) => {}
         // Polling can be interrupted (e.g. by a debugger) - retry if so.
         Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
         Err(e) => {

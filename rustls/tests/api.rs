@@ -34,7 +34,7 @@ use rustls::internal::msgs::message::{
 use rustls::server::{ClientHello, ParsedCertificate, ResolvesServerCert};
 use rustls::{Connection, SupportedCipherSuite};
 use rustls::{
-    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error, InvalidMessage,
+    sign, AlertDescription, CertificateError, ConnectionCommon, ContentType, Error,
     KeyLog, PeerIncompatible, PeerMisbehaved, SideData,
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
@@ -50,9 +50,8 @@ use common::*;
 
 use provider::cipher_suite;
 use provider::sign::RsaSigningKey;
-use rustls::internal::msgs::fragmenter::MessageFragmenter;
 use rustls::recvbuf::{ReaderAppBufs, RecvBufMap};
-use rustls::tcpls::frame::{MAX_TCPLS_FRAGMENT_LEN, TCPLS_HEADER_SIZE, TCPLS_OVERHEAD};
+use rustls::tcpls::frame::TCPLS_OVERHEAD;
 use rustls::tcpls::stream::SimpleIdHashMap;
 use rustls::tcpls::{TcpConnection, TcplsSession};
 
@@ -172,11 +171,11 @@ fn versions() {
     version_test(&[], &[], Some(ProtocolVersion::TLSv1_3));
 }
 
-fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
+/*fn check_read(reader: &mut dyn io::Read, bytes: &[u8]) {
     let mut buf = vec![0u8; bytes.len() + 1];
     assert_eq!(bytes.len(), reader.read(&mut buf).unwrap());
     assert_eq!(bytes, &buf[..bytes.len()]);
-}
+}*/
 fn check_read_app_buff(reader: &mut  ReaderAppBufs, bytes: &[u8], app_recv: &mut RecvBufMap, id: u16){
     let mut buf = vec![0u8; bytes.len() + 1];
     assert_eq!(bytes.len(), reader.read_app_bufs(&mut buf, app_recv, id).unwrap());
@@ -184,11 +183,11 @@ fn check_read_app_buff(reader: &mut  ReaderAppBufs, bytes: &[u8], app_recv: &mut
 }
 
 
-fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
+/*fn check_read_err(reader: &mut dyn io::Read, err_kind: io::ErrorKind) {
     let mut buf = vec![0u8; 1];
     let err = reader.read(&mut buf).unwrap_err();
     assert!(matches!(err, err  if err.kind()  == err_kind))
-}
+}*/
 
 #[cfg(read_buf)]
 fn check_read_buf(reader: &mut dyn io::Read, bytes: &[u8]) {
@@ -524,7 +523,7 @@ fn server_can_get_client_cert_after_resumption() {
 }
 
 
-fn test_config_builders_debug() {
+/*fn test_config_builders_debug() {
     
     let b = ServerConfig::builder_with_provider(
         CryptoProvider {
@@ -557,7 +556,7 @@ fn test_config_builders_debug() {
        "ConfigBuilder<ClientConfig, _> { state: WantsVerifier { provider: CryptoProvider { cipher_suites: [TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256, TLS13_CHACHA20_POLY1305_SHA256, TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256, TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256], kx_groups: [X25519, secp256r1, secp384r1], signature_verification_algorithms: WebPkiSupportedAlgorithms { all: [ .. ], mapping: [ECDSA_NISTP384_SHA384, ECDSA_NISTP256_SHA256, ED25519, RSA_PSS_SHA512, RSA_PSS_SHA384, RSA_PSS_SHA256, RSA_PKCS1_SHA512, RSA_PKCS1_SHA384, RSA_PKCS1_SHA256] }, secure_random: Ring, key_provider: Ring }, versions: [TLSv1_3], time_provider: DefaultTimeProvider } }",
         format!("{:?}", b)
     );
-}
+}*/
 
 /// Test that the server handles combination of `offer_client_auth()` returning true
 /// and `client_auth_mandatory` returning `Some(false)`. This exercises both the
@@ -749,7 +748,7 @@ fn client_closes_uncleanly() {
              if version.version == ProtocolVersion::TLSv1_2 {
             continue
         }
-        let mut map: SimpleIdHashMap<TcpConnection> = SimpleIdHashMap::default();
+        let _map: SimpleIdHashMap<TcpConnection> = SimpleIdHashMap::default();
         let client_config = make_client_config_with_versions(kt, &[version]);
         let (mut client, mut server, mut recv_svr, mut recv_clnt) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
@@ -790,7 +789,7 @@ fn client_closes_uncleanly() {
 
 #[test]
 fn test_tls13_valid_early_plaintext_alert() {
-    let (mut client, mut server, mut recv_svr, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, mut server, mut recv_svr,  _recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
     // The client will not have written a CCS or any encrypted messages to the server yet.
@@ -817,7 +816,7 @@ fn test_tls13_valid_early_plaintext_alert() {
 
 #[test]
 fn test_tls13_too_short_early_plaintext_alert() {
-    let (mut client, mut server, mut recv_svr, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, mut server, mut recv_svr, _recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     // Perform the start of a TLS 1.3 handshake, sending a client hello to the server.
     // The client will not have written a CCS or any encrypted messages to the server yet.
@@ -1367,7 +1366,7 @@ fn test_server_rejects_non_empty_tcpls_tokens_extension() {
             if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
                 for mut ext in ch.extensions.iter_mut() {
                     if let ClientExtension::TcplsTokens(tokens) = &mut ext {
-                        for i in 1..=5 {
+                        for _i in 1..=5 {
                             tokens.push(TcplsToken::new([5u8;32]));
                         }
                     }
@@ -1388,11 +1387,11 @@ fn test_server_rejects_non_empty_tcpls_tokens_extension() {
     transfer_altered(&mut conn_client, non_empty_tcpls_tokens, &mut conn_server);
     client = match conn_client {
         Connection::Client(conn) => conn,
-        Connection::Server(conn) => panic!("Wrong connection type")
+        Connection::Server(_conn) => panic!("Wrong connection type")
     };
     server = match conn_server {
         Connection::Server(conn) => conn,
-        Connection::Client(conn) => panic!("Wrong connection type"),
+        Connection::Client(_conn) => panic!("Wrong connection type"),
     };
     let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
         do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
@@ -1588,7 +1587,7 @@ fn receive_out_of_order_tls_records_multiple_streams() {
 
     client = match tcpls_client.tls_conn.unwrap() {
         Connection::Client(conn) => conn,
-        Connection::Server(conn) => panic!("wrong type of connection. Found server connection")
+        Connection::Server(_conn) => panic!("wrong type of connection. Found server connection")
     };
 
     //Change the order of records in send buffers
@@ -1965,7 +1964,7 @@ fn client_optional_auth_client_revocation_works() {
 #[test]
 
 fn client_error_is_sticky() {
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _, _recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     client
         .read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
@@ -1979,7 +1978,7 @@ fn client_error_is_sticky() {
 #[test]
 fn server_error_is_sticky() {
 
-    let (_, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, mut server, mut recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     server
         .read_tls(&mut b"\x16\x03\x03\x00\x08\x0f\x00\x00\x04junk".as_ref())
@@ -1992,21 +1991,21 @@ fn server_error_is_sticky() {
 
 #[test]
 fn server_flush_does_nothing() {
-    let (_, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, mut server,  _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     assert!(matches!(server.writer().flush(), Ok(())));
 }
 
 #[test]
 fn client_flush_does_nothing() {
 
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _,  _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     assert!(matches!(client.writer().flush(), Ok(())));
 }
 
 #[allow(clippy::no_effect)]
 #[test]
 fn server_is_send_and_sync() {
-    let (_, server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, server,  _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     &server as &dyn Send;
     &server as &dyn Sync;
 }
@@ -2014,12 +2013,12 @@ fn server_is_send_and_sync() {
 #[allow(clippy::no_effect)]
 #[test]
 fn client_is_send_and_sync() {
-    let (client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (client, _, _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     &client as &dyn Send;
     &client as &dyn Sync;
 }
 
-fn server_respects_buffer_limit_pre_handshake() {
+/*fn server_respects_buffer_limit_pre_handshake() {
     let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     server.set_buffer_limit(Some(32), 0);
@@ -2045,9 +2044,9 @@ fn server_respects_buffer_limit_pre_handshake() {
     client.process_new_packets(&mut map, &mut recv_clnt).unwrap();
 
    check_read_app_buff(&mut client.reader_app_bufs(), b"01234567890123456789012345678901", &mut recv_clnt, 0);
-}
+}*/
 
-fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
+/*fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
     let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     server.set_buffer_limit(Some(32), 0);
@@ -2068,9 +2067,9 @@ fn server_respects_buffer_limit_pre_handshake_with_vectored_write() {
     client.process_new_packets(&mut map, &mut recv_clnt).unwrap();
 
     check_read_app_buff(&mut client.reader_app_bufs(), b"01234567890123456789012345678901", &mut recv_clnt, 0);
-}
+}*/
 
-fn server_respects_buffer_limit_post_handshake() {
+/*fn server_respects_buffer_limit_post_handshake() {
     let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
     // this test will vary in behaviour depending on the default suites
@@ -2096,7 +2095,7 @@ fn server_respects_buffer_limit_post_handshake() {
     client.process_new_packets(&mut map, &mut recv_clnt).unwrap();
 
     check_read_app_buff(&mut client.reader_app_bufs(), b"01234567890123456789012345", &mut recv_clnt, 0);
-}
+}*/
 /*#[ignore]
 #[test]
 fn client_respects_buffer_limit_pre_handshake() {
@@ -2128,7 +2127,7 @@ fn client_respects_buffer_limit_pre_handshake() {
 
 }*/
 
-fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
+/*fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
 
     let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let mut map = SimpleIdHashMap::default();
@@ -2151,7 +2150,7 @@ fn client_respects_buffer_limit_pre_handshake_with_vectored_write() {
     server.process_new_packets(&mut map, &mut recv_srv).unwrap();
 
     check_read_app_buff(&mut server.reader_app_bufs(), b"01234567890123456789012345678901", &mut recv_srv, 0);
-}
+}*/
 
 #[test]
 fn client_respects_buffer_limit_post_handshake() {
@@ -2286,7 +2285,7 @@ where
     S: SideData,
 {
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
-          let mut buf = input.clone();
+          let mut buf = input;
         self.sess.read_tls(&mut buf)
     }
 
@@ -2314,7 +2313,7 @@ where
 
 #[test]
 fn server_read_returns_wouldblock_when_no_data() {
-    let (_, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, mut server, _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     assert!(matches!(server.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
@@ -2322,7 +2321,7 @@ fn server_read_returns_wouldblock_when_no_data() {
 #[test]
 fn client_read_returns_wouldblock_when_no_data() {
 
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _,  _recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     assert!(matches!(client.reader().read(&mut [0u8; 1]),
                      Err(err) if err.kind() == io::ErrorKind::WouldBlock));
 }
@@ -2330,7 +2329,7 @@ fn client_read_returns_wouldblock_when_no_data() {
 #[test]
 fn new_server_returns_initial_io_state() {
     let mut map = SimpleIdHashMap::default();
-    let (_, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, mut server, mut recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     let io_state = server.process_new_packets(&mut map, &mut recv_srv).unwrap();
     println!("IoState is Debug {:?}", io_state);
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
@@ -2341,7 +2340,7 @@ fn new_server_returns_initial_io_state() {
 #[test]
 fn new_client_returns_initial_io_state() {
     let mut map = SimpleIdHashMap::default();
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _,  _recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
     let io_state = client.process_new_packets(&mut map, &mut recv_clnt).unwrap();
     println!("IoState is Debug {:?}", io_state);
     assert_eq!(io_state.plaintext_bytes_to_read(), 0);
@@ -2352,7 +2351,7 @@ fn new_client_returns_initial_io_state() {
 #[test]
 fn client_complete_io_for_handshake() {
 
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, mut server,  _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = client
@@ -2365,7 +2364,7 @@ fn client_complete_io_for_handshake() {
 
 #[test]
 fn buffered_client_complete_io_for_handshake() {
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, mut server,  _recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
 
     assert!(client.is_handshaking());
     let (rdlen, wrlen) = client
@@ -2379,7 +2378,7 @@ fn buffered_client_complete_io_for_handshake() {
 #[test]
 fn client_complete_io_for_handshake_eof() {
 
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _, _recv_srv, _recv_clnt) = make_pair(KeyType::Rsa);
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(client.is_handshaking());
@@ -2474,7 +2473,7 @@ fn client_complete_io_for_read() {
 fn server_complete_io_for_handshake() {
 
     for kt in ALL_KEY_TYPES {
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(*kt);
+        let (mut client, mut server, _recv_srv,  _recv_clnt) = make_pair(*kt);
 
         assert!(server.is_handshaking());
         let (rdlen, wrlen) = server
@@ -2488,7 +2487,7 @@ fn server_complete_io_for_handshake() {
 
 #[test]
 fn server_complete_io_for_handshake_eof() {
-    let (_, mut server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, mut server,  _recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     let mut input = io::Cursor::new(Vec::new());
 
     assert!(server.is_handshaking());
@@ -2553,25 +2552,25 @@ fn server_complete_io_for_read() {
 }
 
 
-fn client_stream_write() {
+/*fn client_stream_write() {
 
     test_client_stream_write(StreamKind::Ref);
     test_client_stream_write(StreamKind::Owned);
-}
+}*/
 
 
-fn server_stream_write() {
+/*fn server_stream_write() {
     test_server_stream_write(StreamKind::Ref);
     test_server_stream_write(StreamKind::Owned);
-}
+}*/
 
-#[derive(Debug, Copy, Clone)]
+/*#[derive(Debug, Copy, Clone)]
 enum StreamKind {
     Owned,
     Ref,
-}
+}*/
 
-fn test_client_stream_write(stream_kind: StreamKind) {
+/*fn test_client_stream_write(stream_kind: StreamKind) {
     for kt in ALL_KEY_TYPES {
         let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(*kt);
         let data = b"hello";
@@ -2585,9 +2584,9 @@ fn test_client_stream_write(stream_kind: StreamKind) {
         }
         check_read_app_buff(&mut server.reader_app_bufs(), data, &mut recv_srv, 0);
     }
-}
+}*/
 
-fn test_server_stream_write(stream_kind: StreamKind) {
+/*fn test_server_stream_write(stream_kind: StreamKind) {
     for kt in ALL_KEY_TYPES {
         let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(*kt);
         let data = b"hello";
@@ -2602,10 +2601,10 @@ fn test_server_stream_write(stream_kind: StreamKind) {
             check_read_app_buff(&mut client.reader_app_bufs(), data, &mut recv_clnt, 0);
 
     }
-}
+}*/
 
 
-fn client_stream_read() {
+/*fn client_stream_read() {
 
     test_client_stream_read(StreamKind::Ref, ReadKind::Buf);
     test_client_stream_read(StreamKind::Owned, ReadKind::Buf);
@@ -2614,10 +2613,10 @@ fn client_stream_read() {
         test_client_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
         test_client_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
     }
-}
+}*/
 
 
-fn server_stream_read() {
+/*fn server_stream_read() {
 
     test_server_stream_read(StreamKind::Ref, ReadKind::Buf);
     test_server_stream_read(StreamKind::Owned, ReadKind::Buf);
@@ -2626,16 +2625,16 @@ fn server_stream_read() {
         test_server_stream_read(StreamKind::Ref, ReadKind::BorrowedBuf);
         test_server_stream_read(StreamKind::Owned, ReadKind::BorrowedBuf);
     }
-}
+}*/
 
-#[derive(Debug, Copy, Clone)]
+/*#[derive(Debug, Copy, Clone)]
 enum ReadKind {
     Buf,
     #[cfg(read_buf)]
     BorrowedBuf,
-}
+}*/
 
-fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
+/*fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
     match read_kind {
         ReadKind::Buf => {
             check_read(&mut stream, data);
@@ -2647,11 +2646,11 @@ fn test_stream_read(read_kind: ReadKind, mut stream: impl Read, data: &[u8]) {
             check_read_buf_err(&mut stream, io::ErrorKind::UnexpectedEof)
         }
     }
-}
+}*/
 
-fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
+/*fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
     for kt in ALL_KEY_TYPES {
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(*kt);
+        let (mut client, mut server,  _recv_srv, mut recv_clnt) = make_pair(*kt);
         let data = b"world";
         server.writer().write_all(data).unwrap();
 
@@ -2667,11 +2666,11 @@ fn test_client_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             test_stream_read(read_kind, stream, data)
         }
     }
-}
+}*/
 
-fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
+/*fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
     for kt in ALL_KEY_TYPES {
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair(*kt);
+        let (mut client, mut server, mut recv_srv,  _recv_clnt) = make_pair(*kt);
         let data = b"world";
         client.writer().write_all(data).unwrap();
 
@@ -2687,7 +2686,7 @@ fn test_server_stream_read(stream_kind: StreamKind, read_kind: ReadKind) {
             test_stream_read(read_kind, stream, data)
         }
     }
-}
+}*/
 
 #[test]
 
@@ -2819,7 +2818,7 @@ fn make_disjoint_suite_configs() -> (ClientConfig, ServerConfig) {
 fn client_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
 
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server,  _recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
 
     {
         let mut pipe = OtherSession::new_fails(&mut server);
@@ -2843,7 +2842,7 @@ fn client_stream_handshake_error() {
 fn client_streamowned_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
 
-    let (client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (client, mut server,  _recv_srv,  recv_clnt) = make_pair_for_configs(client_config, server_config);
 
     let pipe = OtherSession::new_fails(&mut server);
     let mut client_stream = StreamOwned::new(client, pipe, recv_clnt);
@@ -2868,7 +2867,7 @@ fn client_streamowned_handshake_error() {
 fn server_stream_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
 
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server, mut recv_srv,  _recv_clnt) = make_pair_for_configs(client_config, server_config);
 
     client
         .writer()
@@ -2893,7 +2892,7 @@ fn server_stream_handshake_error() {
 fn server_streamowned_handshake_error() {
     let (client_config, server_config) = make_disjoint_suite_configs();
 
-    let (mut client, server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (mut client, server,  recv_srv,  _recv_clnt) = make_pair_for_configs(client_config, server_config);
 
     client
         .writer()
@@ -2924,21 +2923,21 @@ fn client_config_is_clone() {
 #[test]
 fn client_connection_is_debug() {
 
-    let (client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (client, _,  _recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     println!("{:?}", client);
 }
 
 #[test]
 fn server_connection_is_debug() {
 
-    let (_, server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (_, server,  _recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     println!("{:?}", server);
 }
 
 #[test]
 fn server_complete_io_for_handshake_ending_with_alert() {
     let (client_config, server_config) = make_disjoint_suite_configs();
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server,  _recv_srv,  _recv_clnt) = make_pair_for_configs(client_config, server_config);
     assert!(server.is_handshaking());
     let mut pipe = OtherSession::new_fails(&mut client);
     let rc = server.complete_io(&mut pipe, None);
@@ -3335,7 +3334,7 @@ fn test_ciphersuites() -> Vec<(
     KeyType,
     CipherSuite,
 )> {
-    let mut v = vec![
+    let v = vec![
         (
             &rustls::version::TLS13,
             KeyType::Rsa,
@@ -4203,7 +4202,7 @@ fn tls13_stateless_resumption() {
 
 #[test]
 fn early_data_not_available() {
-    let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (mut client, _,  _recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     assert!(client.early_data().is_none());
 }
 
@@ -4249,8 +4248,6 @@ fn early_data_is_available_on_resumption() {
     );
 
     do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-    let mut received_early_data = [0u8; 5];
 
     assert_eq!(&recv_srv.get_mut(0).unwrap().get_mut_consumed()[..5], b"hello");
 }
@@ -5045,7 +5042,7 @@ fn test_client_does_not_offer_sha1() {
                 continue
             }
             let client_config = make_client_config_with_versions(*kt, &[version]);
-            let (mut client, _, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, make_server_config(*kt));
+            let (mut client, _,  _recv_srv,  _recv_clnt) = make_pair_for_configs(client_config, make_server_config(*kt));
 
             assert!(client.wants_write(None));
             let mut buf = [0u8; 262144];
@@ -5446,7 +5443,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
     // in parallel without knowledge of which will work due to underlying
     // connectivity uncertainty.
     for _ in 0..5 {
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
+        let (mut client, mut server, mut recv_srv, _recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
         transfer(&mut client, &mut server, None);
         server.process_new_packets(&mut map, &mut recv_srv).unwrap();
 
@@ -5456,7 +5453,7 @@ fn test_tls13_client_resumption_does_not_reuse_tickets() {
 
     // 6th subsequent handshake: cannot be resumed; we ran out of tickets
 
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
+    let (mut client, mut server, mut recv_srv,  _recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
     transfer(&mut client, &mut server, None);
     server.process_new_packets(&mut map, &mut recv_srv).unwrap();
 
@@ -5662,7 +5659,7 @@ fn test_server_rejects_duplicate_sni_names() {
 
     let mut map = SimpleIdHashMap::default();
 
-    let (client, server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (client, server, mut recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, duplicate_sni_payload, &mut server);
     assert_eq!(
@@ -5693,7 +5690,7 @@ fn test_server_rejects_empty_sni_extension() {
 
     let mut map = SimpleIdHashMap::default();
 
-    let (client, server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (client, server, mut recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, empty_sni_payload, &mut server);
     assert_eq!(
@@ -5726,7 +5723,7 @@ fn test_server_rejects_clients_without_any_kx_groups() {
 
     let mut map = SimpleIdHashMap::default();
 
-    let (client, server, mut recv_srv, mut recv_clnt) = make_pair(KeyType::Rsa);
+    let (client, server, mut recv_srv,  _recv_clnt) = make_pair(KeyType::Rsa);
     let (mut client, mut server) = (client.into(), server.into());
     transfer_altered(&mut client, delete_kx_groups, &mut server);
     assert_eq!(
@@ -5806,7 +5803,7 @@ fn test_client_rejects_illegal_tls13_ccs() {
 
 
 
-#[cfg(feature = "tls12")]
+/*#[cfg(feature = "tls12")]
 fn remove_ems_request(msg: &mut Message) -> Altered {
     if let MessagePayload::Handshake { parsed, encoded } = &mut msg.payload {
         if let HandshakePayload::ClientHello(ch) = &mut parsed.payload {
@@ -5818,7 +5815,7 @@ fn remove_ems_request(msg: &mut Message) -> Altered {
     }
 
     Altered::InPlace
-}
+}*/
 
 /// https://github.com/rustls/rustls/issues/797
 #[cfg(feature = "tls12")]
@@ -5892,7 +5889,7 @@ fn test_client_tls12_no_resume_after_server_downgrade() {
 }
 
 
-fn test_acceptor() {
+/*fn test_acceptor() {
     use rustls::server::Acceptor;
 
     let client_config = Arc::new(make_client_config(KeyType::Ed25519));
@@ -5969,10 +5966,10 @@ fn test_acceptor() {
     let _ = alert.write(&mut alert_content);
     let expected = build_alert(AlertLevel::Fatal, AlertDescription::DecodeError, &[]);
     assert_eq!(alert_content, expected);
-}
+}*/
 
 
-fn test_acceptor_rejected_handshake() {
+/*fn test_acceptor_rejected_handshake() {
     use rustls::server::Acceptor;
 
     let client_config = finish_client_config(KeyType::Ed25519, ClientConfig::builder_with_provider(provider::default_provider().into())
@@ -6000,7 +5997,7 @@ fn test_acceptor_rejected_handshake() {
     let _ = alert.write(&mut alert_content);
     let expected = build_alert(AlertLevel::Fatal, AlertDescription::ProtocolVersion, &[]);
     assert_eq!(alert_content, expected);
-}
+}*/
 
 #[test]
 fn test_no_warning_logging_during_successful_sessions() {
@@ -6154,7 +6151,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 
         let client_config = Arc::new(client_config);
 
-        let (client, server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
+        let (client, server,  _recv_srv, _recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
 
         assert!(
             client
@@ -6189,7 +6186,7 @@ fn test_secret_extraction_disabled_or_too_early() {
 }
 
 //#[test] // Test logic is no more applicable
-fn test_received_plaintext_backpressure() {
+/*fn test_received_plaintext_backpressure() {
     let kt = KeyType::Rsa;
 
     let server_config = Arc::new(
@@ -6262,7 +6259,7 @@ fn test_received_plaintext_backpressure() {
             .unwrap(),
         24
     );
-}
+}*/
 
 #[test]
 fn test_debug_server_name_from_ip() {

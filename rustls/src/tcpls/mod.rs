@@ -168,7 +168,7 @@ impl TcplsSession {
                 .unwrap()
                 .socket
                 .write(request.as_slice()) {
-              Ok(n) => {
+              Ok(_n) => {
                   self.tls_conn.as_mut()
                       .unwrap()
                       .outstanding_tcp_conns
@@ -266,7 +266,7 @@ impl TcplsSession {
         };
 
         let mut done = 0;
-        let mut chunk_num: usize = 0;
+       /* let mut chunk_num: usize = 0;*/
 
 
 
@@ -278,11 +278,11 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
-            chunk_num = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
+            let chunk_count = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
             let mut sent;
 
             if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
-                tls_conn.calculate_conn_shares(chunk_num, &conn_ids, id);
+                tls_conn.calculate_conn_shares(chunk_count, &conn_ids, id);
                 println!("Shares {:?}", tls_conn.record_layer.streams.get_mut(id as u32).unwrap().conn_shares);
 
             }
@@ -601,10 +601,10 @@ impl TcplsSession {
         let conn_id = *self.tls_conn.as_ref().unwrap().conns_rtts.iter().min_by_key(|(_, &value)| value).unwrap().0;
         for str in self.tls_conn.as_mut().unwrap().record_layer.streams.mut_iter() {
             for un_ack_chunk in str.1.send.mut_iter_not_ack(){
-                let time_elapsed  = un_ack_chunk.send_time.unwrap().elapsed();
+                let time_elapsed  = un_ack_chunk.1.send_time.unwrap().elapsed();
                 if time_elapsed >= self.timeout {
-                    println!("Resending packet {} of stream {}", un_ack_chunk.chunk_num, str.1.id);
-                    self.tcp_connections.get_mut(&conn_id).unwrap().socket.write(&un_ack_chunk.data).unwrap();
+                    println!("Resending packet {} of stream {}", un_ack_chunk.1.chunk_num, str.1.id);
+                    self.tcp_connections.get_mut(&conn_id).unwrap().socket.write(&un_ack_chunk.1.data).unwrap();
                 }
             }
         }

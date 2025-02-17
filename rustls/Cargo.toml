@@ -140,3 +140,7 @@ allowed_external_types = [
     "rustls_pki_types",
     "rustls_pki_types::*",
 ]
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(bench)', 'cfg(read_buf)'] }
+

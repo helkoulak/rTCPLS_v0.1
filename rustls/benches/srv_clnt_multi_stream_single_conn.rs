@@ -120,7 +120,7 @@ use criterion::{criterion_group, criterion_main, Criterion, Throughput, Benchmar
 use pprof::criterion::{Output, PProfProfiler};
 use rustls::{Connection, ConnectionCommon, SideData};
 use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::SimpleIdHashSet;
+use rustls::tcpls::stream::{SimpleIdHashMap, SimpleIdHashSet};
 use rustls::tcpls::TcplsSession;
 use crate::bench_util::CPUTime;
 use rustls::crypto::{ring as provider, CryptoProvider};
@@ -170,7 +170,7 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    (pipe, recv_svr)
                                },
 
-                                                  |(ref mut pipe, recv_svr)| pipe.sess.process_new_packets(recv_svr).unwrap(),
+                                                  |(ref mut pipe, recv_svr)| pipe.sess.process_new_packets(&mut SimpleIdHashMap::default(), recv_svr).unwrap(),
                                                   BatchSize::SmallInput)
                            });
     group.finish();

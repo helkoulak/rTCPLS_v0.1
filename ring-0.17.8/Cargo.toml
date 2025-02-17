@@ -243,3 +243,6 @@ default-features = false
 [target."cfg(any(unix, windows, target_os = \"wasi\"))".dev-dependencies.libc]
 version = "0.2.148"
 default-features = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(pregenerate_asm_only)'] }
