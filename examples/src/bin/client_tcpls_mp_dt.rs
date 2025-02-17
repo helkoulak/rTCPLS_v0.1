@@ -541,6 +541,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
                 provider::default_provider(),
             )));
     }
+    config.enable_ack = true;
 
     Arc::new(config)
 }
