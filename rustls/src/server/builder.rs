@@ -137,7 +137,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
             send_half_rtt_data: false,
             send_tls13_tickets: 4,
             enable_tcpls: false,
-            enable_ack: true,
+            enable_ack: false,
             max_tcpls_tokens_cap: 1,
             #[cfg(feature = "tls12")]
             require_ems: cfg!(feature = "fips"),
