@@ -87,7 +87,7 @@ $ cargo bench --bench srv_clnt_single_stream_single_conn
 $ cargo bench --bench encryption_tcpls_header_benchmark
 ```
 
-### Measuring the average CPU time spent on decrypting TCPLS header using three different Crypto algorithms, namely SipHash, HMAC_SHA256, and AES-128. 
+### Measuring the average CPU time spent on decrypting TCPLS header using three different Crypto algorithms, namely SipHash24, HMAC_SHA256, and AES-128. 
 ```
 $ cargo bench --bench tcpls_header_decryption_benchmark
 ```

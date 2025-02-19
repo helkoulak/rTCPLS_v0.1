@@ -4,13 +4,12 @@ mod bench_util;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 
-use aes::Aes128;
 
-use cipher::{generic_array::GenericArray, BlockDecrypt, KeyInit};
 use ring::hmac::Key;
 use ring::rand::SecureRandom;
 use ring::{hmac, rand};
-use rustls::crypto::cipherx::HeaderProtector;
+use rustls::crypto::cipherx::{HeaderProtector, HeaderProtectorSiphash};
+
 
 fn decrypt_header_hmac(sample: &[u8; 16], enc_tcpls_header: &[u8; 8], hmac_key: &Key ) {
     let tag = hmac::sign(hmac_key, sample);
@@ -22,16 +21,7 @@ fn decrypt_header_hmac(sample: &[u8; 16], enc_tcpls_header: &[u8; 8], hmac_key: 
 
 }
 
-fn decrypt_header_aes(sample: &mut Vec<u8>, enc_header: &mut Vec<u8>, cipher: &Aes128 ) {
-    let mut mask = GenericArray::default() ;
-    cipher.decrypt_block_b2b(GenericArray::from_slice(sample), &mut mask);
-    let first_8_bytes = &mask.as_slice()[..8];
-    let mut output = vec![0u8; 8];
-    for i in 0..7 {
-        output[i] = first_8_bytes[i] ^ enc_header[i];
-    }
 
-}
 
 fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
     let rng = rand::SystemRandom::new();
@@ -51,7 +41,8 @@ fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
     });
 
     c.bench_function("SipHash decoding", |b| {
-        let mut hasher = HeaderProtector::new_with_key(siphash_key);
+
+        let mut hasher = HeaderProtectorSiphash::new_with_key(&siphash_key);
 
         b.iter(|| {
             black_box(hasher.decrypt_in_output(&sample, &enc_tcpls_header))
@@ -67,11 +58,9 @@ fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
         rng.fill(&mut key_bytes).expect("Generate rand failed");
         rng.fill(&mut encrypted_header).expect("Generate rand failed");
 
-        let key = GenericArray::from_slice(&key_bytes);
-        let cipher = Aes128::new(key);
-
+        let mut header_protector_aes = HeaderProtector::new_with_key(&key_bytes);
         b.iter(|| {
-            black_box(decrypt_header_aes(&mut sample, &mut encrypted_header, &cipher))
+            black_box(header_protector_aes.decrypt_in_output(&sample, &enc_tcpls_header))
         });
     });
 }

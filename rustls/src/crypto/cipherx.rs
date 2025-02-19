@@ -6,7 +6,7 @@ use std::vec;
 use aes::Aes128;
 use cipher::generic_array::GenericArray;
 use cipher::{BlockEncrypt, KeyInit};
-
+use cipher::consts::U16;
 use crate::crypto::tls13::HkdfExpander;
 
 use zeroize::Zeroize;
@@ -21,6 +21,8 @@ pub use crate::msgs::message::{
 use crate::recvbuf::RecvBufMap;
 use crate::suites::ConnectionTrafficSecrets;
 use crate::tcpls::frame::{Frame, TcplsHeader};
+use siphasher::sip::SipHasher24;
+
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
@@ -353,8 +355,8 @@ impl HeaderProtector {
         }
     }
 
-    pub fn new_with_key(key: [u8; 16]) -> Self {
-        let key = GenericArray::from_slice(&key);
+    pub fn new_with_key(key: &[u8; 16]) -> Self {
+        let key = GenericArray::from_slice(key);
         Self{
             aes_cipher: Aes128::new(&key),
         }
@@ -389,10 +391,62 @@ impl HeaderProtector {
         Ok(out)
     }
 
-    pub fn generate_mask(&mut self, input: &[u8]) -> [u8; 16]{
+    pub fn generate_mask(&mut self, input: &[u8]) -> GenericArray<u8, U16> {
         let mut mask =  GenericArray::default();
         self.aes_cipher.encrypt_block_b2b(GenericArray::from_slice(&input), &mut mask);
-        mask.into()
+        mask
+    }
+
+}
+
+pub struct HeaderProtectorSiphash{
+    siphasher: SipHasher24,
+}
+
+impl HeaderProtectorSiphash {
+   /* pub(crate) fn new(expander: &dyn HkdfExpander, aead_key_len: usize) -> Self {
+
+        let mut derived_key= vec![0; aead_key_len]; // 16 or 32 bytes
+        expander.expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice()).unwrap();
+        let mut key = [0; 16];
+        key.copy_from_slice(&derived_key[..16]);
+        Self{
+            siphasher: SipHasher24::new_with_key(&key),
+
+        }
+    }*/
+
+    pub fn new_with_key(key: &[u8; 16]) -> Self {
+        Self{
+            siphasher:SipHasher24::new_with_key(&key),
+        }
+    }
+
+
+    #[inline]
+    pub fn decrypt_in_output(
+        &mut self,
+        sample: &[u8],
+        header: &[u8],
+    ) -> Result<[u8; 8], Error> {
+        self.xor_in_output(sample, header)
+    }
+
+    fn xor_in_output(
+        &mut self,
+        sample: &[u8],
+        header: & [u8],
+    ) -> Result<[u8; 8], Error> {
+        let mut out = self.calculate_hash(sample);
+        for i in 0..header.len() {
+            out[i] ^= header[i];
+        }
+        Ok(out)
+    }
+
+
+    pub fn calculate_hash(&mut self, input: &[u8]) -> [u8;8] {
+            self.siphasher.hash(input).to_be_bytes()
     }
 
 }

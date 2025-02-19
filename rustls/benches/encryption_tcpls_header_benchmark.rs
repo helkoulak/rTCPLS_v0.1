@@ -244,7 +244,7 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
         enc_key: less_safe_key,
     };
 
-    let mut header_protector: HeaderProtector = HeaderProtector::new_with_key(header_protection_key);
+    let mut header_protector: HeaderProtector = HeaderProtector::new_with_key(&header_protection_key);
 
     c.bench_function("AES_128_GCM encryption without tcpls header", |b| {
 
