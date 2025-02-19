@@ -48,7 +48,7 @@ impl TlsClient {
 
             if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() && !self.data_sent{
                 //Send three byte arrays on three streams
-                self.send_data(vec![0u8; (6 * GIGABYTE) as usize].as_slice(), 0).expect("");
+                self.send_data(vec![0u8; GIGABYTE as usize].as_slice(), 0).expect("");
 
                 self.data_sent = true;
             }

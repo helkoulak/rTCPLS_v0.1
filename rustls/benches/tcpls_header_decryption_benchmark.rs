@@ -1,14 +1,12 @@
 use crate::bench_util::CPUTime;
-use rustls::SideData;
 
 mod bench_util;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use smallvec::ToSmallVec;
 
 use aes::Aes128;
 
-use cipher::{generic_array::GenericArray, BlockCipher, BlockDecrypt, KeyInit};
+use cipher::{generic_array::GenericArray, BlockDecrypt, KeyInit};
 use ring::hmac::Key;
 use ring::rand::SecureRandom;
 use ring::{hmac, rand};
@@ -36,7 +34,7 @@ fn decrypt_header_aes(sample: &mut Vec<u8>, enc_header: &mut Vec<u8>, cipher: &A
 }
 
 fn tcpls_header_decryption_benchmark(c: &mut Criterion<CPUTime>) {
-    let mut rng = rand::SystemRandom::new();
+    let rng = rand::SystemRandom::new();
     let mut sample = [0u8; 16];
     let mut enc_tcpls_header = [0u8; 8];
     let mut siphash_key = [0u8; 16];

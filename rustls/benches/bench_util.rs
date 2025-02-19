@@ -30,11 +30,10 @@ impl std::hash::Hasher for StreamIdHasher {
     }
 }
 
-type BuildStreamIdHasher = std::hash::BuildHasherDefault<StreamIdHasher>;
+/*type BuildStreamIdHasher = std::hash::BuildHasherDefault<StreamIdHasher>;
 
-pub type StreamIdHashMap<V> = std::collections::HashMap<u64, V, BuildStreamIdHasher>;
+pub type StreamIdHashMap<V> = std::collections::HashMap<u64, V, BuildStreamIdHasher>;*/
 
-/// Keeps track of QUIC streams and enforces stream limits.
 
 pub struct CPUTime;
 impl Measurement for CPUTime {

@@ -1,13 +1,13 @@
 use crate::bench_util::CPUTime;
-use rustls::{ContentType, Error, ProtocolVersion, SideData};
-use std::hash::Hash;
+use rustls::{ContentType, Error, ProtocolVersion};
+
 
 mod bench_util;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
-use smallvec::ToSmallVec;
 
-use ring::aead::{LessSafeKey, UnboundKey, AES_256_GCM};
+
+use ring::aead::{LessSafeKey, UnboundKey, AES_128_GCM};
 use ring::rand::SecureRandom;
 use ring::{aead, rand};
 use rustls::crypto::cipherx::{make_tls13_aad, HeaderProtector, OutboundChunks, PrefixedPayload, NONCE_LEN};
@@ -16,7 +16,7 @@ use rustls::tcpls::frame::{Frame, TcplsHeader};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
-pub(crate) const MAX_FRAGMENT_SIZE: usize = MAX_FRAGMENT_LEN + HEADER_SIZE;
+
 
 
 pub const TCPLS_HEADER_SIZE: usize = 8;
@@ -79,6 +79,10 @@ struct Tls13MessageEncrypter {
 }
 pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13] {
     let version = ProtocolVersion::TLSv1_2.to_array();
+    build_aad_inner(payload_len, header, version)
+}
+
+fn build_aad_inner(payload_len: usize, header: &TcplsHeader, version: [u8; 2]) -> [u8; 13] {
     [
         ContentType::ApplicationData.into(),
         // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
@@ -95,6 +99,21 @@ pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13
         (header.stream_id >> 8) as u8,
         (header.stream_id & 0xff) as u8
     ]
+}
+
+fn write_header(tcpls_header: &TcplsHeader, payload: &mut PrefixedPayload) {
+    let header_bytes = [
+        (tcpls_header.chunk_num >> 24) as u8,
+        (tcpls_header.chunk_num >> 16) as u8,
+        (tcpls_header.chunk_num >> 8) as u8,
+        (tcpls_header.chunk_num & 0xff) as u8,
+        (tcpls_header.stream_id >> 24) as u8,
+        (tcpls_header.stream_id >> 16) as u8,
+        (tcpls_header.stream_id >> 8) as u8,
+        (tcpls_header.stream_id & 0xff) as u8,
+    ];
+
+    payload.as_mut()[..8].copy_from_slice(&header_bytes);
 }
 
 fn encrypted_payload_len(payload_len: usize, enc_key: &LessSafeKey) -> usize {
@@ -136,15 +155,7 @@ fn encrypt_header(
     //Write payload in output buffer
     payload.extend_from_chunks(&OutboundChunks::Single(msg));
     //Write TCPLS header
-    //Write TCPLS header
-    payload.as_mut()[0] = (tcpls_header.chunk_num >> 24) as u8;
-    payload.as_mut()[1] = (tcpls_header.chunk_num >> 16) as u8;
-    payload.as_mut()[2] = (tcpls_header.chunk_num >> 8) as u8;
-    payload.as_mut()[3] = (tcpls_header.chunk_num & 0xff) as u8;
-    payload.as_mut()[4] = (tcpls_header.stream_id >> 24) as u8;
-    payload.as_mut()[5] = (tcpls_header.stream_id >> 16) as u8;
-    payload.as_mut()[6] = (tcpls_header.stream_id >> 8) as u8;
-    payload.as_mut()[7] = (tcpls_header.stream_id & 0xff) as u8;
+    write_header(tcpls_header, &mut payload);
     // Write frame header and type
     match frame_header {
         Some(ref header) => {
@@ -170,14 +181,17 @@ fn encrypt_header(
     let sample = payload.as_mut_tcpls_payload().rchunks(tag_len).next().unwrap();
 
     let mut i = 0;
+    let mask = header_encrypter.generate_mask(sample);
     // Calculate hash(sample) XOR TCPLS header
-    for byte in header_encrypter.generate_mask(sample){
+    for byte in mask {
         payload.as_mut_tcpls_header()[i] ^= byte;
         i += 1;
     }
 
     Ok(())
 }
+
+
 
 fn encrypt(
     msg: &Vec<u8>,
@@ -200,9 +214,9 @@ fn encrypt(
 }
 
 fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
-    let mut rng = rand::SystemRandom::new();
+    let rng = rand::SystemRandom::new();
     let mut msg = vec![0u8; MAX_TCPLS_FRAGMENT_LEN];
-    let mut sip_key = [0u8; 16];
+    let mut header_protection_key = [0u8; 16];
     let mut iv = [0u8; 12];
     let enc_tcpls_header = TcplsHeader {
         chunk_num: 636873673,
@@ -213,39 +227,40 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
         length: MAX_TCPLS_FRAGMENT_LEN as u16,
         fin: 1,
     });
-    let mut key_bytes = [0u8; 32];
+    let mut key_bytes = [0u8; 16];
     let mut nonce_bytes = [0u8; 12];
 
-    let key = UnboundKey::new(&AES_256_GCM, &key_bytes).unwrap();
+    let key = UnboundKey::new(&AES_128_GCM, &key_bytes).unwrap();
     let less_safe_key = LessSafeKey::new(key);
 
     rng.fill(&mut msg).expect("Generate rand failed");
     rng.fill(&mut iv).expect("Generate rand failed");
     rng.fill(&mut key_bytes).expect("Generate rand failed");
     rng.fill(&mut nonce_bytes).expect("Generate rand failed");
-    rng.fill(&mut sip_key).expect("Generate rand failed");
+    rng.fill(&mut header_protection_key).expect("Generate rand failed");
 
     let msg_encrypter = Tls13MessageEncrypter{
         iv: Iv::from(iv),
         enc_key: less_safe_key,
     };
 
-    let mut header_protector: HeaderProtector = HeaderProtector::new_with_key(sip_key);
+    let mut header_protector: HeaderProtector = HeaderProtector::new_with_key(header_protection_key);
 
-    c.bench_function("AES_256_GCM encryption with tcpls header", |b| {
+    c.bench_function("AES_128_GCM encryption without tcpls header", |b| {
 
         b.iter(|| {
-            black_box(encrypt_header(&msg, 0, 0, &enc_tcpls_header, frame_header,
-                                     &mut header_protector, &msg_encrypter))
+            encrypt(&msg, 0, &msg_encrypter)
+        });
+    });
+    c.bench_function("AES_128_GCM encryption with tcpls header", |b| {
+
+        b.iter(|| {
+            encrypt_header(&msg, 0, 0, &enc_tcpls_header, frame_header,
+                                     &mut header_protector, &msg_encrypter)
         });
     });
 
-    c.bench_function("AES_256_GCM encryption without tcpls header", |b| {
 
-        b.iter(|| {
-            black_box(encrypt(&msg, 0, &msg_encrypter))
-        });
-    });
 }
 
 
@@ -262,7 +277,7 @@ criterion_main!(benches);*/
 criterion_group! {
     name = benches;
     config = Criterion::default()
-        .measurement_time(std::time::Duration::from_secs(100))
+        .measurement_time(std::time::Duration::from_secs(1))
         .with_measurement(CPUTime)
         .sample_size(500);
     targets = encryption_benchmark
