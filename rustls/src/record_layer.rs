@@ -377,10 +377,7 @@ pub(crate) struct Decrypted<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::prelude::v1::Vec;
-    use crate::ContentType::ApplicationData;
-    use crate::recvbuf::RecvBufMap;
-    use super::*;
+
 
     /*#[test]
     fn test_has_decrypted() {

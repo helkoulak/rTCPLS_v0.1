@@ -5,7 +5,7 @@
 
 
 rTCPLS is a Rust implementation of the protocol TCPLS atop the TLS library [Rustls](https://github.com/rustls/rustls). It follows the 
-[TCPLS IETF draft](https://datatracker.ietf.org/doc/draft-piraux-tcpls/) with some additional improvements.
+[TCPLS IETF draft](https://datatracker.ietf.org/doc/draft-piraux-tcpls/).
 
 
 # Status
@@ -64,7 +64,7 @@ $ cargo run --bin client_tcpls_stress_single_stream_single_connection --  --cafi
 # Testing
  To run the API tests, execute the following command
 ```
-$ cargo test --package rustls --test api
+$ cargo test
 ```
 
 # Benchmarking

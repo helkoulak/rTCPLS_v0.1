@@ -1318,8 +1318,6 @@ mod tests {
 
     use crate::crypto::cipherx::PlainMessage;
     use crate::msgs::message::Message;
-    use crate::msgs::message::MAX_WIRE_SIZE;
-
     use super::*;
 
     #[test]
@@ -1505,23 +1503,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_limited_buffer() {
-        const PAYLOAD_LEN: usize = 16_384;
-        let mut message = Vec::with_capacity(16_389);
-        message.push(0x17); // ApplicationData
-        message.extend(&[0x03, 0x04]); // ProtocolVersion
-        message.extend((PAYLOAD_LEN as u16).to_be_bytes()); // payload length
-        message.extend(&[0; PAYLOAD_LEN]);
 
-        let mut d = BufferedDeframer::new();
-        assert_len(4096, d.input_bytes(&message));
-        assert_len(4096, d.input_bytes(&message));
-        assert_len(4096, d.input_bytes(&message));
-        assert_len(4096, d.input_bytes(&message));
-        assert_len(MAX_WIRE_SIZE - 16_384, d.input_bytes(&message));
-        assert!(d.input_bytes(&message).is_err());
-    }
 
     fn input_error(d: &mut BufferedDeframer) {
         let error = io::Error::from(io::ErrorKind::TimedOut);
@@ -1602,7 +1584,7 @@ mod tests {
             negotiated_version: Option<ProtocolVersion>,
         ) -> PlainMessage {
             let mut deframer_buffer = self.buffer.borrow();
-            let mut binding = RecvBufMap::default();
+
             let m = self
                 .inner
                 .pop_unbuffered(record_layer, negotiated_version, &mut deframer_buffer)

@@ -4,13 +4,9 @@ use std::net;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process;
 use std::str;
 use std::thread;
 use std::time;
-
-use self::regex::Regex;
-use regex;
 
 use ring::rand::SecureRandom;
 
@@ -262,94 +258,5 @@ impl TlsClient {
         self
     }
 
-    pub fn go(&mut self) -> Option<()> {
-        let fragstring;
-        let portstring = self.port.to_string();
-        let mut args = Vec::<&str>::new();
-        args.push(&self.hostname);
 
-        args.push("--port");
-        args.push(&portstring);
-
-        if self.http {
-            args.push("--http");
-        }
-
-        if self.cache.is_some() {
-            args.push("--cache");
-            args.push(self.cache.as_ref().unwrap());
-        }
-
-        if self.no_sni {
-            args.push("--no-sni");
-        }
-
-        if self.insecure {
-            args.push("--insecure");
-        }
-
-        if self.cafile.is_some() {
-            args.push("--cafile");
-            args.push(
-                self.cafile
-                    .as_ref()
-                    .unwrap()
-                    .to_str()
-                    .unwrap(),
-            );
-        }
-
-        for suite in &self.suites {
-            args.push("--suite");
-            args.push(suite.as_ref());
-        }
-
-        if self.verbose {
-            args.push("--verbose");
-        }
-
-        if self.max_fragment_size.is_some() {
-            args.push("--max-frag-size");
-            fragstring = self
-                .max_fragment_size
-                .unwrap()
-                .to_string();
-            args.push(&fragstring);
-        }
-
-        let output = process::Command::new(tlsclient_find())
-            .args(&args)
-            .env("SSLKEYLOGFILE", "./sslkeylogfile.txt")
-            .output()
-            .unwrap_or_else(|e| panic!("failed to execute: {}", e));
-
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
-        let stderr_str = String::from_utf8_lossy(&output.stderr);
-
-        for expect in &self.expect_output {
-            let re = Regex::new(expect).unwrap();
-            if re.find(&stdout_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
-                panic!("Test failed");
-            }
-        }
-
-        for expect in &self.expect_log {
-            let re = Regex::new(expect).unwrap();
-            if re.find(&stderr_str).is_none() {
-                println!("We expected to find '{}' in the following output:", expect);
-                println!("{:?}", output);
-                panic!("Test failed");
-            }
-        }
-
-        if self.expect_fails {
-            assert!(output.status.code().unwrap() != 0);
-        } else {
-            assert!(output.status.success());
-        }
-
-        Some(())
-    }
 }

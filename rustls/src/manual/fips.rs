@@ -15,11 +15,6 @@ rustls = { version = "0.23", features = [ "fips" ] }
 
 This is [`default_fips_provider()`]:
 
-```rust,ignore
-rustls::crypto::default_fips_provider()
-    .install_default()
-    .expect("default provider already set elsewhere");
-```
 
 This snippet makes use of the process-default provider,
 and that assumes all your uses of rustls use that.
@@ -32,10 +27,7 @@ See [`ClientConfig::fips()`] or [`ServerConfig::fips()`].
 
 You could, for example:
 
-```rust,ignore
-# let client_config = unreachable!();
-assert!(client_config.fips());
-```
+
 
 But maybe your application has an error handling
 or health-check strategy better than panicking.

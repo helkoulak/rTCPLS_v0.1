@@ -20,7 +20,7 @@
 //! the code coverage doesn't complain it isn't covered. TODO: Verify that the
 //! file was created successfully, with the right permissions, etc., and that it
 //! contains something like what we expect.
-
+#![allow(static_mut_refs)]
 use std::env;
 use std::sync::{Mutex, Once};
 

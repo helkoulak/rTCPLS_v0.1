@@ -50,14 +50,7 @@ and are communicable only by Rust's move semantics.
 Values of these types are threaded through the protocol state machine, leading to terminal
 states that look like:
 
-```ignore
-struct ExpectTraffic {
-   (...)
-    _cert_verified: verify::ServerCertVerified,
-    _sig_verified: verify::HandshakeSignatureValid,
-    _fin_verified: verify::FinishedMessageVerified,
-}
-```
+
 
 Since this state requires a value of these types, it will be a compile-time error to
 reach that state without performing the requisite security-critical operations.

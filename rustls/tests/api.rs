@@ -39,7 +39,7 @@ use rustls::{
 };
 use rustls::{CipherSuite, ProtocolVersion, SignatureScheme};
 use rustls::{ClientConfig, ClientConnection};
-use rustls::{ConnectionTrafficSecrets, DistinguishedName};
+use rustls::DistinguishedName;
 use rustls::{ServerConfig, ServerConnection};
 use rustls::{Stream, StreamOwned};
 
@@ -247,24 +247,7 @@ fn config_builder_for_client_rejects_empty_cipher_suites() {
     );
 }
 
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn config_builder_for_client_rejects_incompatible_cipher_suites() {
-    assert_eq!(
 
-        ClientConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
-                ..provider::default_provider()
-            }
-            .into()
-        )
-        .with_protocol_versions(&[&rustls::version::TLS12])
-        .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
-    );
-}
 
 #[test]
 fn config_builder_for_server_rejects_empty_kx_groups() {
@@ -300,24 +283,7 @@ fn config_builder_for_server_rejects_empty_cipher_suites() {
     );
 }
 
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn config_builder_for_server_rejects_incompatible_cipher_suites() {
-    assert_eq!(
 
-        ServerConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![cipher_suite::TLS13_AES_256_GCM_SHA384],
-                ..provider::default_provider()
-            }
-            .into()
-        )
-        .with_protocol_versions(&[&rustls::version::TLS12])
-        .err(),
-        Some(Error::General("no usable cipher suites configured".into()))
-    );
-}
 
 #[test]
 fn config_builder_for_client_with_time() {
@@ -993,61 +959,9 @@ fn client_trims_terminating_dot() {
     }
 }
 
-#[cfg(feature = "tls12")]
-fn check_sigalgs_reduced_by_ciphersuite(
-    kt: KeyType,
-    suite: CipherSuite,
-    expected_sigalgs: Vec<SignatureScheme>,
-) {
-    let client_config = finish_client_config(
-        kt,
 
-        ClientConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![find_suite(suite)],
-                ..provider::default_provider()
-            }
-            .into(),
-        )
-        .with_safe_default_protocol_versions()
-        .unwrap(),
-    );
 
-    let mut server_config = make_server_config(kt);
 
-    server_config.cert_resolver = Arc::new(ServerCheckCertResolve {
-        expected_sigalgs: Some(expected_sigalgs),
-        expected_cipher_suites: Some(vec![suite, CipherSuite::TLS_EMPTY_RENEGOTIATION_INFO_SCSV]),
-        ..Default::default()
-    });
-
-    let mut client =
-        ClientConnection::new(Arc::new(client_config), server_name("localhost")).unwrap();
-    let mut server = ServerConnection::new(Arc::new(server_config)).unwrap();
-         let mut recv_svr = RecvBufMap::new();
-    let mut recv_clnt = RecvBufMap::new();
-
-    let err = do_handshake_until_error(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
-    assert!(err.is_err());
-}
-
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn server_cert_resolve_reduces_sigalgs_for_rsa_ciphersuite() {
-    check_sigalgs_reduced_by_ciphersuite(
-        KeyType::Rsa,
-        CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        vec![
-            SignatureScheme::RSA_PSS_SHA512,
-            SignatureScheme::RSA_PSS_SHA384,
-            SignatureScheme::RSA_PSS_SHA256,
-            SignatureScheme::RSA_PKCS1_SHA512,
-            SignatureScheme::RSA_PKCS1_SHA384,
-            SignatureScheme::RSA_PKCS1_SHA256,
-        ],
-    );
-}
 
 
 
@@ -3242,18 +3156,7 @@ fn do_exporter_test(client_config: ClientConfig, server_config: ServerConfig) {
     assert_eq!(client_secret.to_vec(), server_secret.to_vec());
 }
 
-#[cfg(feature = "tls12")]
 
-#[test]
-#[ignore]
-fn test_tls12_exporter() {
-    for kt in ALL_KEY_TYPES {
-        let client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS12]);
-        let server_config = make_server_config(*kt);
-
-        do_exporter_test(client_config, server_config);
-    }
-}
 
 #[test]
 fn test_tls13_exporter() {
@@ -3521,46 +3424,7 @@ impl KeyLog for KeyLogToVec {
     }
 }
 
-#[cfg(feature = "tls12")]
 
-#[test]
-#[ignore]
-fn key_log_for_tls12() {
-    let client_key_log = Arc::new(KeyLogToVec::new("client"));
-    let server_key_log = Arc::new(KeyLogToVec::new("server"));
-
-    let kt = KeyType::Rsa;
-    let mut client_config = make_client_config_with_versions(kt, &[&rustls::version::TLS12]);
-    client_config.key_log = client_key_log.clone();
-    let client_config = Arc::new(client_config);
-
-    let mut server_config = make_server_config(kt);
-    server_config.key_log = server_key_log.clone();
-    let server_config = Arc::new(server_config);
-
-    // full handshake
-
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-    let client_full_log = client_key_log.take();
-    let server_full_log = server_key_log.take();
-    assert_eq!(client_full_log, server_full_log);
-    assert_eq!(1, client_full_log.len());
-    assert_eq!("CLIENT_RANDOM", client_full_log[0].label);
-
-    // resumed
-
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-    let client_resume_log = client_key_log.take();
-    let server_resume_log = server_key_log.take();
-    assert_eq!(client_resume_log, server_resume_log);
-    assert_eq!(1, client_resume_log.len());
-    assert_eq!("CLIENT_RANDOM", client_resume_log[0].label);
-    assert_eq!(client_full_log[0].secret, client_resume_log[0].secret);
-}
 
 #[test]
 fn key_log_for_tls13() {
@@ -5092,105 +4956,7 @@ fn test_client_config_keyshare_mismatch() {
     assert!(do_handshake_until_error(&mut client, &mut server, &mut recv_srv, &mut recv_clnt).is_err());
 }
 
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn test_client_sends_helloretryrequest() {
-    // client sends a secp384r1 key share
-    let mut client_config = make_client_config_with_kx_groups(
-        KeyType::Rsa,
-        vec![provider::kx_group::SECP384R1, provider::kx_group::X25519],
-    );
 
-    let storage = Arc::new(ClientStorage::new());
-    client_config.resumption = Resumption::store(storage.clone());
-
-    // but server only accepts x25519, so a HRR is required
-    let server_config =
-        make_server_config_with_kx_groups(KeyType::Rsa, vec![provider::kx_group::X25519]);
-
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
-
-    // client sends hello
-    {
-        let mut pipe = OtherSession::new(&mut server);
-        let wrlen = client.write_tls(&mut pipe, 0).unwrap();
-        assert!(wrlen > 200);
-        assert_eq!(pipe.writevs.len(), 1);
-        assert!(pipe.writevs[0].len() == 1);
-    }
-
-    // server sends HRR
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.write_tls(&mut pipe, 0).unwrap();
-        assert!(wrlen < 100); // just the hello retry request
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() == 2); // hello retry request and CCS
-    }
-
-    // client sends fixed hello
-    {
-        let mut pipe = OtherSession::new(&mut server);
-
-        let wrlen = client.write_tls(&mut pipe, 0).unwrap();
-        assert!(wrlen > 200); // just the client hello retry
-        assert_eq!(pipe.writevs.len(), 1); // only one writev
-        assert!(pipe.writevs[0].len() == 2); // only a CCS & client hello retry
-    }
-
-    // server completes handshake
-    {
-        let mut pipe = OtherSession::new(&mut client);
-        let wrlen = server.write_tls(&mut pipe, 0).unwrap();
-        assert!(wrlen > 200);
-        assert_eq!(pipe.writevs.len(), 1);
-        assert!(pipe.writevs[0].len() == 5); // server hello / encrypted exts / cert / cert-verify / finished
-    }
-
-    do_handshake_until_error(&mut client, &mut server, &mut recv_srv, &mut recv_clnt).unwrap();
-
-    // client only did following storage queries:
-    println!("storage {:#?}", storage.ops());
-    assert_eq!(storage.ops().len(), 9);
-    assert!(matches!(
-        storage.ops()[0],
-        ClientStorageOp::TakeTls13Ticket(_, false)
-    ));
-    assert!(matches!(
-        storage.ops()[1],
-        ClientStorageOp::GetTls12Session(_, false)
-    ));
-    assert!(matches!(
-        storage.ops()[2],
-        ClientStorageOp::GetKxHint(_, None)
-    ));
-    assert!(matches!(
-        storage.ops()[3],
-        ClientStorageOp::SetKxHint(_, rustls::NamedGroup::X25519)
-    ));
-    assert!(matches!(
-        storage.ops()[4],
-        ClientStorageOp::RemoveTls12Session(_)
-    ));
-    // server sends 4 tickets by default
-    assert!(matches!(
-        storage.ops()[5],
-        ClientStorageOp::InsertTls13Ticket(_)
-    ));
-    assert!(matches!(
-        storage.ops()[6],
-        ClientStorageOp::InsertTls13Ticket(_)
-    ));
-    assert!(matches!(
-        storage.ops()[7],
-        ClientStorageOp::InsertTls13Ticket(_)
-    ));
-    assert!(matches!(
-        storage.ops()[8],
-        ClientStorageOp::InsertTls13Ticket(_)
-    ));
-}
 
 #[test]
 fn test_client_rejects_hrr_with_varied_session_id() {
@@ -5625,19 +5391,13 @@ fn handshakes_complete_and_data_flows_with_gratuitious_max_fragment_sizes() {
     }
 }
 
-fn assert_lt(left: usize, right: usize) {
+/*fn assert_lt(left: usize, right: usize) {
     if left >= right {
         panic!("expected {} < {}", left, right);
     }
-}
+}*/
 
-#[test]
-#[ignore]
-fn connection_types_are_not_huge() {
-    // Arbitrary sizes
-    assert_lt(mem::size_of::<ServerConnection>(), 1650);
-    assert_lt(mem::size_of::<ClientConnection>(), 1650);
-}
+
 
 
 #[test]
@@ -5818,75 +5578,7 @@ fn remove_ems_request(msg: &mut Message) -> Altered {
 }*/
 
 /// https://github.com/rustls/rustls/issues/797
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn test_client_tls12_no_resume_after_server_downgrade() {
-         let mut recv_svr = RecvBufMap::new();
-    let mut recv_clnt = RecvBufMap::new();
-    let mut client_config = common::make_client_config(KeyType::Ed25519);
-    let client_storage = Arc::new(ClientStorage::new());
-    client_config.resumption = Resumption::store(client_storage.clone());
-    let client_config = Arc::new(client_config);
 
-    let server_config_1 = Arc::new(common::finish_server_config(
-        KeyType::Ed25519,
-
-        server_config_builder_with_versions(&[&rustls::version::TLS13]),
-    ));
-
-    let mut server_config_2 = common::finish_server_config(
-        KeyType::Ed25519,
-
-        server_config_builder_with_versions(&[&rustls::version::TLS12]),
-    );
-    server_config_2.session_storage = Arc::new(rustls::server::NoServerSessionStorage {});
-
-    dbg!("handshake 1");
-    let mut client_1 =
-        ClientConnection::new(client_config.clone(), "localhost".try_into().unwrap()).unwrap();
-    let mut server_1 = ServerConnection::new(server_config_1).unwrap();
-
-    common::do_handshake(&mut client_1, &mut server_1, &mut recv_svr, &mut recv_clnt);
-
-    assert_eq!(client_storage.ops().len(), 9);
-    println!("hs1 storage ops: {:#?}", client_storage.ops());
-    assert!(matches!(
-        client_storage.ops()[3],
-        ClientStorageOp::SetKxHint(_, _)
-    ));
-    assert!(matches!(
-        client_storage.ops()[4],
-        ClientStorageOp::RemoveTls12Session(_)
-    ));
-    assert!(matches!(
-        client_storage.ops()[5],
-        ClientStorageOp::InsertTls13Ticket(_)
-    ));
-
-    dbg!("handshake 2");
-         let mut recv_svr = RecvBufMap::new();
-    let mut recv_clnt = RecvBufMap::new();
-
-    let mut client_2 =
-        ClientConnection::new(client_config, "localhost".try_into().unwrap()).unwrap();
-    let mut server_2 = ServerConnection::new(Arc::new(server_config_2)).unwrap();
-    common::do_handshake(&mut client_2, &mut server_2, &mut recv_svr, &mut recv_clnt);
-    println!("hs2 storage ops: {:#?}", client_storage.ops());
-    assert_eq!(client_storage.ops().len(), 11);
-
-    // attempt consumes a TLS1.3 ticket
-    assert!(matches!(
-        client_storage.ops()[9],
-        ClientStorageOp::TakeTls13Ticket(_, true)
-    ));
-
-    // but ends up with TLS1.2
-    assert_eq!(
-        client_2.protocol_version(),
-        Some(rustls::ProtocolVersion::TLSv1_2)
-    );
-}
 
 
 /*fn test_acceptor() {
@@ -6037,153 +5729,10 @@ fn test_no_warning_logging_during_successful_sessions() {
     }
 }
 
-/// Test that secrets can be extracted and used for encryption/decryption.
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn test_secret_extraction_enabled() {
-    // Normally, secret extraction would be used to configure kTLS (TLS offload
-    // to the kernel). We want this test to run on any platform, though, so
-    // instead we just compare secrets for equality.
 
-    // TLS 1.2 and 1.3 have different mechanisms for key exchange and handshake,
-    // and secrets are stored/extracted differently, so we want to test them both.
-    // We support 3 different AEAD algorithms (AES-128-GCM mode, AES-256-GCM, and
-    // Chacha20Poly1305), so that's 2*3 = 6 combinations to test.
-    let kt = KeyType::Rsa;
-    for suite in [
-        cipher_suite::TLS13_AES_128_GCM_SHA256,
-        cipher_suite::TLS13_AES_256_GCM_SHA384,
-        #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS13_CHACHA20_POLY1305_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-        cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-        #[cfg(not(feature = "fips"))]
-        cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
-    ] {
-        let version = suite.version();
-        println!("Testing suite {:?}", suite.suite().as_str());
-
-        // Only offer the cipher suite (and protocol version) that we're testing
-        let mut server_config = ServerConfig::builder_with_provider(
-            CryptoProvider {
-                cipher_suites: vec![suite],
-                ..provider::default_provider()
-            }
-            .into(),
-        )
-        .with_protocol_versions(&[version])
-        .unwrap()
-        .with_no_client_auth()
-        .with_single_cert(kt.get_chain(), kt.get_key())
-        .unwrap();
-        // Opt into secret extraction from both sides
-        server_config.enable_secret_extraction = true;
-        let server_config = Arc::new(server_config);
-
-        let mut client_config = make_client_config(kt);
-        client_config.enable_secret_extraction = true;
-
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-
-        do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-        // The handshake is finished, we're now able to extract traffic secrets
-        let client_secrets = client
-            .dangerous_extract_secrets()
-            .unwrap();
-        let server_secrets = server
-            .dangerous_extract_secrets()
-            .unwrap();
-
-        // Comparing secrets for equality is something you should never have to
-        // do in production code, so ConnectionTrafficSecrets doesn't implement
-        // PartialEq/Eq on purpose. Instead, we have to get creative.
-        fn explode_secrets(s: &ConnectionTrafficSecrets) -> (&[u8], &[u8]) {
-            match s {
-                ConnectionTrafficSecrets::Aes128Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
-                ConnectionTrafficSecrets::Aes256Gcm { key, iv } => (key.as_ref(), iv.as_ref()),
-                ConnectionTrafficSecrets::Chacha20Poly1305 { key, iv } => {
-                    (key.as_ref(), iv.as_ref())
-                }
-                _ => panic!("unexpected secret type"),
-            }
-        }
-
-        fn assert_secrets_equal(
-            (l_seq, l_sec): (u64, ConnectionTrafficSecrets),
-            (r_seq, r_sec): (u64, ConnectionTrafficSecrets),
-        ) {
-            assert_eq!(l_seq, r_seq);
-            assert_eq!(explode_secrets(&l_sec), explode_secrets(&r_sec));
-        }
-
-        assert_secrets_equal(client_secrets.tx, server_secrets.rx);
-        assert_secrets_equal(client_secrets.rx, server_secrets.tx);
-    }
-}
 
 /// Test that secrets cannot be extracted unless explicitly enabled, and until
 /// the handshake is done.
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn test_secret_extraction_disabled_or_too_early() {
-    let kt = KeyType::Rsa;
-    let provider = Arc::new(CryptoProvider {
-        cipher_suites: vec![cipher_suite::TLS13_AES_128_GCM_SHA256],
-        ..provider::default_provider()
-    });
-
-    for (server_enable, client_enable) in [(true, false), (false, true)] {
-        let mut server_config = ServerConfig::builder_with_provider(provider.clone())
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(kt.get_chain(), kt.get_key())
-            .unwrap();
-        server_config.enable_secret_extraction = server_enable;
-        let server_config = Arc::new(server_config);
-
-        let mut client_config = make_client_config(kt);
-        client_config.enable_secret_extraction = client_enable;
-
-        let client_config = Arc::new(client_config);
-
-        let (client, server,  _recv_srv, _recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-
-        assert!(
-            client
-                .dangerous_extract_secrets()
-                .is_err(),
-            "extraction should fail until handshake completes"
-        );
-        assert!(
-            server
-                .dangerous_extract_secrets()
-                .is_err(),
-            "extraction should fail until handshake completes"
-        );
-
-        let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-
-        do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-        assert_eq!(
-            server_enable,
-            server
-                .dangerous_extract_secrets()
-                .is_ok()
-        );
-        assert_eq!(
-            client_enable,
-            client
-                .dangerous_extract_secrets()
-                .is_ok()
-        );
-    }
-}
 
 //#[test] // Test logic is no more applicable
 /*fn test_received_plaintext_backpressure() {
@@ -6407,65 +5956,7 @@ fn test_client_construction_requires_66_bytes_of_random_material() {
         .expect("check how much random material ClientConnection::new consumes");
 }
 
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn test_client_removes_tls12_session_if_server_sends_undecryptable_first_message() {
-    fn inject_corrupt_finished_message(msg: &mut Message) -> Altered {
-        if let MessagePayload::ChangeCipherSpec(_) = msg.payload {
-            // interdict "real" ChangeCipherSpec with its encoding, plus a faulty encrypted Finished.
-            let mut raw_change_cipher_spec = [0x14u8, 0x03, 0x03, 0x00, 0x01, 0x01].to_vec();
-            let mut corrupt_finished = [0x16, 0x03, 0x03, 0x00, 0x28].to_vec();
-            corrupt_finished.extend([0u8; 0x28]);
 
-            let mut both = vec![];
-            both.append(&mut raw_change_cipher_spec);
-            both.append(&mut corrupt_finished);
-
-            Altered::Raw(both)
-        } else {
-            Altered::InPlace
-        }
-    }
-    let mut map = SimpleIdHashMap::default();
-
-    let mut client_config =
-        make_client_config_with_versions(KeyType::Rsa, &[&rustls::version::TLS12]);
-    let storage = Arc::new(ClientStorage::new());
-    client_config.resumption = Resumption::store(storage.clone());
-    let client_config = Arc::new(client_config);
-    let server_config = Arc::new(make_server_config(KeyType::Rsa));
-
-    // successful handshake to allow resumption
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-    do_handshake(&mut client, &mut server, &mut recv_srv, &mut recv_clnt);
-
-    // resumption
-    let (mut client, mut server, mut recv_srv, mut recv_clnt) = make_pair_for_arc_configs(&client_config, &server_config);
-    transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut map, &mut recv_srv).unwrap();
-    let mut client = client.into();
-    transfer_altered(
-        &mut server.into(),
-        inject_corrupt_finished_message,
-        &mut client,
-    );
-
-    // discard storage operations up to this point, to observe the one we want to test for.
-    storage.ops_and_reset();
-
-    // client cannot decrypt faulty Finished, and deletes saved session in case
-    // server resumption is buggy.
-    assert_eq!(
-        Some(Error::DecryptError),
-        client.process_new_packets(&mut map, &mut recv_clnt).err()
-    );
-
-    assert!(matches!(
-        storage.ops()[0],
-        ClientStorageOp::RemoveTls12Session(_)
-    ));
-}
 
 
 

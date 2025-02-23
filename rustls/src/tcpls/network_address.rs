@@ -93,7 +93,7 @@ impl AddressMap {
 
 #[test]
 fn test_build_local_address_list() {
-    let mut v = 0;
+    let mut v: u64;
     let mut local_addresses: Vec<Frame> = Vec::new();
     match get_if_addrs() {
         Ok(ifaces) => {

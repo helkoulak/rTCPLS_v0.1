@@ -845,7 +845,7 @@ fn read_all_bytes(sess: &mut Connection, conn: &mut net::TcpStream) {
 }
 
 fn exec(opts: &Options, mut sess: Connection, count: usize) {
-    let mut app_bufs = RecvBufMap::new();
+    let app_bufs = RecvBufMap::new();
     let mut sent_message = false;
 
     let addrs = [

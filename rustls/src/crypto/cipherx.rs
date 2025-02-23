@@ -587,6 +587,7 @@ impl MessageDecrypter for InvalidMessageDecrypter {
 #[test]
 fn test_header_enc_dec() {
     use ring::rand::SystemRandom;
+    use ring::rand::SecureRandom;
     let rng = SystemRandom::new();
     const INPUT_SIZE: usize = 16;
     const HEADER_SIZE: usize = 8;
@@ -596,9 +597,9 @@ fn test_header_enc_dec() {
     let mut key = [0u8; INPUT_SIZE];
     rng.fill(&mut key).unwrap();
 
-    let mut header_enc_dec = HeaderProtector::new_with_key(key);
+    let mut header_enc_dec = HeaderProtector::new_with_key(&key);
 
-    for i in 1..10000 {
+    for _i in 1..10000 {
         rng.fill(&mut sample).unwrap();
         rng.fill(&mut header).unwrap();
 

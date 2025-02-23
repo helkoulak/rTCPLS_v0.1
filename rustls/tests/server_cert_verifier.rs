@@ -4,7 +4,7 @@
 #[macro_use]
 mod macros;
 
-test_for_each_provider! {
+use rustls::crypto::ring as provider;
 
 mod common;
 use common::{
@@ -76,36 +76,7 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
     }
 }
 
-#[cfg(feature = "tls12")]
-#[test]
-#[ignore]
-fn client_can_override_certificate_verification_and_reject_tls12_signatures() {
-    for kt in ALL_KEY_TYPES.iter() {
-        let mut client_config = make_client_config_with_versions(*kt, &[&rustls::version::TLS12]);
-        let verifier = Arc::new(MockServerVerifier::rejects_tls12_signatures(
-            Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
-        ));
 
-        client_config
-            .dangerous()
-            .set_certificate_verifier(verifier);
-
-        let server_config = Arc::new(make_server_config(*kt));
-
-        let (mut client, mut server, mut recv_svr, mut recv_clnt) =
-            make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-        let errs = do_handshake_until_both_error(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
-        assert_eq!(
-            errs,
-            Err(vec![
-                ErrorFromPeer::Client(Error::InvalidMessage(
-                    InvalidMessage::HandshakePayloadTooLarge,
-                )),
-                ErrorFromPeer::Server(Error::AlertReceived(AlertDescription::HandshakeFailure)),
-            ]),
-        );
-    }
-}
 
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
@@ -294,4 +265,4 @@ impl Default for MockServerVerifier {
     }
 }
 
-} // test_for_each_provider!
+

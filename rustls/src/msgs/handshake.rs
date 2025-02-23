@@ -2092,12 +2092,7 @@ wrapped_payload!(
     /// for a single certificate. The Subject field is [encoded as an RFC 5280 `Name`](https://datatracker.ietf.org/doc/html/rfc5280#page-116).
     /// It can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
     ///
-    /// ```ignore
-    /// for name in distinguished_names {
-    ///     use x509_parser::prelude::FromDer;
-    ///     println!("{}", x509_parser::x509::X509Name::from_der(&name.0)?.1);
-    /// }
-    /// ```
+
     pub struct DistinguishedName,
     PayloadU16,
 );
@@ -2107,10 +2102,7 @@ impl DistinguishedName {
     ///
     /// This can be decoded using [x509-parser's FromDer trait](https://docs.rs/x509-parser/latest/x509_parser/prelude/trait.FromDer.html).
     ///
-    /// ```ignore
-    /// use x509_parser::prelude::FromDer;
-    /// println!("{}", x509_parser::x509::X509Name::from_der(dn.as_ref())?.1);
-    /// ```
+
     pub fn in_sequence(bytes: &[u8]) -> Self {
         Self(PayloadU16::new(wrap_in_sequence(bytes)))
     }
