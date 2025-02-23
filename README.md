@@ -37,7 +37,7 @@ $ cargo run --bin server_tcpls -- --verbose --certs test-ca/rsa/end.fullchain --
 $ cargo run --bin client_tcpls -- --cafile test-ca/rsa/ca.cert -p 8443 localhost --verbose
 ```
 
-### Client sends multiple streams to the server via two tcp connections 
+### Client sends multiple streams to the server via three tcp connections 
 ```
 $ cargo run --bin server_tcpls_mp -- --verbose --certs test-ca/rsa/end.fullchain --key test-ca/rsa/end.rsa -p 8443
 $ cargo run --bin client_tcpls_mp --  --cafile test-ca/rsa/ca.cert -p 8443 localhost --verbose
