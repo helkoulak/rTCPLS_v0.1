@@ -181,20 +181,20 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
 }
 criterion_main!(benches);*/
 
-criterion_group! {
+/*criterion_group! {
     name = benches;
     config = Criterion::default()
         .measurement_time(std::time::Duration::from_secs(1))
         .with_measurement(CPUTime)
         .sample_size(5000);
     targets = criterion_benchmark
-}
+}*/
 
 
 
 
 
-/*criterion_group!{
+criterion_group!{
     name = benches;
     // This can be any expression that returns a `Criterion` object.
     config = Criterion::default()
@@ -205,7 +205,7 @@ criterion_group! {
         //.with_profiler(PProfProfiler::new(100, Output::Flamegraph(Some(pprof::flamegraph::Options::default()))))
         .sample_size(5000);
     targets = criterion_benchmark
-}*/
+}
 
 /*criterion_group!{
     name = benches;

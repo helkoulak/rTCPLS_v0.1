@@ -60,10 +60,7 @@ criterion = { version = "0.5.1" }
 pprof = { version = "0.13.0", features = ["flamegraph", "criterion"] }
 
 
-[[example]]
-name = "bogo_shim"
-path = "examples/internal/bogo_shim.rs"
-required-features = ["tls12"]
+
 
 [[example]]
 name = "bench"
@@ -87,11 +84,7 @@ path = "benches/srv_clnt_single_stream_single_conn.rs"
 harness = false
 required-features = ["ring"]
 
-[[bench]]
-name = "srv_clnt_multi_stream_single_conn"
-path = "benches/srv_clnt_multi_stream_single_conn.rs"
-harness = false
-required-features = ["ring"]
+
 
 [[bench]]
 name = "srv_clnt_multi_stream_multi_connection"
@@ -99,35 +92,12 @@ path = "benches/srv_clnt_multi_stream_multi_connection.rs"
 harness = false
 required-features = ["ring"]
 
-[[bench]]
-name = "srv_clnt_mp"
-path = "benches/srv_clnt_mp.rs"
-harness = false
-required-features = ["ring"]
-
-[[bench]]
-name = "hmac_benchmark"
-path = "benches/hmac_benchmark.rs"
-harness = false
-required-features = ["ring"]
-
-
-[[bench]]
-name = "aes_benchmark"
-path = "benches/aes_benchmark.rs"
-harness = false
-required-features = ["ring"]
 
 [[bench]]
 name = "tcpls_header_decryption_benchmark"
 path = "benches/tcpls_header_decryption_benchmark.rs"
 harness = false
 required-features = ["ring"]
-
-[[bench]]
-name = "siphash_benchmark"
-path = "benches/siphash_benchmark.rs"
-harness = false
 
 
 [package.metadata.docs.rs]

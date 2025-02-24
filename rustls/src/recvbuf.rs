@@ -39,18 +39,22 @@ impl RecvBuf {
     /// create a new instance of RecvBuffer
     pub fn new(stream_id: u64, capacity: Option<usize>) -> Self {
         if let Some(capacity) = capacity {
-            Self {
+            let mut recv_buf = Self {
                 id: stream_id,
                 data :vec![0; capacity],
                 ..Default::default()
-            }
+            };
+            unsafe {recv_buf.data.set_len(capacity)};
+            recv_buf
 
         } else {
-            Self {
+            let mut recv_buf = Self {
                 id: stream_id,
                 data: vec![0; DEFAULT_BUFFER_LIMIT],
                 ..Default::default()
-            }
+            };
+            unsafe {recv_buf.data.set_len(DEFAULT_BUFFER_LIMIT)};
+            recv_buf
         }
     }
     pub fn get_mut(&mut self) -> &mut [u8] {
