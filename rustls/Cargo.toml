@@ -87,8 +87,8 @@ required-features = ["ring"]
 
 
 [[bench]]
-name = "srv_clnt_multi_stream_multi_connection"
-path = "benches/srv_clnt_multi_stream_multi_connection.rs"
+name = "srv_clnt_single_stream_two_connection"
+path = "benches/srv_clnt_single_stream_two_connection.rs"
 harness = false
 required-features = ["ring"]
 

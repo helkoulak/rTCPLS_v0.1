@@ -102,8 +102,8 @@ use rustls::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
 
 pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
     ServerConnectionData>, app_bufs: &mut RecvBufMap) {
-    let conn_ids: Vec<u32> = vec![0,1,2];
-    let str_ids: Vec<u32> = vec![1, 2];
+    let conn_ids: Vec<u32> = vec![0,1];
+    let str_ids: Vec<u32> = vec![1];
     for str_id in str_ids{
         loop {
             for id in &conn_ids {
@@ -117,13 +117,13 @@ pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
 }
 mod bench_util;
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 300 * MAX_TCPLS_FRAGMENT_LEN;
+    let data_len= 600 * MAX_TCPLS_FRAGMENT_LEN;
     let capacity = 700 * MAX_TCPLS_FRAGMENT_LEN;
     let sendbuf1 = vec![1u8; data_len];
-    let sendbuf2 = vec![2u8; data_len];
+
     let mut group = c.benchmark_group("Data_recv");
     group.throughput(Throughput::Bytes((data_len) as u64));
-    group.bench_with_input(BenchmarkId::new("Data_recv_multi_stream_multi_connection", data_len * 2), &sendbuf1,
+    group.bench_with_input(BenchmarkId::new("Data_recv_single_stream_two_connection", data_len ), &sendbuf1,
                            |b, _sendbuf| {
 
                                b.iter_batched_ref(|| {
@@ -137,21 +137,21 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
                                    let mut tcpls_client = TcplsSession::new(false);
                                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
                                    tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
-                                   tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 2);
+
 
                                    //Encrypt data and buffer it in send buffer
                                    tcpls_client.stream_send(1, sendbuf1.as_slice()).expect("Buffering in send buffer failed");
-                                   tcpls_client.stream_send(2, sendbuf2.as_slice()).expect("Buffering in send buffer failed");
+
                                    let mut pipe = OtherSession::new(server);
                                    let mut conn_id: u32 = 0;
-                                   let stream_ids: Vec<u32> = vec![1, 2];
+                                   let stream_ids: Vec<u32> = vec![1];
 
                                    for str_id in stream_ids {
                                        while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(str_id)) {
                                            pipe.sess.set_connection_in_use(conn_id);
                                            tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id).unwrap();
                                            conn_id += 1;
-                                           if conn_id == 3 {
+                                           if conn_id == 2 {
                                                conn_id = 0;
                                            }
                                        }
@@ -160,7 +160,7 @@ fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
 
                                    // Create app receive buffer
                                    recv_svr.get_or_create(1, Some(capacity));
-                                   recv_svr.get_or_create(2, Some(capacity));
+
                                    (pipe, recv_svr)
                                },
 

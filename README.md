@@ -71,9 +71,9 @@ $ cargo test
  There are several benchmark tests to measure the CPU time taken to accomplish several tasks. Execute the following commands to run the 
 following tests:
 
-### Measuring the average CPU time spent on decrypting into the application buffer two received streams, of 300 TCPLS full records each, sent over three connections.
+### Measuring the average CPU time spent on decrypting into the application buffer one stream, of 600 TCPLS full records, sent over two connections.
 ```
-$ cargo bench --bench srv_clnt_multi_stream_multi_connection
+$ cargo bench --bench srv_clnt_single_stream_two_connection
 ```
 
 ### Measuring the average CPU time spent on decrypting into the application buffers one stream, of 600 TCPLS full records, sent over a single connection.
