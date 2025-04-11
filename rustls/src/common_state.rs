@@ -70,7 +70,8 @@ pub struct CommonState {
     pub(crate) protocol: Protocol,
     pub(crate) quic: quic::Quic,
     pub(crate) enable_secret_extraction: bool,
-    pub(crate) conns_rtts: SimpleIdHashMap<Duration>
+    pub(crate) conns_rtts: SimpleIdHashMap<Duration>,
+    pub(crate) encrypted_chunk: Vec<u8>,
 }
 
 impl CommonState {
@@ -109,6 +110,7 @@ impl CommonState {
             quic: quic::Quic::default(),
             enable_secret_extraction: false,
             conns_rtts: SimpleIdHashMap::default(),
+            encrypted_chunk: Vec::new(),
         }
     }
     /// sets the id of the currently active tcp connection
@@ -315,13 +317,8 @@ impl CommonState {
 
     /// Fragment `m`, encrypt the fragments, and then queue
     /// the encrypted fragments for sending.
-    pub(crate) fn send_msg_encrypt(&mut self, m: PlainMessage, id: u32) {
-        let iter = self
-            .message_fragmenter
-            .fragment_message(&m);
-        for m in iter {
-            self.send_single_fragment(m, id, false);
-        }
+    pub(crate) fn send_msg_encrypt(&mut self, m: OutboundPlainMessage, id: u32) {
+        self.send_single_fragment(m, id);
     }
 
     /// Like send_msg_encrypt, but operate on an appdata directly.
@@ -331,8 +328,6 @@ impl CommonState {
         // but we're respecting it for plaintext data -- so we'll
         // be out by whatever the cipher+record overhead is.  That's a
         // constant and predictable amount, so it's not a terrible issue.
-
-        let mut fin = false;
         let len = match limit {
             #[cfg(feature = "std")]
             Limit::Yes => self
@@ -351,34 +346,26 @@ impl CommonState {
             return 0;
         }
 
-        if len == payload.len() {
-            fin = true;
-        }
+
 
         let iter = self
             .message_fragmenter
             .fragment_payload(
-                ContentType::ApplicationData,
-                ProtocolVersion::TLSv1_2,
+                ApplicationData,
+                TLSv1_2,
                 payload.split_at(len).0,
             );
-        let mut count = iter.len();
+
         for m in iter {
-            count -= 1;
             //consider flag fin when reaching last chunk
-            let finish = if count == 0 {
-                fin
-            } else {
-                false
-            };
-            self.send_single_fragment(m, id, finish);
+            self.send_single_fragment(m, id);
         }
 
         len
     }
 
 
-    fn send_single_fragment(&mut self, m: OutboundPlainMessage, id: u32, fin: bool) {
+    fn send_single_fragment(&mut self, m: OutboundPlainMessage, id: u32) {
         self.record_layer.streams.get_or_create(id).unwrap();
         // set id of stream to decide on crypto context and record seq space
         self.record_layer.encrypt_for_stream(id);
@@ -407,16 +394,13 @@ impl CommonState {
             ApplicationData => {
                 Some(Frame::Stream {
                     length: m.payload.len() as u16,
-                    fin: fin.into(),
+                    fin: self.record_layer.streams.get_or_create(id).unwrap().send.fin,
                 })
             },
             _ => None,
         };
 
-        let typ = m.typ;
-
-        let em = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header);
-        self.queue_message(em.encode(), id, Some(&tcpls_header), typ);
+        self.encrypted_chunk = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header).encode();
     }
 
     pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{
@@ -574,23 +558,22 @@ impl CommonState {
 
     /// Send a raw TLS message, fragmenting it if needed.
     pub(crate) fn send_msg(&mut self, m: Message, must_encrypt: bool, id: u32) {
-      let typ = m.payload.content_type();
-        if !must_encrypt {
-            let msg = &m.into();
-            let iter = self
-                .message_fragmenter
-                .fragment_message(msg);
-            for m in iter {
-                self.queue_message(m.to_unencrypted_opaque().encode(), id, None, typ);
+        let msg = &m.into();
+        let iter = self
+            .message_fragmenter
+            .fragment_message(msg);
+        for m in iter {
+            if !must_encrypt {
+                self.queue_message(m.to_unencrypted_opaque().encode(), id, m.typ, must_encrypt, 0);
+            }else {
+                self.queue_message(m.payload.to_vec(), id, m.typ, must_encrypt, 0);
             }
-        } else {
-            self.send_msg_encrypt(m.into(), id);
         }
     }
 
     pub(crate) fn take_received_plaintext(&mut self, bytes: Payload) {
         self.received_plaintext
-            .append(bytes.into_vec(), None, ApplicationData);
+            .append(bytes.into_vec(), ApplicationData, false, 0);
     }
 
     #[cfg(feature = "tls12")]
@@ -899,7 +882,7 @@ impl CommonState {
                     .get_or_create_plain_buf(id)
                     .unwrap()
                     .send_plain_buf
-                    .append(payload.to_vec(), None, ApplicationData),
+                    .append(payload.to_vec(), ApplicationData, false, 0),
             };
             return len;
         }
@@ -909,12 +892,12 @@ impl CommonState {
 
     pub(crate) fn perhaps_write_key_update(&mut self) {
         if let Some(message) = self.queued_key_update_message.take() {
-            self.queue_message(message, DEFAULT_STREAM_ID, None, ContentType::Alert);
+            self.queue_message(message, DEFAULT_STREAM_ID, ContentType::Alert, true, 0);
         }
     }
     // Put m into sendable_tls for writing.
-    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32, tcpls_header: Option<&TcplsHeader>, data_type: ContentType) {
-        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg, tcpls_header, data_type);
+    pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32, data_type: ContentType, encrypt: bool, fin: u8) {
+        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg, data_type, false, 0);
         self.record_layer.streams.insert_flushable(id as u64);
     }
 
@@ -1067,20 +1050,24 @@ enum Limit {
     No,
 }
 
-pub(crate)  struct OutboundTlsMessage {
+pub(crate)  struct OutboundTcplsMessage {
     pub(crate) data: Vec<u8>,
     pub(crate) send_time: Option<Instant>,
-    pub(crate) chunk_num: u32,
+    pub(crate) offset: u64,
     pub(crate) typ: ContentType,
+    pub(crate) encrypt: bool,
+    pub(crate) fin: u8,
 }
 
-impl OutboundTlsMessage {
-    pub(crate) fn new(data: Vec<u8>, chunk_num: u32, sent_at: Option<Instant>, typ: ContentType) -> Self {
+impl OutboundTcplsMessage {
+    pub(crate) fn new(data: Vec<u8>, offset: u64, sent_at: Option<Instant>, typ: ContentType, encrypt: bool, fin: u8) -> Self {
         Self {
             data,
             send_time: sent_at,
-            chunk_num,
+            offset,
             typ,
+            encrypt,
+            fin,
         }
     }
 

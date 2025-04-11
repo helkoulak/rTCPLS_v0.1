@@ -45,7 +45,7 @@ pub struct Stream {
 
     pub id: u32,
 
-    /// buffers encrypted TLS records that to be sent on the TCP socket
+    /// buffers encrypted TCPLS records that to be sent on the TCP socket
     pub(crate) send: ChunkVecBuffer,
 
     pub next_snd_pkt_num: u32,

@@ -86,6 +86,7 @@ enum_builder! {
         Handshake => 0x16,
         ApplicationData => 0x17,
         Heartbeat => 0x18,
+        TcplsControl => 0x19,
     }
 }
 

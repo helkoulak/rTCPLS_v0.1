@@ -32,6 +32,7 @@ use crate::msgs::message::{InboundOpaqueMessage, Message, MessageError, MessageP
 use crate::PeerMisbehaved::{InvalidTcplsJoinToken, TcplsJoinExtensionNotFound};
 use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::RecvBufMap;
+use crate::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
 use crate::tcpls::network_address::AddressMap;
 use crate::tcpls::outstanding_conn::OutstandingTcpConn;
 use crate::tcpls::stream::{SimpleIdHashMap, SimpleIdHashSet, StreamIter};
@@ -241,11 +242,16 @@ impl TcplsSession {
         Ok(conn_id)
     }
     /// Store data in send buffer
-    pub fn stream_send(&mut self, str_id: u32, input: &[u8]) -> Result<usize, Error> {
+    pub fn stream_send(&mut self, str_id: u32, input: &[u8]) {
 
-        self.tls_conn.as_mut().unwrap().write_to = str_id;
-        let buffered = self.tls_conn.as_mut().unwrap().writer().write(input).expect("Could not write data to stream");
-        Ok(buffered)
+        let mut fin: u8 = 0;
+        let mut count = input.chunks(MAX_TCPLS_FRAGMENT_LEN).len();
+        for chunk in input.chunks(MAX_TCPLS_FRAGMENT_LEN).map(|chunk| chunk.to_vec()) {
+            count -= 1;
+            if count == 0 {fin = 1}
+            self.tls_conn.as_mut().unwrap().queue_message(chunk, str_id, ContentType::ApplicationData, true, fin);
+        }
+
     }
 
     /// Flush bytes of a certain stream or a set of streams on specified byte-oriented sink.
@@ -306,10 +312,40 @@ impl TcplsSession {
                         },
                     };
                     let chunk_len = chunk.data.len();
-                    sent = match socket.write(chunk.data.as_slice()) {
+                    let typ = chunk.typ;
+                    let encrypt = chunk.encrypt;
+                    let data_to_send;
+                    let fin = chunk.fin;
+                    match encrypt {
+                        true => {
+                            tls_conn.write_to = id as u32;
+                            match typ {
+                                ContentType::ApplicationData => {
+                                    if fin == 1 {
+                                        tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.fin = fin;
+                                    }
+
+                                    tls_conn.writer().write(chunk.data.as_slice()).expect("Could not write data to stream");
+                                },
+                                _ => {
+                                    let msg = OutboundPlainMessage {
+                                        typ: chunk.typ,
+                                        version: TLSv1_2,
+                                        payload: OutboundChunks::from(chunk.data.as_slice()),
+                                    };
+                                    tls_conn.send_msg_encrypt(msg, id as u32);
+                                },
+                            }
+                            data_to_send = tls_conn.encrypted_chunk.clone();
+                        },
+                        false => {
+                            data_to_send = chunk.data.clone();
+                        },
+                    };
+                    sent = match socket.write(data_to_send.as_slice()) {
                         Ok(0) => return Ok(done),
                         Ok(sent) => {
-                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
+                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, data_to_send, typ, chunk.offset);
                             if sent < chunk_len {
                                 tls_conn.record_layer.streams.get_mut(id as u32).unwrap().set_conn(Some(conn_to_use));
                             } else {
@@ -321,7 +357,7 @@ impl TcplsSession {
 
                         Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
                             sent = 0;
-                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, chunk);
+                            tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.consume_chunk(sent, data_to_send, typ, chunk.offset);
                             return Ok(done)
                         },
                         _error => {
@@ -329,10 +365,14 @@ impl TcplsSession {
                         },
                     };
 
-
-                    len -= sent;
+                    if sent > chunk_len {
+                        len -= chunk_len;
+                        done += chunk_len;
+                    } else {
+                        len -= sent;
+                        done += sent;
+                    }
                     if len == 0 { break }
-                    done += sent;
                 }
             }
 
@@ -603,7 +643,7 @@ impl TcplsSession {
             for un_ack_chunk in str.1.send.mut_iter_not_ack(){
                 let time_elapsed  = un_ack_chunk.1.send_time.unwrap().elapsed();
                 if time_elapsed >= self.timeout {
-                    println!("Resending packet {} of stream {}", un_ack_chunk.1.chunk_num, str.1.id);
+                    println!("Resending packet {} of stream {}", un_ack_chunk.1.offset, str.1.id);
                     self.tcp_connections.get_mut(&conn_id).unwrap().socket.write(&un_ack_chunk.1.data).unwrap();
                 }
             }

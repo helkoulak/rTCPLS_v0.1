@@ -1058,7 +1058,7 @@ impl EarlyDataState {
         let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
-                received.append(bytes.into_vec(), None, ApplicationData);
+                received.append(bytes.into_vec(), ApplicationData, false, 0);
                 true
             }
             _ => false,
