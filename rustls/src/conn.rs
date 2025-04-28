@@ -7,7 +7,7 @@ use core::ops::{Deref, DerefMut};
 #[cfg(feature = "std")]
 use std::io;
 use std::io::Write;
-use std::println;
+
 
 use crate::common_state::{CommonState, Context, IoState, PlainBufsMap, State};
 use crate::enums::{AlertDescription, ContentType};
@@ -17,7 +17,7 @@ use crate::log::trace;
 
 use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer, MessageDeframerMap};
 use crate::msgs::handshake::Random;
-use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload, OutboundPlainMessage};
+use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
 
 pub(crate) mod unbuffered;
@@ -372,12 +372,8 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
 
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
-use crate::ContentType::ApplicationData;
-use crate::crypto::cipherx::OutboundChunks;
-
-use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::{ReaderAppBufs, RecvBufMap};
-use crate::tcpls::frame::{Frame, PROBE_FRAME_SIZE, STREAM_FRAME_HEADER_SIZE};
+use crate::tcpls::frame::{Frame, STREAM_FRAME_HEADER_SIZE};
 use crate::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 use crate::tcpls::TcpConnection;
 
@@ -944,7 +940,7 @@ impl<Data> ConnectionCore<Data> {
                         .streams
                         .get_mut(stream_id as u32)
                         .unwrap()
-                        .send.remove_ack(highest_record_sn_received as u32);
+                        .send.remove_ack(highest_record_sn_received);
                     break
                 },
                 Frame::NewToken { token: _, sequence: _ } => {},
@@ -960,7 +956,7 @@ impl<Data> ConnectionCore<Data> {
                     next_record_stream_id: _,
                     next_offset: _,
                 } => {},
-                Frame::Probe {
+               /* Frame::Probe {
                     random,
                 } => {
                     if tcp_conns.get(&conn_id).unwrap().probe_initiated {
@@ -990,7 +986,7 @@ impl<Data> ConnectionCore<Data> {
 
                     }
                     break
-                }
+                }*/
             }
         }
     }

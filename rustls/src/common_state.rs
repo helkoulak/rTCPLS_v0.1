@@ -25,7 +25,7 @@ use crate::{quic, record_layer};
 use crate::ContentType::ApplicationData;
 use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::RecvBufMap;
-use crate::tcpls::frame::{Frame, TcplsHeader};
+use crate::tcpls::frame::Frame;
 use crate::tcpls::outstanding_conn::OutstandingConnMap;
 use crate::tcpls::stream::{DEFAULT_STREAM_ID, SimpleIdHashMap};
 
@@ -403,7 +403,7 @@ impl CommonState {
         self.encrypted_chunk = self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, stream_frame_header).encode();
     }
 
-    pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{
+    /*pub(crate) fn send_single_probe(&mut self, m: OutboundPlainMessage) -> Option<OutboundOpaqueMessage>{
 
         // set id of stream to decide on crypto context and record seq space
         self.record_layer.encrypt_for_stream(DEFAULT_STREAM_ID);
@@ -429,7 +429,7 @@ impl CommonState {
 
         Some(self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, None))
 
-    }
+    }*/
 
     pub(crate) fn send_ack(&mut self, chunk_num: u64, stream_id: u64) -> Option<OutboundOpaqueMessage>{
         let mut ack = vec![0u8; 17];
@@ -468,7 +468,7 @@ impl CommonState {
 
     }
 
-    pub fn calculate_conn_shares(&mut self, chunks_num: usize, conn_ids: &Vec<u64>, stream_id: u64)  {
+    /*pub fn calculate_conn_shares(&mut self, chunks_num: usize, conn_ids: &Vec<u64>, stream_id: u64)  {
         let mut weights: SimpleIdHashMap<f64> = SimpleIdHashMap::default();
         let mut weight_sum: f64 = 0.0;
 
@@ -493,7 +493,7 @@ impl CommonState {
                 self.record_layer.streams.get_mut(stream_id as u32).unwrap().insert_conn_share(*id, share);
             }
         }
-    }
+    }*/
 
     fn send_plain_non_buffering(&mut self, payload: OutboundChunks<'_>, limit: Limit, id: u32) -> usize {
         debug_assert!(self.may_send_application_data);
@@ -897,7 +897,7 @@ impl CommonState {
     }
     // Put m into sendable_tls for writing.
     pub(crate) fn queue_message(&mut self, msg: Vec<u8>, id: u32, data_type: ContentType, encrypt: bool, fin: u8) {
-        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg, data_type, false, 0);
+        self.record_layer.streams.get_or_create(id).unwrap().send.append(msg, data_type, encrypt, fin);
         self.record_layer.streams.insert_flushable(id as u64);
     }
 

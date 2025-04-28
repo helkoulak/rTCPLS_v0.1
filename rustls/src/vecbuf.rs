@@ -12,7 +12,6 @@ use crate::ContentType;
 use crate::ContentType::{ApplicationData, Handshake};
 #[cfg(feature = "std")]
 use crate::msgs::message::OutboundChunks;
-use crate::tcpls::frame::TcplsHeader;
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
@@ -80,7 +79,7 @@ impl ChunkVecBuffer {
     }
 
     #[inline]
-    pub(crate) fn mut_iter_not_ack(&mut self) -> impl Iterator<Item = (&u32, &mut OutboundTcplsMessage)> {
+    pub(crate) fn mut_iter_not_ack(&mut self) -> impl Iterator<Item = (&u64, &mut OutboundTcplsMessage)> {
         self.not_acked.iter_mut()
     }
 
@@ -93,10 +92,10 @@ impl ChunkVecBuffer {
         len
     }
 
-    /// How many chunks this stream has
+    /*/// How many chunks this stream has
     pub(crate) fn chunks_num(&self) -> usize {
         self.chunks.len()
-    }
+    }*/
 
     /// For a proposed append of `len` bytes, how many
     /// bytes should we actually append to adhere to the
@@ -144,7 +143,7 @@ impl ChunkVecBuffer {
         self.current_offset = 0;
     }
 
-    pub(crate) fn remove_ack(&mut self, chunk_num: u32) {
+    pub(crate) fn remove_ack(&mut self, chunk_num: u64) {
         self.not_acked.remove(&chunk_num);
     }
 

@@ -170,7 +170,7 @@ impl TlsClient {
         // Print the hash as a hexadecimal string
         // println!("\n \n File bytes on stream {:?} : \n {:?} \n \n SHA-256 Hash {:?} \n Total length: {:?} \n", stream, file_contents, hash, len);
 
-        self.tcpls_session.stream_send(stream, data.as_ref()).expect("buffering failed");
+        self.tcpls_session.stream_send(stream, data.as_ref());
 
 
         Ok(())

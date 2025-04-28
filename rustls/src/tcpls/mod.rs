@@ -14,12 +14,11 @@ use log::trace;
 
 use mio::net::{TcpListener, TcpStream};
 use rand::Rng;
-use ring::rand::{SecureRandom, SystemRandom};
 use crate::{CipherSuite, ClientConfig, ClientConnection,
             Connection, ContentType, Error, HandshakeType, InvalidMessage, IoState,
             NamedGroup, PeerMisbehaved, ProtocolVersion, ServerConfig, ServerConnection, Side, SignatureScheme};
 use crate::AlertDescription::IllegalParameter;
-use crate::ContentType::ApplicationData;
+
 use crate::crypto::cipherx::OutboundChunks;
 use crate::InvalidMessage::{InvalidContentType, InvalidEmptyPayload};
 use crate::msgs::codec;
@@ -284,14 +283,14 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
-            let chunk_count = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();
+          /*  let chunk_count = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();*/
             let mut sent;
 
-            if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
+          /*  if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
                 tls_conn.calculate_conn_shares(chunk_count, &conn_ids, id);
                 println!("Shares {:?}", tls_conn.record_layer.streams.get_mut(id as u32).unwrap().conn_shares);
 
-            }
+            }*/
 
 
             while len > 0 {
@@ -598,7 +597,7 @@ impl TcplsSession {
         }
     }
 
-    pub fn probe_rtt(&mut self) -> Result<(), Error> {
+   /* pub fn probe_rtt(&mut self) -> Result<(), Error> {
         if self.tls_conn.as_ref().unwrap().is_handshaking(){
             return Err(Error::General("Still handshaking".to_string()))
         }
@@ -625,7 +624,7 @@ impl TcplsSession {
 
        Ok(())
 
-    }
+    }*/
 
     pub fn free_session_resources(&mut self) {
         self.tls_config = None;

@@ -64,7 +64,7 @@ impl TlsClient {
                 if self.tcpls_session.tcp_connections.len() == 3 &&
                     !self.data_sent
                      {
-                         self.tcpls_session.probe_rtt().unwrap();
+                        /* self.tcpls_session.probe_rtt().unwrap();*/
                          let num_of_buf:u32 = 10000;
                          //Send three byte arrays on three streams
                          let mut id_set = SimpleIdHashSet::default();
@@ -211,7 +211,7 @@ impl TlsClient {
         // Print the hash as a hexadecimal string
        // println!("\n \n File bytes on stream {:?} : \n {:?} \n \n SHA-256 Hash {:?} \n Total length: {:?} \n", stream, file_contents, hash, len);
 
-        self.tcpls_session.stream_send(stream as u32, data.as_ref()).expect("buffering failed");
+        self.tcpls_session.stream_send(stream as u32, data.as_ref());
 
 
         Ok(())

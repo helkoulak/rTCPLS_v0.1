@@ -59,9 +59,9 @@ pub enum Frame {
         next_offset: u64,
     },
 
-    Probe {
+  /*  Probe {
         random: u32,
-    }
+    }*/
 }
 
 impl Frame {
@@ -87,7 +87,7 @@ impl Frame {
 
             0x09 => parse_stream_change_frame(b).unwrap(),
 
-            0x0a => parse_probe_frame(b).unwrap(),
+           /* 0x0a => parse_probe_frame(b).unwrap(),*/
 
             _ => return Err(InvalidMessage::InvalidFrameType),
         };
@@ -164,12 +164,12 @@ impl Frame {
                 b.put_varint(0x09).unwrap();
             }
 
-            Self::Probe {
+           /* Self::Probe {
                 random,
             } => {
                 b.put_u32(*random).unwrap();
                 b.put_u8(0x0a).unwrap();
-            }
+            }*/
         }
 
         Ok(before - b.cap())
@@ -306,11 +306,11 @@ fn parse_remove_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
     Ok(Frame::RemoveAddress { address_id })
 }
 
-fn parse_probe_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
+/*fn parse_probe_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
     let random = b.get_u32_reverse()?;
 
     Ok(Frame::Probe {random})
-}
+}*/
 
 fn parse_stream_change_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
     let next_offset = b.get_varint_reverse()?;

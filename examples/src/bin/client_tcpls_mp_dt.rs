@@ -83,7 +83,7 @@ impl TlsClient {
 
                 if self.tcpls_session.tcp_connections.len() == 2 && !self.down_req_sent {
                     println!("Send download request");
-                    self.tcpls_session.stream_send(1, b"GET DATA".as_slice()).expect("buffering failed");
+                    self.tcpls_session.stream_send(1, b"GET DATA".as_slice());
                     self.download_time.clone_from(&Instant::now());
                     self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
                     self.down_req_sent = true;

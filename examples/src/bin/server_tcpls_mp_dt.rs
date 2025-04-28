@@ -81,14 +81,14 @@ impl TlsServer {
 
                 if !self.conns_probed && !self.download_req_received {
                     println!("Probing connections");
-                    self.tcpls_session.probe_rtt().unwrap();
+                   /* self.tcpls_session.probe_rtt().unwrap();*/
                     self.conns_probed = true;
                     return;
                 }
 
                  if self.download_req_received {
                      println!("Sending data");
-                     self.tcpls_session.stream_send(1, vec![2u8; 70000000].as_slice()).unwrap();
+                     self.tcpls_session.stream_send(1, vec![2u8; 70000000].as_slice());
                      self.tcpls_session.send_on_connection(None, None).expect("Sending on connection failed");
                      self.download_req_received = false;
                  }
