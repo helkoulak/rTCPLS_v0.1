@@ -265,16 +265,16 @@ impl TcplsSession {
 
 
         //Flush streams selected by the app or flush all
-        let stream_ids = match flushable_streams {
-            Some(set) => StreamIter::from(&set),
-            None => tls_conn.record_layer.streams.flushable(),
+        let mut stream_ids = match flushable_streams {
+            Some(set) => StreamIter::from(&set).peekable(),
+            None => tls_conn.record_layer.streams.flushable().peekable(),
         };
 
         let mut done = 0;
        /* let mut chunk_num: usize = 0;*/
 
-
-
+        let mut data_to_send= Vec::new();
+    if stream_ids.peek().is_some() {
         for id in stream_ids {
             match tls_conn.record_layer.streams.get_mut(id as u32) {
                 Some(_stream) => {},
@@ -283,14 +283,14 @@ impl TcplsSession {
 
 
             let mut len = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.len();
-          /*  let chunk_count = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();*/
+            /*  let chunk_count = tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.chunks_num();*/
             let mut sent;
 
-          /*  if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
-                tls_conn.calculate_conn_shares(chunk_count, &conn_ids, id);
-                println!("Shares {:?}", tls_conn.record_layer.streams.get_mut(id as u32).unwrap().conn_shares);
-
-            }*/
+            /*  if !tls_conn.record_layer.streams.get_mut(id as u32).unwrap().shares_already_calculated() {
+                  tls_conn.calculate_conn_shares(chunk_count, &conn_ids, id);
+                  println!("Shares {:?}", tls_conn.record_layer.streams.get_mut(id as u32).unwrap().conn_shares);
+  
+              }*/
 
 
             while len > 0 {
@@ -313,24 +313,43 @@ impl TcplsSession {
                     let chunk_len = chunk.data.len();
                     let typ = chunk.typ;
                     let encrypt = chunk.encrypt;
-                    let data_to_send;
+                    let mut data_to_send = Vec::new();
                     let fin = chunk.fin;
                     match encrypt {
                         true => {
+                            let mut i = 0;
                             tls_conn.write_to = id as u32;
+                            data_to_send.extend_from_slice(chunk.data.as_slice());
+                            let mut rest_len = MAX_TCPLS_FRAGMENT_LEN - chunk_len;
+                            if rest_len > 0 && !tls_conn.record_layer.control_is_empty() {
+                                while rest_len > 0 || i < tls_conn.record_layer.control_messages.len(){
+                                    i += 1;
+                                    let control_msg = tls_conn.record_layer.control_messages.pop_front().unwrap();
+                                    let control_len = control_msg.len();
+                                    if control_len <= rest_len {
+                                        data_to_send.extend_from_slice(control_msg.as_slice());
+                                        rest_len -= control_len;
+                                    } else {
+                                        
+                                        tls_conn.record_layer.control_messages.push_back(control_msg);
+                                    }
+
+                                }
+                            }
                             match typ {
+                                
                                 ContentType::ApplicationData => {
                                     if fin == 1 {
                                         tls_conn.record_layer.streams.get_mut(id as u32).unwrap().send.fin = fin;
                                     }
 
-                                    tls_conn.writer().write(chunk.data.as_slice()).expect("Could not write data to stream");
+                                    tls_conn.writer().write(data_to_send.as_slice()).expect("Could not write data to stream");
                                 },
                                 _ => {
                                     let msg = OutboundPlainMessage {
                                         typ: chunk.typ,
                                         version: TLSv1_2,
-                                        payload: OutboundChunks::from(chunk.data.as_slice()),
+                                        payload: OutboundChunks::from(data_to_send.as_slice()),
                                     };
                                     tls_conn.send_msg_encrypt(msg, id as u32);
                                 },
@@ -338,7 +357,7 @@ impl TcplsSession {
                             data_to_send = tls_conn.encrypted_chunk.clone();
                         },
                         false => {
-                            data_to_send = chunk.data.clone();
+                            data_to_send.extend_from_slice(chunk.data.as_slice());
                         },
                     };
                     sent = match socket.write(data_to_send.as_slice()) {
@@ -379,6 +398,10 @@ impl TcplsSession {
                 tls_conn.record_layer.streams.reset_stream(id as u32);
             }
         }
+    } else { 
+        
+    }
+        
 
         Ok(done)
     }

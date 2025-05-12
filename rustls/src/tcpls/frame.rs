@@ -36,11 +36,11 @@ pub enum Frame {
 
     NewToken {
         token: [u8; 32],
-        sequence: u64,
+        sequence: u8,
     },
 
     ConnectionReset {
-        connection_id: u64,
+        connection_id: u32,
     },
 
     NewAddress {
@@ -51,7 +51,7 @@ pub enum Frame {
     },
 
     RemoveAddress {
-        address_id: u64,
+        address_id: u8,
     },
 
     StreamChange {
@@ -129,12 +129,12 @@ impl Frame {
 
             Self::NewToken { token, sequence } => {
                 b.put_bytes(token).unwrap();
-                b.put_varint_reverse(*sequence).unwrap();
+                b.put_u8(*sequence).unwrap();
                 b.put_varint(0x05).unwrap();
             }
 
             Self::ConnectionReset { connection_id } => {
-                b.put_varint_reverse(*connection_id).unwrap();
+                b.put_u32(*connection_id).unwrap();
                 b.put_varint(0x06).unwrap();
             }
             Self::NewAddress {
@@ -151,7 +151,7 @@ impl Frame {
             }
 
             Self::RemoveAddress { address_id } => {
-                b.put_varint_reverse(*address_id).unwrap();
+                b.put_u8(*address_id).unwrap();
                 b.put_varint(0x08).unwrap();
             }
 
@@ -263,7 +263,7 @@ fn parse_ack_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_new_token_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let sequence = b.get_varint_reverse()?;
+    let sequence = b.get_u8_reverse()?;
 
     let token = b.get_bytes_reverse(32)?.buf();
 
@@ -274,7 +274,7 @@ fn parse_new_token_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_connection_reset_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let connection_id = b.get_varint_reverse()?;
+    let connection_id = b.get_u32_reverse()?;
 
     Ok(Frame::ConnectionReset { connection_id })
 }
@@ -301,7 +301,7 @@ fn parse_new_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 
 fn parse_remove_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
-    let address_id = b.get_varint_reverse()?;
+    let address_id = b.get_u8_reverse()?;
 
     Ok(Frame::RemoveAddress { address_id })
 }
@@ -423,7 +423,7 @@ fn test_encode_decode_new_token_frame() {
 
     let token_frame = Frame::NewToken {
         token: [0x0F; 32],
-        sequence: 854785486,
+        sequence: 8,
     };
 
     let mut d = octets::OctetsMut::with_slice(&mut buf);

@@ -5,7 +5,7 @@ use std::collections::hash_map;
 use std::time::{Duration, Instant};
 use std::vec;
 use pki_types::CertificateDer;
-
+use rand::Rng;
 use crate::enums::{AlertDescription, ContentType, HandshakeType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 #[cfg(feature = "logging")]
@@ -430,6 +430,58 @@ impl CommonState {
         Some(self.record_layer.encrypt_outgoing_tcpls(m, &tcpls_header, None))
 
     }*/
+
+    pub(crate) fn send_pad(&mut self) {
+        self.record_layer.control_messages.push_back([0x00].to_vec());
+    }
+    pub(crate) fn send_ping(&mut self) {
+        self.record_layer.control_messages.push_back([0x01].to_vec());
+    }
+    pub(crate) fn send_new_token(&mut self, sequence: u8) {
+        let mut rng = rand::thread_rng();
+        let mut buf = [0u8; 34];
+        let random: [u8; 32] = rng.gen();
+        let token_frame = Frame::NewToken {
+            token: random,
+            sequence,
+        };
+
+        let mut d = octets::OctetsMut::with_slice(&mut buf);
+
+        token_frame.encode(&mut d).unwrap();
+
+        self.record_layer.control_messages.push_back(buf.to_vec());
+
+    }
+    
+    pub(crate) fn send_connection_reset(&mut self, connection_id: u32) {
+        let mut buf= [0u8; 5];
+        let conn_reset_frame = Frame::ConnectionReset {
+            connection_id,
+        };
+
+        let mut d = octets::OctetsMut::with_slice(&mut buf);
+
+        conn_reset_frame.encode(&mut d).unwrap();
+
+        self.record_layer.control_messages.push_back(buf.to_vec());
+        
+    }
+    
+    pub(crate) fn send_remove_address(&mut self, address_id: u8) {
+        let mut buf= [0u8; 2];
+        let remove_add_frame = Frame::RemoveAddress {
+            address_id
+        };
+
+        let mut d = octets::OctetsMut::with_slice(&mut buf);
+
+        remove_add_frame.encode(&mut d).unwrap();
+
+        self.record_layer.control_messages.push_back(buf.to_vec());
+    }
+    
+    
 
     pub(crate) fn send_ack(&mut self, chunk_num: u64, stream_id: u64) -> Option<OutboundOpaqueMessage>{
         let mut ack = vec![0u8; 17];

@@ -1,8 +1,9 @@
 use alloc::boxed::Box;
 use core::num::NonZeroU64;
-
-
+use std::collections::VecDeque;
 use std::prelude::rust_2015::ToString;
+use std::prelude::v1::Vec;
+use std::vec;
 use crate::crypto::cipherx::{HeaderProtector, InboundOpaqueMessage, MessageDecrypter, MessageEncrypter};
 use crate::error::Error;
 #[cfg(feature = "logging")]
@@ -38,6 +39,7 @@ pub struct RecordLayer {
     // id of currently used stream
     stream_in_use: u32,
     pub streams: StreamMap,
+    pub control_messages: VecDeque<Vec<u8>>,
     has_decrypted: bool,
 
 
@@ -62,6 +64,7 @@ impl RecordLayer {
             message_decrypter: <dyn MessageDecrypter>::invalid(),
             streams: StreamMap::new(),
             /*is_handshaking: true,*/
+            control_messages: Default::default(),
             has_decrypted: false,
             encrypt_state: DirectionState::Invalid,
             decrypt_state: DirectionState::Invalid,
@@ -71,6 +74,10 @@ impl RecordLayer {
             header_decrypter: Default::default(),
             early_data_requested: false,
         }
+    }
+    
+    pub fn control_is_empty(&self) -> bool {
+        self.control_messages.is_empty()
     }
 
     /// Decrypt a TLS message.
