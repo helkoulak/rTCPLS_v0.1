@@ -8,7 +8,7 @@ use std::prelude::rust_2018::ToString;
 use std::vec;
 
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_SIZE, STREAM_ID_SIZE};
+use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, OFFSET_SIZE, STREAM_ID_SIZE};
 use crate::recvbuf::RecvBufMap;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tcpls::frame::{Frame, TcplsHeader, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE};
@@ -271,14 +271,18 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         //Write payload in output buffer
         payload.extend_from_chunks(&msg.payload);
         //Write TCPLS header
-        payload.as_mut()[0] = (tcpls_header.chunk_num >> 24) as u8;
-        payload.as_mut()[1] = (tcpls_header.chunk_num >> 16) as u8;
-        payload.as_mut()[2] = (tcpls_header.chunk_num >> 8) as u8;
-        payload.as_mut()[3] = (tcpls_header.chunk_num & 0xff) as u8;
-        payload.as_mut()[4] = (tcpls_header.stream_id >> 24) as u8;
-        payload.as_mut()[5] = (tcpls_header.stream_id >> 16) as u8;
-        payload.as_mut()[6] = (tcpls_header.stream_id >> 8) as u8;
-        payload.as_mut()[7] = (tcpls_header.stream_id & 0xff) as u8;
+        payload.as_mut()[0] = (tcpls_header.offset >> 56) as u8;
+        payload.as_mut()[1] = (tcpls_header.offset >> 48) as u8;
+        payload.as_mut()[2] = (tcpls_header.offset >> 40) as u8;
+        payload.as_mut()[3] = (tcpls_header.offset >> 32) as u8;
+        payload.as_mut()[4] = (tcpls_header.offset >> 24) as u8;
+        payload.as_mut()[5] = (tcpls_header.offset >> 16) as u8;
+        payload.as_mut()[6] = (tcpls_header.offset >> 8) as u8;
+        payload.as_mut()[7] = (tcpls_header.offset & 0xff) as u8;
+        payload.as_mut()[8] = (tcpls_header.stream_id >> 24) as u8;
+        payload.as_mut()[9] = (tcpls_header.stream_id >> 16) as u8;
+        payload.as_mut()[10] = (tcpls_header.stream_id >> 8) as u8;
+        payload.as_mut()[11] = (tcpls_header.stream_id & 0xff) as u8;
 
         // Write frame header and type
         match frame_header {
@@ -307,7 +311,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         // Encrypt sample AES(sample) and XOR with TCPLS header
         for (i, byte) in header_encrypter.generate_mask(sample).into_iter().enumerate(){
             payload.as_mut_tcpls_header()[i] ^= byte;
-            if i == 7 {break}
+            if i == 11 {break}
         }
 
         Ok(OutboundOpaqueMessage::new(
@@ -375,10 +379,10 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         app_bufs: &'a mut RecvBufMap,
         header_decrypted: bool,
         header_decrypter: &mut HeaderProtector,
-    ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
+    ) -> Result<(InboundPlainMessage<'a>, u64, u64, u32), Error> {
 
         let stream_id: u32;
-        let chunk_num: u32;
+        let offset: u64;
 
         let payload = &mut msg.payload;
 
@@ -396,15 +400,15 @@ impl MessageDecrypter for Tls13MessageDecrypter {
                 // Calculate hash(sample) XOR TCPLS header
                 for (i, byte) in header_decrypter.generate_mask(sample).into_iter().enumerate(){
                     payload[..TCPLS_HEADER_SIZE][i] ^= byte;
-                    if i == 7 {break}
+                    if i == 11 {break}
                 }
             },
         }
 
-        chunk_num = u32::from_be_bytes(payload[..CHUNK_NUM_SIZE]
+        offset = u64::from_be_bytes(payload[..OFFSET_SIZE]
             .try_into()
             .unwrap());
-        stream_id = u32::from_be_bytes(payload[STREAM_ID_SIZE..TCPLS_HEADER_SIZE]
+        stream_id = u32::from_be_bytes(payload[OFFSET_SIZE..TCPLS_HEADER_SIZE]
             .try_into()
             .unwrap());
 
@@ -416,11 +420,11 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         let recv_buf = app_bufs.get_or_create(stream_id as u64, None);
 
 
-        if recv_buf.next_recv_pkt_num != chunk_num {
+        if recv_buf.next_offset != offset {
             return Err(Error::General("Record out of order".to_string()));
         }
 
-        recv_buf.next_recv_pkt_num += 1;
+        
         // output buffer must be at least as big as the input buffer
         if recv_buf.capacity() < payload.len() {
             return Err(Error::General("Buffer too short".to_string()));
@@ -438,10 +442,14 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             version[1],
             (payload.len() >> 8) as u8,
             (payload.len() & 0xff) as u8,
-            (chunk_num >> 24) as u8,
-            (chunk_num >> 16) as u8,
-            (chunk_num >> 8) as u8,
-            (chunk_num & 0xff) as u8,
+            (offset >> 56) as u8,
+            (offset >> 48) as u8,
+            (offset >> 40) as u8,
+            (offset >> 32) as u8,
+            (offset >> 24) as u8,
+            (offset >> 16) as u8,
+            (offset >> 8) as u8,
+            (offset & 0xff) as u8,
             (stream_id >> 24) as u8,
             (stream_id >> 16) as u8,
             (stream_id >> 8) as u8,
@@ -476,7 +484,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
 
         let current_offset = recv_buf.offset;
 
-        recv_buf.highest_record_sn_received = chunk_num;
+        recv_buf.highest_offset_received = offset;
         recv_buf.last_decrypted = payload_len_no_type;
         recv_buf.total_decrypted += payload_len_no_type;
         recv_buf.offset += payload_len_no_type as u64;
@@ -495,7 +503,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
                 recv_buf.get_mut_at_index(recv_buf.offset as usize, payload_len_no_type)
             },
 
-        }).into_plain_message(),seq , chunk_num, stream_id))
+        }).into_plain_message(), seq, offset, stream_id))
 
     }
 

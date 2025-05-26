@@ -24,9 +24,7 @@ pub(crate) struct ChunkVecBuffer {
     not_acked: BTreeMap<u64, OutboundTcplsMessage>,
     limit: Option<usize>,
     /// where the next chunk will be appended
-    current_offset: u64,
-    /// The offset immediately behind "current_offset"
-    previous_offset: u64,
+    pub(crate) current_offset: u64,
     pub(crate) fin: u8,
 
 }
@@ -51,7 +49,6 @@ impl ChunkVecBuffer {
     }*/
     #[inline]
     pub(crate)  fn advance_offset(&mut self, added: u64) {
-        self.previous_offset = self.current_offset;
         self.current_offset += added;
     }
 

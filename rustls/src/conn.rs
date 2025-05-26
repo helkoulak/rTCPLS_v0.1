@@ -923,7 +923,7 @@ impl<Data> ConnectionCore<Data> {
                     app_buffer.offset -= STREAM_FRAME_HEADER_SIZE as u64;
                     app_buffer.total_decrypted = 0;
                     if self.common_state.enable_ack {
-                        match self.common_state.send_ack(app_buffer.highest_record_sn_received as u64, app_buffer.id) {
+                        match self.common_state.send_ack(app_buffer.highest_offset_received, app_buffer.id) {
                             Some(enc_ack) =>
                                 tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_ack.encode()).unwrap(),
                             None => {0},

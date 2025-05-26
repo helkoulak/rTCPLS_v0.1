@@ -331,7 +331,7 @@ impl MessageEncrypter for GcmMessageEncrypter {
         payload_len + GCM_EXPLICIT_NONCE_LEN + self.enc_key.algorithm().tag_len()
     }
 
-    fn encrypt_tcpls(&mut self, _msg: OutboundPlainMessage, _seq: u64, _stream_id: u32, _tcpls_header: &TcplsHeader, _frame_header: Option<Frame>, _header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt_tcpls(&mut self, msg: OutboundPlainMessage, seq: u64, stream_id: u32, tcpls_header: &TcplsHeader, frame_header: Option<Frame>, header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
         todo!()
     }
 
@@ -343,9 +343,9 @@ impl MessageEncrypter for GcmMessageEncrypter {
         todo!()
     }
 
-    fn increase_write_seq(&mut self, _stream_id: u32){todo!()}
+    fn increase_write_seq(&mut self, stream_id: u64){todo!()}
 
-    fn get_write_seq(&self, _stream_id: u32) -> u64{todo!()}
+    fn get_write_seq(&self, stream_id: u64) -> u64{todo!()}
 
     fn reset_write_seq(&mut self){todo!()}
 
@@ -444,7 +444,7 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         payload_len + self.enc_key.algorithm().tag_len()
     }
 
-    fn encrypt_tcpls(&mut self, _msg: OutboundPlainMessage, _seq: u64, _stream_id: u32, _tcpls_header: &TcplsHeader, _frame_header: Option<Frame>, _header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt_tcpls(&mut self, msg: OutboundPlainMessage, seq: u64, stream_id: u64, tcpls_header: &TcplsHeader, frame_header: Option<Frame>, header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
         todo!()
     }
 
@@ -456,8 +456,8 @@ impl MessageEncrypter for ChaCha20Poly1305MessageEncrypter {
         todo!()
     }
 
-    fn increase_write_seq(&mut self, _stream_id: u32){todo!()}
-    fn get_write_seq(&self, _stream_id: u32) -> u64{todo!()}
+    fn increase_write_seq(&mut self, stream_id: u64){todo!()}
+    fn get_write_seq(&self, stream_id: u64) -> u64{todo!()}
     fn reset_write_seq(&mut self){todo!()}
     fn get_or_create_write_seq(&mut self, _stream_id: u32) -> u64{todo!()}
 

@@ -14,7 +14,7 @@ pub struct RecvBuf {
     /// where the next chunk will be appended
     pub offset: u64,
 
-    pub highest_record_sn_received: u32,
+    pub highest_offset_received: u64,
 
     /// Length of last decrypted data chunk
     pub last_decrypted: usize,
@@ -26,7 +26,7 @@ pub struct RecvBuf {
     /// application.
     consumed: usize,
 
-    pub next_recv_pkt_num: u32,
+    pub next_offset: u64,
 
     pub last_data_type_decrypted: u8,
 
@@ -170,7 +170,7 @@ impl RecvBuf {
             *byte = 0;
         }
         self.offset = 0;
-        self.next_recv_pkt_num = 0;
+        self.next_offset = 0;
         self.consumed = 0;
         self.last_decrypted = 0;
         self.total_decrypted = 0;
@@ -402,7 +402,7 @@ mod test {
         let mut stream = RecvBuf::new(0, Some(DEFAULT_BUFFER_LIMIT));
         stream.data.copy_from_slice(vector.as_slice());
         stream.last_decrypted = 1234;
-        stream.next_recv_pkt_num = 95475;
+        stream.next_offset = 95475;
 
         stream.consumed = 54455;
         stream.offset = 412;
@@ -411,7 +411,7 @@ mod test {
 
         assert!(stream.data.iter().all(|&x| x == 0));
         assert_eq!(stream.offset, 0);
-        assert_eq!(stream.next_recv_pkt_num, 0);
+        assert_eq!(stream.next_offset, 0);
         assert_eq!(stream.consumed, 0);
         assert_eq!(stream.last_decrypted, 0);
     }

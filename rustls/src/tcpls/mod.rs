@@ -273,7 +273,7 @@ impl TcplsSession {
         let mut done = 0;
        /* let mut chunk_num: usize = 0;*/
 
-        let mut data_to_send= Vec::new();
+        let mut data_to_send: Vec<u8> = Vec::new();
     if stream_ids.peek().is_some() {
         for id in stream_ids {
             match tls_conn.record_layer.streams.get_mut(id as u32) {

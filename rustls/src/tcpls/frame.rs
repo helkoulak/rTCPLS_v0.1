@@ -4,7 +4,7 @@ use crate::{Error, InvalidMessage};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
 
 /// chunk_num = 4 Bytes + Offset_step = 2 Bytes + Stream Id = 2 Bytes.
-pub const TCPLS_HEADER_SIZE: usize = 8;
+pub const TCPLS_HEADER_SIZE: usize = 12;
 
 pub const SAMPLE_PAYLOAD_LENGTH: usize = 16;
 
@@ -324,14 +324,14 @@ fn parse_stream_change_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 }
 #[derive(Default, PartialEq, Debug)]
 pub struct TcplsHeader {
-    pub chunk_num: u32,
+    pub offset: u64,
     pub stream_id: u32,
 }
 
 impl TcplsHeader {
-    pub fn new(chunk_num: u32, stream_id: u32) -> Self {
+    pub fn new(offset: u64, stream_id: u32) -> Self {
         Self {
-            chunk_num,
+            offset,
             stream_id,
         }
     }
@@ -340,7 +340,7 @@ impl TcplsHeader {
         &mut self,
         b: &mut octets::OctetsMut,
     ) -> Result<(), Error> {
-        b.put_u32(self.chunk_num).unwrap();
+        b.put_u64(self.offset).unwrap();
         b.put_u32(self.stream_id).unwrap();
 
         Ok(())
@@ -348,15 +348,15 @@ impl TcplsHeader {
 
     pub fn decode_tcpls_header(b: &mut octets::Octets) -> Self {
         Self{
-            chunk_num: b.get_u32().unwrap(),
+            offset: b.get_u64().unwrap(),
             stream_id: b.get_u32().unwrap(),
         }
     }
 
     pub fn decode_tcpls_header_from_slice(b: &[u8]) -> Self {
         Self{
-            chunk_num: u32::from_be_bytes(b[0..4].try_into().unwrap()),
-            stream_id: u32::from_be_bytes(b[4..8].try_into().unwrap()),
+            offset: u64::from_be_bytes(b[0..7].try_into().unwrap()),
+            stream_id: u32::from_be_bytes(b[7..11].try_into().unwrap()),
         }
     }
 

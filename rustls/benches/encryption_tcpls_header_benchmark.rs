@@ -90,10 +90,10 @@ fn build_aad_inner(payload_len: usize, header: &TcplsHeader, version: [u8; 2]) -
         version[1],
         (payload_len >> 8) as u8,
         (payload_len & 0xff) as u8,
-        (header.chunk_num >> 24) as u8,
-        (header.chunk_num >> 16) as u8,
-        (header.chunk_num >> 8) as u8,
-        (header.chunk_num & 0xff) as u8,
+        (header.offset >> 24) as u8,
+        (header.offset >> 16) as u8,
+        (header.offset >> 8) as u8,
+        (header.offset & 0xff) as u8,
         (header.stream_id >> 24) as u8,
         (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
@@ -103,10 +103,10 @@ fn build_aad_inner(payload_len: usize, header: &TcplsHeader, version: [u8; 2]) -
 
 fn write_header(tcpls_header: &TcplsHeader, payload: &mut PrefixedPayload) {
     let header_bytes = [
-        (tcpls_header.chunk_num >> 24) as u8,
-        (tcpls_header.chunk_num >> 16) as u8,
-        (tcpls_header.chunk_num >> 8) as u8,
-        (tcpls_header.chunk_num & 0xff) as u8,
+        (tcpls_header.offset >> 24) as u8,
+        (tcpls_header.offset >> 16) as u8,
+        (tcpls_header.offset >> 8) as u8,
+        (tcpls_header.offset & 0xff) as u8,
         (tcpls_header.stream_id >> 24) as u8,
         (tcpls_header.stream_id >> 16) as u8,
         (tcpls_header.stream_id >> 8) as u8,
@@ -219,7 +219,7 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
     let mut header_protection_key = [0u8; 16];
     let mut iv = [0u8; 12];
     let enc_tcpls_header = TcplsHeader {
-        chunk_num: 636873673,
+        offset: 636873673,
         stream_id: 64684,
 
     };

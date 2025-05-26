@@ -243,6 +243,7 @@ pub(crate) const STREAM_ID_OFFSET: usize = 9;
 
 pub(crate) const STREAM_ID_SIZE: usize = 4;
 
-pub(crate) const CHUNK_NUM_OFFSET: usize = 5;
+/// The offset of TCPLS Header's offset field.
+pub(crate) const OFFSET_OFFSET: usize = 5;
 
-pub(crate) const CHUNK_NUM_SIZE: usize = 4;
+pub(crate) const OFFSET_SIZE: usize = 8;

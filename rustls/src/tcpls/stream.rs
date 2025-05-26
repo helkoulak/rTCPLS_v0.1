@@ -48,8 +48,6 @@ pub struct Stream {
     /// buffers encrypted TCPLS records that to be sent on the TCP socket
     pub(crate) send: ChunkVecBuffer,
 
-    pub next_snd_pkt_num: u32,
-
     /// Dictates tcp connection to send on in case a record was partially sent in previous sending trial
     pub(crate) conn_to_use: Option<u64>,
 
@@ -61,7 +59,6 @@ impl Stream {
         Self{
             id,
             send: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
-            next_snd_pkt_num: 0,
             conn_to_use: None,
             conn_shares: None,
         }
@@ -91,11 +88,10 @@ impl Stream {
     #[inline]
     pub fn build_header(&mut self, len: u16) -> TcplsHeader {
         let header = TcplsHeader {
-            chunk_num: self.next_snd_pkt_num,
+            offset: self.send.current_offset,
             stream_id: self.id,
         };
-
-        self.next_snd_pkt_num += 1;
+        
         self.send.advance_offset(len as u64);
         header
     }

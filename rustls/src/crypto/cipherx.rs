@@ -298,7 +298,7 @@ pub fn make_tls13_aad(payload_len: usize) -> [u8; 5] {
 }
 
 #[inline]
-pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13] {
+pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 17] {
     let version = ProtocolVersion::TLSv1_2.to_array();
     [
         ContentType::ApplicationData.into(),
@@ -307,10 +307,14 @@ pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13
         version[1],
         (payload_len >> 8) as u8,
         (payload_len & 0xff) as u8,
-        (header.chunk_num >> 24) as u8,
-        (header.chunk_num >> 16) as u8,
-        (header.chunk_num >> 8) as u8,
-        (header.chunk_num & 0xff) as u8,
+        (header.offset >> 56) as u8,
+        (header.offset >> 48) as u8,
+        (header.offset >> 40) as u8,
+        (header.offset >> 32) as u8,
+        (header.offset >> 24) as u8,
+        (header.offset >> 16) as u8,
+        (header.offset >> 8) as u8,
+        (header.offset & 0xff) as u8,
         (header.stream_id >> 24) as u8,
         (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
@@ -520,7 +524,7 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         payload_len
     }
 
-    fn encrypt_tcpls(&mut self, _msg: OutboundPlainMessage, _seq: u64, _stream_id: u32, _tcpls_header: &TcplsHeader, _frame_header: Option<Frame>, _header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt_tcpls(&mut self, msg: OutboundPlainMessage, seq: u64, stream_id: u32, tcpls_header: &TcplsHeader, frame_header: Option<Frame>, header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
         todo!()
     }
 

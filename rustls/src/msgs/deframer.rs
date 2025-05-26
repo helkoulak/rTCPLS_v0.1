@@ -16,7 +16,7 @@ use std::collections::hash_map;
 use std::io;
 
 use super::codec::Codec;
-use crate::msgs::message::{CHUNK_NUM_OFFSET, CHUNK_NUM_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
+use crate::msgs::message::{OFFSET_OFFSET, OFFSET_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
 use core::ptr;
 
 
@@ -294,7 +294,7 @@ impl MessageDeframer {
                             .try_into()
                             .unwrap()))
                     {
-                        if rev_buf.next_recv_pkt_num == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
+                        if rev_buf.next_offset == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + OFFSET_OFFSET..unrange.start + OFFSET_OFFSET + OFFSET_SIZE]
                             .try_into()
                             .unwrap()) {
                             pos = Some(unrange.start);
