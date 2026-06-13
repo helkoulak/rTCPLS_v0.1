@@ -1,7 +1,6 @@
-
-use alloc::vec::Vec;
 use crate::error::InvalidMessage;
 use crate::msgs::codec::{Codec, Reader};
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 pub struct ChangeCipherSpecPayload;
@@ -17,7 +16,6 @@ impl Codec<'_> for ChangeCipherSpecPayload {
             return Err(InvalidMessage::InvalidCcs);
         }
 
-        r.expect_empty("ChangeCipherSpecPayload")
-            .map(|_| Self {})
+        r.expect_empty("ChangeCipherSpecPayload").map(|_| Self {})
     }
 }

@@ -1,4 +1,3 @@
-
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -28,7 +27,6 @@ use crate::msgs::handshake::{
     CertificateChain, ClientDhParams, ClientEcdhParams, ClientKeyExchangeParams,
     HandshakeMessagePayload, HandshakePayload, NewSessionTicketPayload, ServerKeyExchangeParams,
     SessionId,
-
 };
 use crate::msgs::message::{Message, MessagePayload};
 use crate::msgs::persist;
@@ -43,7 +41,6 @@ mod server_hello {
     use super::*;
     use crate::msgs::enums::ExtensionType;
     use crate::msgs::handshake::{HasServerExtensions, ServerHelloPayload};
-
 
     pub(in crate::client) struct CompleteServerHelloHandling {
         pub(in crate::client) config: Arc<ClientConfig>,
@@ -61,7 +58,6 @@ mod server_hello {
             suite: &'static Tls12CipherSuite,
             server_hello: &ServerHelloPayload,
             tls13_supported: bool,
-
         ) -> hs::NextStateOrError<'static> {
             self.randoms
                 .server
@@ -72,7 +68,6 @@ mod server_hello {
             // public values and don't require constant time comparison
             let has_downgrade_marker = self.randoms.server[24..] == tls12::DOWNGRADE_SENTINEL;
             if tls13_supported && has_downgrade_marker {
-
                 return Err({
                     cx.common.send_fatal_alert(
                         AlertDescription::IllegalParameter,
@@ -112,7 +107,6 @@ mod server_hello {
                 debug!("Server may staple OCSP response");
             }
 
-
             // See if we're successfully resuming.
             if let Some(resuming) = self.resuming_session {
                 if resuming.session_id == server_hello.session_id {
@@ -135,18 +129,13 @@ mod server_hello {
                         &secrets.randoms.client,
                         &secrets.master_secret,
                     );
-                    cx.common
-                        .start_encryption_tls12(&secrets, Side::Client);
+                    cx.common.start_encryption_tls12(&secrets, Side::Client);
 
                     // Since we're resuming, we verified the certificate and
                     // proof of possession in the prior session.
 
-                    cx.common.peer_certificates = Some(
-                        resuming
-                            .server_cert_chain()
-                            .clone()
-                            .into_owned(),
-                    );
+                    cx.common.peer_certificates =
+                        Some(resuming.server_cert_chain().clone().into_owned());
                     let cert_verified = verify::ServerCertVerified::assertion();
                     let sig_verified = verify::HandshakeSignatureValid::assertion();
 
@@ -240,7 +229,6 @@ impl State<ClientConnectionData> for ExpectCertificate {
                 must_issue_new_ticket: self.must_issue_new_ticket,
             }))
         } else {
-
             let server_cert = ServerCertDetails::new(server_cert_chain, vec![]);
 
             Ok(Box::new(ExpectServerKx {
@@ -448,15 +436,12 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
         )?;
         self.transcript.add_message(&m);
 
-
-        let kx = opaque_kx
-            .unwrap_given_kxa(self.suite.kx)
-            .ok_or_else(|| {
-                cx.common.send_fatal_alert(
-                    AlertDescription::DecodeError,
-                    InvalidMessage::MissingKeyExchange,
-                )
-            })?;
+        let kx = opaque_kx.unwrap_given_kxa(self.suite.kx).ok_or_else(|| {
+            cx.common.send_fatal_alert(
+                AlertDescription::DecodeError,
+                InvalidMessage::MissingKeyExchange,
+            )
+        })?;
 
         // Save the signature and signed parameters for later verification.
         let mut kx_params = Vec::new();
@@ -489,7 +474,6 @@ impl State<ClientConnectionData> for ExpectServerKx<'_> {
             must_issue_new_ticket: self.must_issue_new_ticket,
         }))
     }
-
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         Box::new(ExpectServerKx {
@@ -552,7 +536,6 @@ fn emit_client_kx(
 
     transcript.add_message(&ckx);
     common.send_msg(ckx, false, DEFAULT_STREAM_ID);
-
 }
 
 fn emit_certverify(
@@ -589,7 +572,6 @@ fn emit_ccs(common: &mut CommonState) {
     };
 
     common.send_msg(ccs, false, DEFAULT_STREAM_ID);
-
 }
 
 fn emit_finished(
@@ -611,7 +593,6 @@ fn emit_finished(
 
     transcript.add_message(&f);
     common.send_msg(f, true, DEFAULT_STREAM_ID);
-
 }
 
 struct ServerKxDetails {
@@ -756,9 +737,7 @@ impl State<ClientConnectionData> for ExpectCertificateRequest<'_> {
 
         const NO_CONTEXT: Option<Vec<u8>> = None; // TLS 1.2 doesn't use a context.
         let client_auth = ClientAuthDetails::resolve(
-            self.config
-                .client_auth_cert_resolver
-                .as_ref(),
+            self.config.client_auth_cert_resolver.as_ref(),
             Some(&certreq.canames),
             &certreq.sigschemes,
             NO_CONTEXT,
@@ -879,10 +858,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
                 &st.server_cert.ocsp_response,
                 now,
             )
-            .map_err(|err| {
-                cx.common
-                    .send_cert_verify_error_alert(err)
-            })?;
+            .map_err(|err| cx.common.send_cert_verify_error_alert(err))?;
 
         // 3.
         // Build up the contents of the signed message.
@@ -908,14 +884,10 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             st.config
                 .verifier
                 .verify_tls12_signature(&message, end_entity, sig)
-                .map_err(|err| {
-                    cx.common
-                        .send_cert_verify_error_alert(err)
-                })?
+                .map_err(|err| cx.common.send_cert_verify_error_alert(err))?
         };
 
         cx.common.peer_certificates = Some(st.server_cert.cert_chain.into_owned());
-
 
         // 4.
         if let Some(client_auth) = &st.client_auth {
@@ -948,9 +920,7 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
         let mut transcript = st.transcript;
         emit_client_kx(&mut transcript, st.suite.kx, cx.common, kx.pub_key());
         // Note: EMS handshake hash only runs up to ClientKeyExchange.
-        let ems_seed = st
-            .using_ems
-            .then(|| transcript.current_hash());
+        let ems_seed = st.using_ems.then(|| transcript.current_hash());
 
         // 5c.
         if let Some(ClientAuthDetails::Verify { signer, .. }) = &st.client_auth {
@@ -974,11 +944,8 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             &secrets.randoms.client,
             &secrets.master_secret,
         );
-        cx.common
-            .start_encryption_tls12(&secrets, Side::Client);
-        cx.common
-            .record_layer
-            .start_encrypting();
+        cx.common.start_encryption_tls12(&secrets, Side::Client);
+        cx.common.record_layer.start_encrypting();
 
         // 6.
         emit_finished(&secrets, &mut transcript, cx.common);
@@ -1029,7 +996,6 @@ impl State<ClientConnectionData> for ExpectServerDone<'_> {
             must_issue_new_ticket: self.must_issue_new_ticket,
         })
     }
-
 }
 
 struct ExpectNewTicket {
@@ -1120,9 +1086,7 @@ impl State<ClientConnectionData> for ExpectCcs {
 
         // Note: msgs layer validates trivial contents of CCS.
 
-        cx.common
-            .record_layer
-            .start_decrypting();
+        cx.common.record_layer.start_decrypting();
 
         Ok(Box::new(ExpectFinished {
             config: self.config,
@@ -1142,7 +1106,6 @@ impl State<ClientConnectionData> for ExpectCcs {
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
     }
-
 }
 
 struct ExpectFinished {
@@ -1193,10 +1156,7 @@ impl ExpectFinished {
             self.session_id,
             ticket,
             self.secrets.master_secret(),
-            cx.common
-                .peer_certificates
-                .clone()
-                .unwrap_or_default(),
+            cx.common.peer_certificates.clone().unwrap_or_default(),
             now,
             lifetime,
             self.using_ems,
@@ -1218,7 +1178,6 @@ impl State<ClientConnectionData> for ExpectFinished {
     where
         Self: 'm,
     {
-
         let mut st = *self;
         let finished =
             require_handshake_msg!(m, HandshakeType::Finished, HandshakePayload::Finished)?;
@@ -1233,7 +1192,6 @@ impl State<ClientConnectionData> for ExpectFinished {
         // Constant-time verification of this is relatively unimportant: they only
         // get one chance.  But it can't hurt.
         let _fin_verified =
-
             match ConstantTimeEq::ct_eq(&expect_verify_data[..], finished.bytes()).into() {
                 true => verify::FinishedMessageVerified::assertion(),
                 false => {
@@ -1250,14 +1208,11 @@ impl State<ClientConnectionData> for ExpectFinished {
 
         if st.resuming {
             emit_ccs(cx.common);
-            cx.common
-                .record_layer
-                .start_encrypting();
+            cx.common.record_layer.start_encrypting();
             emit_finished(&st.secrets, &mut st.transcript, cx.common);
         }
 
-        cx.common
-            .start_traffic(&mut cx.sendable_plaintext);
+        cx.common.start_traffic(&mut cx.sendable_plaintext);
 
         Ok(Box::new(ExpectTraffic {
             secrets: st.secrets,
@@ -1282,7 +1237,6 @@ impl State<ClientConnectionData> for ExpectFinished {
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
     }
-
 }
 
 // -- Traffic transit state --
@@ -1294,7 +1248,6 @@ struct ExpectTraffic {
 }
 
 impl State<ClientConnectionData> for ExpectTraffic {
-
     fn handle<'m>(
         self: Box<Self>,
         cx: &mut ClientContext<'_>,
@@ -1304,9 +1257,7 @@ impl State<ClientConnectionData> for ExpectTraffic {
         Self: 'm,
     {
         match m.payload {
-            MessagePayload::ApplicationData(payload) => cx
-                .common
-                .take_received_plaintext(payload),
+            MessagePayload::ApplicationData(payload) => cx.common.take_received_plaintext(payload),
             payload => {
                 return Err(inappropriate_message(
                     &payload,
@@ -1323,19 +1274,15 @@ impl State<ClientConnectionData> for ExpectTraffic {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-        self.secrets
-            .export_keying_material(output, label, context);
+        self.secrets.export_keying_material(output, label, context);
         Ok(())
     }
 
-
     fn extract_secrets(&self) -> Result<PartiallyExtractedSecrets, Error> {
-        self.secrets
-            .extract_secrets(Side::Client)
+        self.secrets.extract_secrets(Side::Client)
     }
 
     fn into_owned(self: Box<Self>) -> hs::NextState<'static> {
         self
     }
-
 }

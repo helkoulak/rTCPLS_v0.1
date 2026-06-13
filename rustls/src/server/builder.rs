@@ -1,4 +1,3 @@
-
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -74,11 +73,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ServerConfig, Error> {
-        let private_key = self
-            .state
-            .provider
-            .key_provider
-            .load_private_key(key_der)?;
+        let private_key = self.state.provider.key_provider.load_private_key(key_der)?;
         let resolver = handy::AlwaysResolvesChain::new(private_key, CertificateChain(cert_chain));
         Ok(self.with_cert_resolver(Arc::new(resolver)))
     }
@@ -100,11 +95,7 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
         key_der: PrivateKeyDer<'static>,
         ocsp: Vec<u8>,
     ) -> Result<ServerConfig, Error> {
-        let private_key = self
-            .state
-            .provider
-            .key_provider
-            .load_private_key(key_der)?;
+        let private_key = self.state.provider.key_provider.load_private_key(key_der)?;
         let resolver = handy::AlwaysResolvesChain::new_with_extras(
             private_key,
             CertificateChain(cert_chain),
@@ -117,7 +108,6 @@ impl ConfigBuilder<ServerConfig, WantsServerCert> {
     /// Sets a custom [`ResolvesServerCert`].
     pub fn with_cert_resolver(self, cert_resolver: Arc<dyn ResolvesServerCert>) -> ServerConfig {
         ServerConfig {
-
             provider: self.state.provider,
             verifier: self.state.verifier,
             cert_resolver,

@@ -57,11 +57,7 @@ impl HeaderProtectionKey {
         let pn_len = (first_plain & 0x03) as usize + 1;
 
         *first ^= first_mask & bits;
-        for (dst, m) in packet_number
-            .iter_mut()
-            .zip(pn_mask)
-            .take(pn_len)
-        {
+        for (dst, m) in packet_number.iter_mut().zip(pn_mask).take(pn_len) {
             *dst ^= m;
         }
 

@@ -79,11 +79,8 @@ impl TestPki {
         server_ee_params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
         server_ee_params.alg = alg;
         let server_cert = rcgen::Certificate::from_params(server_ee_params).unwrap();
-        let server_cert_der = CertificateDer::from(
-            server_cert
-                .serialize_der_with_signer(&ca_cert)
-                .unwrap(),
-        );
+        let server_cert_der =
+            CertificateDer::from(server_cert.serialize_der_with_signer(&ca_cert).unwrap());
         let server_key_der =
             PrivatePkcs8KeyDer::from(server_cert.serialize_private_key_der()).into();
         Self {

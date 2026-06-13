@@ -14,9 +14,9 @@ pub(crate) mod handshake;
 pub(crate) mod message;
 pub(crate) mod persist;
 
+pub mod ffdhe_groups;
 #[cfg(test)]
 mod handshake_test;
-pub mod ffdhe_groups;
 
 #[cfg(test)]
 mod message_test;

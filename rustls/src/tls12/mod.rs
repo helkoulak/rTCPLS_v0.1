@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -64,7 +63,6 @@ impl Tls12CipherSuite {
             .collect()
     }
 
-
     /// Return `true` if this is backed by a FIPS-approved implementation.
     ///
     /// This means all the constituent parts that do cryptography return `true` for `fips()`.
@@ -102,7 +100,6 @@ pub(crate) struct ConnectionSecrets {
 
 impl ConnectionSecrets {
     pub(crate) fn from_key_exchange(
-
         kx: Box<dyn crypto::ActiveKeyExchange>,
         peer_pub_key: &[u8],
         ems_seed: Option<hash::Output>,
@@ -123,20 +120,17 @@ impl ConnectionSecrets {
             ),
         };
 
-
         // The API contract for for_key_exchange is that the caller guarantees `label` and `seed`
         // slice parameters are non-empty.
         // `label` is guaranteed non-empty because it's assigned from a `&str` above.
         // `seed.as_ref()` is guaranteed non-empty by documentation on the AsRef impl.
-        ret.suite
-            .prf_provider
-            .for_key_exchange(
-                &mut ret.master_secret,
-                kx,
-                peer_pub_key,
-                label.as_bytes(),
-                seed.as_ref(),
-            )?;
+        ret.suite.prf_provider.for_key_exchange(
+            &mut ret.master_secret,
+            kx,
+            peer_pub_key,
+            label.as_bytes(),
+            seed.as_ref(),
+        )?;
 
         Ok(ret)
     }
@@ -151,11 +145,9 @@ impl ConnectionSecrets {
             suite,
             master_secret: [0u8; 48],
         };
-        ret.master_secret
-            .copy_from_slice(master_secret);
+        ret.master_secret.copy_from_slice(master_secret);
         ret
     }
-
 
     /// Make a `MessageCipherPair` based on the given supported ciphersuite `self.suite`,
     /// and the session's `secrets`.
@@ -186,7 +178,6 @@ impl ConnectionSecrets {
         };
 
         (
-
             self.suite
                 .aead_alg
                 .decrypter(AeadKey::new(read_key), read_iv),
@@ -197,7 +188,6 @@ impl ConnectionSecrets {
     }
 
     fn make_key_block(&self) -> Vec<u8> {
-
         let shape = self.suite.aead_alg.key_block_shape();
 
         let len = (shape.enc_key_len + shape.fixed_iv_len) * 2 + shape.explicit_nonce_len;
@@ -222,7 +212,6 @@ impl ConnectionSecrets {
         self.suite
     }
 
-
     pub(crate) fn master_secret(&self) -> &[u8] {
         &self.master_secret[..]
     }
@@ -236,7 +225,6 @@ impl ConnectionSecrets {
             label,
             handshake_hash.as_ref(),
         );
-
 
         out
     }
@@ -263,7 +251,6 @@ impl ConnectionSecrets {
             (context.len() as u16).encode(&mut randoms);
             randoms.extend_from_slice(context);
         }
-
 
         self.suite
             .prf_provider
@@ -299,7 +286,6 @@ impl ConnectionSecrets {
     }
 }
 
-
 impl Drop for ConnectionSecrets {
     fn drop(&mut self) {
         self.master_secret.zeroize();
@@ -312,7 +298,6 @@ enum Seed {
 }
 
 impl AsRef<[u8]> for Seed {
-
     /// This is guaranteed to return a non-empty slice.
     fn as_ref(&self) -> &[u8] {
         match self {
@@ -333,7 +318,6 @@ fn join_randoms(first: &[u8; 32], second: &[u8; 32]) -> [u8; 64] {
 
 type MessageCipherPair = (Box<dyn MessageDecrypter>, Box<dyn MessageEncrypter>);
 
-
 pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
     kx_algorithm: KeyExchangeAlgorithm,
     common: &mut CommonState,
@@ -351,7 +335,6 @@ pub(crate) fn decode_kx_params<'a, T: KxDecode<'a>>(
 }
 
 pub(crate) const DOWNGRADE_SENTINEL: [u8; 8] = [0x44, 0x4f, 0x57, 0x4e, 0x47, 0x52, 0x44, 0x01];
-
 
 test_for_each_provider! {
     use super::*;

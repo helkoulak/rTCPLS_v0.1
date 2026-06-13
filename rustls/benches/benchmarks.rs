@@ -1,4 +1,3 @@
-
 #![cfg(feature = "ring")]
 
 use bencher::{benchmark_group, benchmark_main, Bencher};

@@ -1,4 +1,3 @@
-
 use core::fmt::Debug;
 
 #[cfg(all(doc, feature = "std"))]

@@ -644,16 +644,12 @@ async fn run_bench<T: BenchStepper>(mut stepper: T, kind: BenchmarkKind) -> anyh
                 // connection and be ready for a new handshake, otherwise the client will start a
                 // handshake before the server is ready and the bytes will be fed to the old
                 // connection!)
-                stepper
-                    .sync_before_resumed_handshake()
-                    .await?;
+                stepper.sync_before_resumed_handshake().await?;
                 stepper.handshake().await?;
             }
         }
         BenchmarkKind::Transfer => {
-            stepper
-                .transmit_data(&mut endpoint)
-                .await?;
+            stepper.transmit_data(&mut endpoint).await?;
         }
     }
 
@@ -744,12 +740,7 @@ fn compare_results(
         };
     }
 
-    diffs.sort_by(|diff1, diff2| {
-        diff2
-            .diff_ratio
-            .abs()
-            .total_cmp(&diff1.diff_ratio.abs())
-    });
+    diffs.sort_by(|diff1, diff2| diff2.diff_ratio.abs().total_cmp(&diff1.diff_ratio.abs()));
 
     let mut diffs_with_cachegrind_diff = Vec::new();
     for diff in diffs {
@@ -798,13 +789,7 @@ fn print_report(result: &CompareResult) {
     if result.diffs.is_empty() {
         println!("_There are no instruction count differences_");
     } else {
-        table(
-            result
-                .diffs
-                .iter()
-                .map(|(diff, _)| diff),
-            true,
-        );
+        table(result.diffs.iter().map(|(diff, _)| diff), true);
         println!("<details>");
         println!("<summary>Details per scenario</summary>\n");
         for (diff, detailed_diff) in &result.diffs {

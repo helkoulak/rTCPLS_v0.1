@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
@@ -36,7 +35,6 @@ mod connection {
     use crate::msgs::handshake::{ClientExtension, ServerExtension};
 
     use crate::server::{ServerConfig, ServerConnectionData};
-
 
     /// A QUIC client or server connection.
     #[derive(Debug)]
@@ -119,12 +117,8 @@ mod connection {
             context: Option<&[u8]>,
         ) -> Result<T, Error> {
             match self {
-                Self::Client(conn) => conn
-                    .core
-                    .export_keying_material(output, label, context),
-                Self::Server(conn) => conn
-                    .core
-                    .export_keying_material(output, label, context),
+                Self::Client(conn) => conn.core.export_keying_material(output, label, context),
+                Self::Server(conn) => conn.core.export_keying_material(output, label, context),
             }
         }
     }
@@ -215,8 +209,7 @@ mod connection {
 
     impl Debug for ClientConnection {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            f.debug_struct("quic::ClientConnection")
-                .finish()
+            f.debug_struct("quic::ClientConnection").finish()
         }
     }
 
@@ -315,8 +308,7 @@ mod connection {
 
     impl Debug for ServerConnection {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            f.debug_struct("quic::ServerConnection")
-                .finish()
+            f.debug_struct("quic::ServerConnection").finish()
         }
     }
 
@@ -359,11 +351,7 @@ mod connection {
             Some(DirectionalKeys::new(
                 suite,
                 suite.quic?,
-                self.core
-                    .common_state
-                    .quic
-                    .early_secret
-                    .as_ref()?,
+                self.core.common_state.quic.early_secret.as_ref()?,
                 self.core.common_state.quic.version,
             ))
         }
@@ -378,7 +366,7 @@ mod connection {
                 &mut self.deframer_buffer,
             )?;
             /*self.core
-                .process_new_packets(&mut self.deframer_buffer, &mut PlainBufsMap::default(), &mut RecvBufMap::new())?;*/
+            .process_new_packets(&mut self.deframer_buffer, &mut PlainBufsMap::default(), &mut RecvBufMap::new())?;*/
             Ok(())
         }
 
@@ -386,10 +374,7 @@ mod connection {
         ///
         /// When this returns `Some(_)`, the new keys must be used for future handshake data.
         pub fn write_hs(&mut self, buf: &mut Vec<u8>) -> Option<KeyChange> {
-            self.core
-                .common_state
-                .quic
-                .write_hs(buf)
+            self.core.common_state.quic.write_hs(buf)
         }
 
         /// Emit the TLS description code of a fatal alert, if one has arisen.
@@ -568,7 +553,6 @@ impl DirectionalKeys {
     }
 }
 
-
 /// All AEADs we support have 16-byte tags.
 const TAG_LEN: usize = 16;
 
@@ -640,7 +624,6 @@ pub trait HeaderProtectionKey: Send + Sync {
         sample: &[u8],
         first: &mut u8,
         packet_number: &mut [u8],
-
     ) -> Result<(), Error>;
 
     /// Removes QUIC Header Protection.
@@ -670,7 +653,6 @@ pub trait HeaderProtectionKey: Send + Sync {
         sample: &[u8],
         first: &mut u8,
         packet_number: &mut [u8],
-
     ) -> Result<(), Error>;
 
     /// Expected sample length for the key's algorithm
@@ -692,7 +674,6 @@ pub trait PacketKey: Send + Sync {
         packet_number: u64,
         header: &[u8],
         payload: &mut [u8],
-
     ) -> Result<Tag, Error>;
 
     /// Decrypt a QUIC packet
@@ -708,7 +689,6 @@ pub trait PacketKey: Send + Sync {
         packet_number: u64,
         header: &[u8],
         payload: &'a mut [u8],
-
     ) -> Result<&'a [u8], Error>;
 
     /// Tag length for the underlying AEAD algorithm
@@ -740,7 +720,6 @@ pub trait PacketKey: Send + Sync {
 /// Packet protection keys for bidirectional 1-RTT communication
 pub struct PacketKeySet {
     /// Encrypts outgoing packets
-
     pub local: Box<dyn PacketKey>,
     /// Decrypts incoming packets
     pub remote: Box<dyn PacketKey>,
@@ -790,8 +769,7 @@ impl<'a> KeyBuilder<'a> {
 
         let packet_iv =
             hkdf_expand_label(self.expander.as_ref(), self.version.packet_iv_label(), &[]);
-        self.alg
-            .packet_key(packet_key, packet_iv)
+        self.alg.packet_key(packet_key, packet_iv)
     }
 
     /// Derive header protection keys
@@ -802,8 +780,7 @@ impl<'a> KeyBuilder<'a> {
             self.version.header_key_label(),
             &[],
         );
-        self.alg
-            .header_protection_key(header_key)
+        self.alg.header_protection_key(header_key)
     }
 }
 

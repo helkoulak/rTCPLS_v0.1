@@ -20,9 +20,7 @@ fn verify_openssl3_available_internal() {
         }
         Ok(output) => {
             let version_str = std::str::from_utf8(&output.stdout).unwrap();
-            let parts = version_str
-                .split(' ')
-                .collect::<Vec<_>>();
+            let parts = version_str.split(' ').collect::<Vec<_>>();
             assert_eq!(
                 parts.first().copied(),
                 Some("OpenSSL"),
@@ -35,9 +33,7 @@ fn verify_openssl3_available_internal() {
                     panic!("Unexpected version response from OpenSSL: {version_str}")
                 });
             assert!(
-                major_version
-                    .parse::<usize>()
-                    .is_ok_and(|v| v >= 3),
+                major_version.parse::<usize>().is_ok_and(|v| v >= 3),
                 "OpenSSL 3+ is required for the tests here. The installed version is {version:?}"
             );
         }

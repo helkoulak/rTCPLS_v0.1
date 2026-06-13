@@ -1,8 +1,7 @@
-
+use crate::error::InvalidMessage;
 use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::mem;
-use crate::error::InvalidMessage;
 
 /// Wrapper over a slice of bytes that allows reading chunks from
 /// with the current position state held using a cursor.
@@ -180,7 +179,6 @@ pub trait Codec<'a>: Debug + Sized {
 }
 
 impl Codec<'_> for u8 {
-
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
@@ -240,7 +238,6 @@ impl Codec<'_> for u24 {
     }
 }
 
-
 impl Codec<'_> for u32 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend(Self::to_be_bytes(*self));
@@ -258,7 +255,6 @@ pub(crate) fn put_u64(v: u64, bytes: &mut [u8]) {
     let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
     *bytes = u64::to_be_bytes(v);
 }
-
 
 pub(crate) fn put_u32(v: u32, bytes: &mut [u8]) {
     let bytes: &mut [u8; 4] = (&mut bytes[..4]).try_into().unwrap();

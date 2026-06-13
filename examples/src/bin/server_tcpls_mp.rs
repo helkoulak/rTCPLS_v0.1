@@ -1,11 +1,10 @@
 #[macro_use]
 extern crate log;
 
-use std::{fs, io};
 use std::io::{BufReader, Read};
 use std::net;
 use std::sync::Arc;
-
+use std::{fs, io};
 
 #[macro_use]
 extern crate serde_derive;
@@ -25,8 +24,8 @@ use rustls::{self, RootCertStore};
 
 use rustls::recvbuf::RecvBufMap;
 use rustls::server::WebPkiClientVerifier;
-use rustls::tcpls::{server_create_listener, TcplsSession};
 use rustls::tcpls::stream::SimpleIdHashMap;
+use rustls::tcpls::{server_create_listener, TcplsSession};
 
 // Token for our listening socket.
 const LISTENER1: mio::Token = mio::Token(100);
@@ -34,7 +33,6 @@ const LISTENER2: mio::Token = mio::Token(101);
 const LISTENER3: mio::Token = mio::Token(102);
 
 // Which mode the server operates in.
-
 
 /// This binds together a TCP listening socket, some outstanding
 /// connections, and a TLS server configuration.
@@ -66,7 +64,10 @@ impl TlsServer {
 
     fn accept(&mut self, recv_map: &RecvBufMap, listener: Token) -> Result<(), io::Error> {
         loop {
-            match self.tcpls_session.server_accept_connection(self.listeners.get_mut(&(listener.0 as u64)).unwrap(), self.tls_config.clone()) {
+            match self.tcpls_session.server_accept_connection(
+                self.listeners.get_mut(&(listener.0 as u64)).unwrap(),
+                self.tls_config.clone(),
+            ) {
                 Ok(conn_id) => {
                     debug!("Accepting new connection of id {:?}", conn_id);
 
@@ -90,8 +91,8 @@ impl TlsServer {
         self.handle_event(event, recv_map);
 
         /*if self.is_closed() {
-                self.connections.remove(&token);
-            }*/
+            self.connections.remove(&token);
+        }*/
     }
 
     fn handle_event(&mut self, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
@@ -101,7 +102,6 @@ impl TlsServer {
         let token = ev.token();
         if ev.is_readable() {
             self.do_read(recv_map, token.0 as u64);
-
 
             // self.try_back_read();
         }
@@ -129,26 +129,35 @@ impl TlsServer {
     pub fn verify_received(&mut self, recv_map: &mut RecvBufMap) {
         let mut hash_index;
 
-
         for id in recv_map.readable() {
             let stream = recv_map.get_mut(id as u32).unwrap();
 
             if !stream.complete {
-                continue
+                continue;
             }
 
-
-            hash_index = match find_pattern(&stream.as_ref_consumed(), vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice()) {
+            hash_index = match find_pattern(
+                &stream.as_ref_consumed(),
+                vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice(),
+            ) {
                 Some(n) => n + 4,
                 None => panic!("hash prefix does not exist"),
             };
 
-
-            assert_eq!(&stream.as_ref_consumed()[hash_index..], self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4]).as_ref());
-            print!("\n \n Received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
+            assert_eq!(
+                &stream.as_ref_consumed()[hash_index..],
+                self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4])
+                    .as_ref()
+            );
+            print!(
+                "\n \n Received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
                 id,
-                &stream.as_ref_consumed()[hash_index..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>(),
-                   stream.as_ref_consumed()[..hash_index - 4].len());
+                &stream.as_ref_consumed()[hash_index..]
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect::<Vec<_>>(),
+                stream.as_ref_consumed()[..hash_index - 4].len()
+            );
             stream.empty_stream();
             recv_map.remove_readable(id);
             self.total_streams_received += 1;
@@ -161,21 +170,32 @@ impl TlsServer {
         digest::digest(algorithm, data)
     }
 
-
     /// Close the backend connection for forwarded sessions.
     fn close_back(&mut self) {
         if self.back.is_some() {
             let back = self.back.as_mut().unwrap();
-            back.shutdown(net::Shutdown::Both)
-                .unwrap();
+            back.shutdown(net::Shutdown::Both).unwrap();
         }
         self.back = None;
     }
 
     fn do_read(&mut self, app_buffers: &mut RecvBufMap, id: u64) {
-        if self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().contains_key(&id) {
-
-            if !self.tcpls_session.tls_conn.as_mut().unwrap().is_handshaking() {
+        if self
+            .tcpls_session
+            .tls_conn
+            .as_mut()
+            .unwrap()
+            .outstanding_tcp_conns
+            .as_mut_ref()
+            .contains_key(&id)
+        {
+            if !self
+                .tcpls_session
+                .tls_conn
+                .as_mut()
+                .unwrap()
+                .is_handshaking()
+            {
                 self.process_join_reponse(id);
             }
             return;
@@ -196,7 +216,7 @@ impl TlsServer {
                 self.closing = true;
                 return;
             }
-            Ok(_) => {},
+            Ok(_) => {}
         };
 
         // Reading some TLS data might have yielded new TLS
@@ -211,7 +231,6 @@ impl TlsServer {
             }
         };
     }
-
 
     /*fn try_back_read(&mut self) {
         if self.back.is_none() {
@@ -251,13 +270,16 @@ impl TlsServer {
         };
     }*/
 
-
-
-
-
     fn tls_write(&mut self) -> io::Result<usize> {
-        self.tcpls_session.tls_conn.as_mut().unwrap()
-            .write_tls(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket, 0)
+        self.tcpls_session.tls_conn.as_mut().unwrap().write_tls(
+            &mut self
+                .tcpls_session
+                .tcp_connections
+                .get_mut(&0)
+                .unwrap()
+                .socket,
+            0,
+        )
     }
 
     fn do_tls_write_and_handle_error(&mut self) {
@@ -269,19 +291,21 @@ impl TlsServer {
     }
 
     fn register(&mut self, app_buf: &RecvBufMap, token: Token) {
-        let event_set = self.event_set(app_buf, token.0 as u64 );
+        let event_set = self.event_set(app_buf, token.0 as u64);
 
         let socket = self.tcpls_session.get_socket(token.0 as u64);
 
-        match self.poll.registry()
-            .register(socket, token, event_set) {
+        match self.poll.registry().register(socket, token, event_set) {
             Ok(()) => (),
             Err(ref err) if err.kind() == io::ErrorKind::AlreadyExists => return (),
-            Err(_err) => { panic!("encountered error while registering source") }
+            Err(_err) => {
+                panic!("encountered error while registering source")
+            }
         }
 
         if self.back.is_some() {
-            self.poll.registry()
+            self.poll
+                .registry()
                 .register(
                     self.back.as_mut().unwrap(),
                     Token(4000),
@@ -295,18 +319,28 @@ impl TlsServer {
         let event_set = self.event_set(app_buf, token.0 as u64);
 
         let socket = self.tcpls_session.get_socket(token.0 as u64);
-        self.poll.registry()
+        self.poll
+            .registry()
             .reregister(socket, token, event_set)
             .unwrap();
     }
 
     fn deregister(&mut self, id: u64) {
-        self.poll.registry()
-            .deregister(&mut self.tcpls_session.tcp_connections.get_mut(&id).unwrap().socket)
+        self.poll
+            .registry()
+            .deregister(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&id)
+                    .unwrap()
+                    .socket,
+            )
             .unwrap();
 
         if self.back.is_some() {
-            self.poll.registry()
+            self.poll
+                .registry()
                 .deregister(self.back.as_mut().unwrap())
                 .unwrap();
         }
@@ -315,13 +349,45 @@ impl TlsServer {
     /// What IO events we're currently waiting for,
     /// based on wants_read/wants_write.
     fn event_set(&mut self, app_buf: &RecvBufMap, id: u64) -> mio::Interest {
-        let rd = match self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().contains_key(&id) {
-            true => self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.wants_read(id),
-            false => self.tcpls_session.tls_conn.as_mut().unwrap().wants_read(app_buf),
+        let rd = match self
+            .tcpls_session
+            .tls_conn
+            .as_mut()
+            .unwrap()
+            .outstanding_tcp_conns
+            .as_mut_ref()
+            .contains_key(&id)
+        {
+            true => self
+                .tcpls_session
+                .tls_conn
+                .as_mut()
+                .unwrap()
+                .outstanding_tcp_conns
+                .wants_read(id),
+            false => self
+                .tcpls_session
+                .tls_conn
+                .as_mut()
+                .unwrap()
+                .wants_read(app_buf),
         };
-        let wr = match self.tcpls_session.tls_conn.as_mut().unwrap().outstanding_tcp_conns.as_mut_ref().contains_key(&id) {
+        let wr = match self
+            .tcpls_session
+            .tls_conn
+            .as_mut()
+            .unwrap()
+            .outstanding_tcp_conns
+            .as_mut_ref()
+            .contains_key(&id)
+        {
             true => false,
-            false => self.tcpls_session.tls_conn.as_mut().unwrap().wants_write(None),
+            false => self
+                .tcpls_session
+                .tls_conn
+                .as_mut()
+                .unwrap()
+                .wants_write(None),
         };
 
         if rd && wr {
@@ -338,7 +404,8 @@ impl TlsServer {
     }*/
 
     pub(crate) fn process_join_reponse(&mut self, id: u64) {
-        match self.tcpls_session
+        match self
+            .tcpls_session
             .tls_conn
             .as_mut()
             .unwrap()
@@ -346,11 +413,16 @@ impl TlsServer {
             .as_mut_ref()
             .get_mut(&id)
             .unwrap()
-            .receive_join_request() {
+            .receive_join_request()
+        {
             Ok(_bytes) => (),
-            Err(ref error) => if error.kind() == io::ErrorKind::WouldBlock {
-                return;
-            } else { panic!("{:?}", error) },
+            Err(ref error) => {
+                if error.kind() == io::ErrorKind::WouldBlock {
+                    return;
+                } else {
+                    panic!("{:?}", error)
+                }
+            }
         }
 
         match self.tcpls_session.process_join_request(id) {
@@ -360,7 +432,6 @@ impl TlsServer {
     }
 }
 
-
 pub fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
     for i in 0..data.len() {
         if data[i..].starts_with(pattern) {
@@ -369,7 +440,6 @@ pub fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
     }
     None
 }
-
 
 /// This used to be conveniently exposed by mio: map EWOULDBLOCK
 /// errors to something less-errory.
@@ -385,8 +455,6 @@ pub fn try_read(r: io::Result<usize>) -> io::Result<Option<usize>> {
         }
     }
 }
-
-
 
 const USAGE: &str = "
 Runs a TLS server on :PORT.  The default PORT is 443.
@@ -582,16 +650,8 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
         rustls::ALL_VERSIONS.to_vec()
     };
 
-    let certs = load_certs(
-        args.flag_certs
-            .as_ref()
-            .expect("--certs option missing"),
-    );
-    let privkey = load_private_key(
-        args.flag_key
-            .as_ref()
-            .expect("--key option missing"),
-    );
+    let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
+    let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     let ocsp = load_ocsp(&args.flag_ocsp);
 
     let mut config = rustls::ServerConfig::builder_with_provider(
@@ -599,13 +659,13 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
             cipher_suites: suites,
             ..provider::default_provider()
         }
-            .into(),
+        .into(),
     )
-        .with_protocol_versions(&versions)
-        .expect("inconsistent cipher-suites/versions specified")
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(certs, privkey, ocsp)
-        .expect("bad certificates/private key");
+    .with_protocol_versions(&versions)
+    .expect("inconsistent cipher-suites/versions specified")
+    .with_client_cert_verifier(client_auth)
+    .with_single_cert_with_ocsp(certs, privkey, ocsp)
+    .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
@@ -628,9 +688,6 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
     Arc::new(config)
 }
 
-
-
-
 fn main() {
     let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 
@@ -642,7 +699,7 @@ fn main() {
 
     if args.flag_verbose {
         env_logger::builder()
-            .filter_level(LevelFilter::Trace)   // Set global log level to Trace
+            .filter_level(LevelFilter::Trace) // Set global log level to Trace
             .filter_module("mio", LevelFilter::Info) // Set specific level for mio
             .init();
     }
@@ -658,15 +715,21 @@ fn main() {
 
     let mut tcpls_server = TlsServer::new(config);
 
-    tcpls_server.poll.registry()
+    tcpls_server
+        .poll
+        .registry()
         .register(&mut listener1, LISTENER1, mio::Interest::READABLE)
         .unwrap();
 
-    tcpls_server.poll.registry()
+    tcpls_server
+        .poll
+        .registry()
         .register(&mut listener2, LISTENER2, mio::Interest::READABLE)
         .unwrap();
 
-    tcpls_server.poll.registry()
+    tcpls_server
+        .poll
+        .registry()
         .register(&mut listener3, LISTENER3, mio::Interest::READABLE)
         .unwrap();
 
@@ -676,7 +739,7 @@ fn main() {
 
     let mut events = mio::Events::with_capacity(256);
     loop {
-        match tcpls_server.poll.poll(&mut events, None){
+        match tcpls_server.poll.poll(&mut events, None) {
             Ok(_) => {}
             // Polling can be interrupted (e.g. by a debugger) - retry if so.
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
@@ -694,13 +757,17 @@ fn main() {
                 }
                 _ => {
                     tcpls_server.conn_event(event, &mut recv_map);
-                    if !tcpls_server.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking(){
+                    if !tcpls_server
+                        .tcpls_session
+                        .tls_conn
+                        .as_ref()
+                        .unwrap()
+                        .is_handshaking()
+                    {
                         tcpls_server.verify_received(&mut recv_map);
                     }
-                },
+                }
             }
         }
     }
-   
 }
-

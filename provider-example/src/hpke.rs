@@ -130,9 +130,7 @@ struct HpkeRsSender {
 
 impl HpkeSealer for HpkeRsSender {
     fn seal(&mut self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, Error> {
-        self.context
-            .seal(aad, plaintext)
-            .map_err(other_err)
+        self.context.seal(aad, plaintext).map_err(other_err)
     }
 }
 
@@ -143,9 +141,7 @@ struct HpkeRsReceiver {
 
 impl HpkeOpener for HpkeRsReceiver {
     fn open(&mut self, aad: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Error> {
-        self.context
-            .open(aad, ciphertext)
-            .map_err(other_err)
+        self.context.open(aad, ciphertext).map_err(other_err)
     }
 }
 

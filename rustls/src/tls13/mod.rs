@@ -1,4 +1,3 @@
-
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -11,7 +10,6 @@ pub(crate) mod key_schedule;
 pub struct Tls13CipherSuite {
     /// Common cipher suite fields.
     pub common: CipherSuiteCommon,
-
 
     /// How to complete HKDF with the suite's hash function.
     ///
@@ -86,7 +84,6 @@ impl fmt::Debug for Tls13CipherSuite {
             .finish()
     }
 }
-
 
 /// Constructs the signature message specified in section 4.4.3 of RFC8446.
 pub(crate) fn construct_client_verify_message(handshake_hash: &hash::Output) -> Vec<u8> {

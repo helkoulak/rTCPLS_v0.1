@@ -2,12 +2,12 @@ use alloc::boxed::Box;
 use alloc::string::ToString;
 use core::fmt;
 
-use std::vec;
+use crate::crypto::tls13::HkdfExpander;
 use aes::Aes128;
+use cipher::consts::U16;
 use cipher::generic_array::GenericArray;
 use cipher::{BlockEncrypt, KeyInit};
-use cipher::consts::U16;
-use crate::crypto::tls13::HkdfExpander;
+use std::vec;
 
 use zeroize::Zeroize;
 
@@ -22,7 +22,6 @@ use crate::recvbuf::RecvBufMap;
 use crate::suites::ConnectionTrafficSecrets;
 use crate::tcpls::frame::{Frame, TcplsHeader};
 use siphasher::sip::SipHasher24;
-
 
 /// Factory trait for building `MessageEncrypter` and `MessageDecrypter` for a TLS1.3 cipher suite.
 pub trait Tls13AeadAlgorithm: Send + Sync {
@@ -168,7 +167,6 @@ pub trait MessageDecrypter: Send + Sync {
     fn get_or_create_read_seq(&mut self, stream_id: u32) -> u64;
 
     fn reset_read_seq(&mut self);
-
 }
 
 /// Objects with this trait can encrypt TLS messages.
@@ -201,11 +199,8 @@ pub trait MessageEncrypter: Send + Sync {
 
     fn get_write_seq(&self, stream_id: u32) -> u64;
 
-
     fn reset_write_seq(&mut self);
     fn get_or_create_write_seq(&mut self, stream_id: u32) -> u64;
-
-
 }
 
 impl dyn MessageEncrypter {
@@ -264,14 +259,10 @@ impl Nonce {
     pub fn new(iv: &Iv, seq: u64, stream_id: u32) -> Self {
         let mut nonce = Self([0u8; NONCE_LEN]);
         codec::put_u64(seq, &mut nonce.0[4..]);
-        codec::put_u32(stream_id,&mut nonce.0[..4]);
-        nonce
-            .0
-            .iter_mut()
-            .zip(iv.0.iter())
-            .for_each(|(nonce, iv)| {
-                *nonce ^= *iv;
-            });
+        codec::put_u32(stream_id, &mut nonce.0[..4]);
+        nonce.0.iter_mut().zip(iv.0.iter()).for_each(|(nonce, iv)| {
+            *nonce ^= *iv;
+        });
 
         nonce
     }
@@ -314,7 +305,7 @@ pub fn make_tls13_aad_tcpls(payload_len: usize, header: &TcplsHeader) -> [u8; 13
         (header.stream_id >> 24) as u8,
         (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
-        (header.stream_id & 0xff) as u8
+        (header.stream_id & 0xff) as u8,
     ]
 }
 
@@ -336,28 +327,27 @@ pub fn make_tls12_aad(
     out
 }
 
-
-
-pub struct HeaderProtector{
-    aes_cipher: Aes128
+pub struct HeaderProtector {
+    aes_cipher: Aes128,
 }
 
 impl HeaderProtector {
     pub(crate) fn new(expander: &dyn HkdfExpander, aead_key_len: usize) -> Self {
-
-        let mut derived_key= vec![0; aead_key_len]; // 16 or 32 bytes
-        expander.expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice()).unwrap();
+        let mut derived_key = vec![0; aead_key_len]; // 16 or 32 bytes
+        expander
+            .expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice())
+            .unwrap();
         let mut key = [0; 16];
         key.copy_from_slice(&derived_key[..16]);
         let key = GenericArray::from_slice(&key);
-        Self{
+        Self {
             aes_cipher: Aes128::new(&key),
         }
     }
 
     pub fn new_with_key(key: &[u8; 16]) -> Self {
         let key = GenericArray::from_slice(key);
-        Self{
+        Self {
             aes_cipher: Aes128::new(&key),
         }
     }
@@ -368,43 +358,36 @@ impl HeaderProtector {
     ///
     /// `header` references the header slice of the encrypted TLS record
 
-
     #[inline]
-    pub fn decrypt_in_output(
-        &mut self,
-        sample: &[u8],
-        header: &[u8],
-    ) -> Result<[u8; 8], Error> {
+    pub fn decrypt_in_output(&mut self, sample: &[u8], header: &[u8]) -> Result<[u8; 8], Error> {
         self.xor_in_output(sample, header)
     }
 
-    fn xor_in_output(
-        &mut self,
-        sample: &[u8],
-        header: & [u8],
-    ) -> Result<[u8; 8], Error> {
+    fn xor_in_output(&mut self, sample: &[u8], header: &[u8]) -> Result<[u8; 8], Error> {
         let mut out = [0u8; 8];
         for (i, byte) in self.generate_mask(sample).into_iter().enumerate() {
             out[i] = header[i] ^ byte;
-            if i == 7 {break}
+            if i == 7 {
+                break;
+            }
         }
         Ok(out)
     }
 
     pub fn generate_mask(&mut self, input: &[u8]) -> GenericArray<u8, U16> {
-        let mut mask =  GenericArray::default();
-        self.aes_cipher.encrypt_block_b2b(GenericArray::from_slice(&input), &mut mask);
+        let mut mask = GenericArray::default();
+        self.aes_cipher
+            .encrypt_block_b2b(GenericArray::from_slice(&input), &mut mask);
         mask
     }
-
 }
 
-pub struct HeaderProtectorSiphash{
+pub struct HeaderProtectorSiphash {
     siphasher: SipHasher24,
 }
 
 impl HeaderProtectorSiphash {
-   /* pub(crate) fn new(expander: &dyn HkdfExpander, aead_key_len: usize) -> Self {
+    /* pub(crate) fn new(expander: &dyn HkdfExpander, aead_key_len: usize) -> Self {
 
         let mut derived_key= vec![0; aead_key_len]; // 16 or 32 bytes
         expander.expand_slice(&[b"tcpls header protection"], derived_key.as_mut_slice()).unwrap();
@@ -417,26 +400,17 @@ impl HeaderProtectorSiphash {
     }*/
 
     pub fn new_with_key(key: &[u8; 16]) -> Self {
-        Self{
-            siphasher:SipHasher24::new_with_key(&key),
+        Self {
+            siphasher: SipHasher24::new_with_key(&key),
         }
     }
 
-
     #[inline]
-    pub fn decrypt_in_output(
-        &mut self,
-        sample: &[u8],
-        header: &[u8],
-    ) -> Result<[u8; 8], Error> {
+    pub fn decrypt_in_output(&mut self, sample: &[u8], header: &[u8]) -> Result<[u8; 8], Error> {
         self.xor_in_output(sample, header)
     }
 
-    fn xor_in_output(
-        &mut self,
-        sample: &[u8],
-        header: & [u8],
-    ) -> Result<[u8; 8], Error> {
+    fn xor_in_output(&mut self, sample: &[u8], header: &[u8]) -> Result<[u8; 8], Error> {
         let mut out = self.calculate_hash(sample);
         for i in 0..header.len() {
             out[i] ^= header[i];
@@ -444,11 +418,9 @@ impl HeaderProtectorSiphash {
         Ok(out)
     }
 
-
-    pub fn calculate_hash(&mut self, input: &[u8]) -> [u8;8] {
-            self.siphasher.hash(input).to_be_bytes()
+    pub fn calculate_hash(&mut self, input: &[u8]) -> [u8; 8] {
+        self.siphasher.hash(input).to_be_bytes()
     }
-
 }
 
 const TLS12_AAD_SIZE: usize = 8 + 1 + 2 + 2;
@@ -520,11 +492,23 @@ impl MessageEncrypter for InvalidMessageEncrypter {
         payload_len
     }
 
-    fn encrypt_tcpls(&mut self, _msg: OutboundPlainMessage, _seq: u64, _stream_id: u32, _tcpls_header: &TcplsHeader, _frame_header: Option<Frame>, _header_encrypter: &mut HeaderProtector) -> Result<OutboundOpaqueMessage, Error> {
+    fn encrypt_tcpls(
+        &mut self,
+        _msg: OutboundPlainMessage,
+        _seq: u64,
+        _stream_id: u32,
+        _tcpls_header: &TcplsHeader,
+        _frame_header: Option<Frame>,
+        _header_encrypter: &mut HeaderProtector,
+    ) -> Result<OutboundOpaqueMessage, Error> {
         todo!()
     }
 
-    fn encrypted_payload_len_tcpls(&self, _payload_len: usize, _header_len: usize) -> (usize, usize) {
+    fn encrypted_payload_len_tcpls(
+        &self,
+        _payload_len: usize,
+        _header_len: usize,
+    ) -> (usize, usize) {
         todo!()
     }
 
@@ -561,10 +545,13 @@ impl MessageDecrypter for InvalidMessageDecrypter {
         Err(Error::DecryptError)
     }
 
-    fn decrypt_tcpls<'a>(&mut self,
-                         _msg: InboundOpaqueMessage<'a>,
-                         _app_bufs: &'a mut RecvBufMap,
-                         _header_decrypted: bool, _header_decrypter: &mut HeaderProtector) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
+    fn decrypt_tcpls<'a>(
+        &mut self,
+        _msg: InboundOpaqueMessage<'a>,
+        _app_bufs: &'a mut RecvBufMap,
+        _header_decrypted: bool,
+        _header_decrypter: &mut HeaderProtector,
+    ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
         Err(Error::DecryptError)
     }
 
@@ -586,8 +573,8 @@ impl MessageDecrypter for InvalidMessageDecrypter {
 }
 #[test]
 fn test_header_enc_dec() {
-    use ring::rand::SystemRandom;
     use ring::rand::SecureRandom;
+    use ring::rand::SystemRandom;
     let rng = SystemRandom::new();
     const INPUT_SIZE: usize = 16;
     const HEADER_SIZE: usize = 8;
@@ -603,11 +590,19 @@ fn test_header_enc_dec() {
         rng.fill(&mut sample).unwrap();
         rng.fill(&mut header).unwrap();
 
-        for (i, byte) in header_enc_dec.generate_mask(&sample).into_iter().enumerate() {
+        for (i, byte) in header_enc_dec
+            .generate_mask(&sample)
+            .into_iter()
+            .enumerate()
+        {
             output[i] = header[i] ^ byte;
-            if i == 7 {break}
+            if i == 7 {
+                break;
+            }
         }
-      assert_eq!(header_enc_dec.decrypt_in_output(&sample, &output).unwrap(), header)
-
+        assert_eq!(
+            header_enc_dec.decrypt_in_output(&sample, &output).unwrap(),
+            header
+        )
     }
 }

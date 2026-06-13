@@ -18,9 +18,7 @@ fn check_test_vectors() {
         }
 
         println!("testing vector {idx}");
-        let mut hpke = HPKE_PROVIDER
-            .start(&vec.suite())
-            .unwrap();
+        let mut hpke = HPKE_PROVIDER.start(&vec.suite()).unwrap();
         let pk_r = HpkePublicKey(hex::decode(vec.pk_rm).unwrap());
         let sk_r = HpkePrivateKey::from(hex::decode(vec.sk_rm).unwrap());
         let info = hex::decode(vec.info).unwrap();
@@ -29,13 +27,9 @@ fn check_test_vectors() {
             let aad = hex::decode(enc.aad).unwrap();
             let pt = hex::decode(enc.pt).unwrap();
 
-            let (enc, ciphertext) = hpke
-                .seal(&info, &aad, &pt, &pk_r)
-                .unwrap();
+            let (enc, ciphertext) = hpke.seal(&info, &aad, &pt, &pk_r).unwrap();
 
-            let plaintext = hpke
-                .open(&enc, &info, &aad, &ciphertext, &sk_r)
-                .unwrap();
+            let plaintext = hpke.open(&enc, &info, &aad, &ciphertext, &sk_r).unwrap();
             assert_eq!(plaintext, pt);
         }
     }

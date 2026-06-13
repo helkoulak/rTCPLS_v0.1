@@ -43,9 +43,6 @@ impl crypto::hmac::Key for Key {
     }
 
     fn tag_len(&self) -> usize {
-        self.0
-            .algorithm()
-            .digest_algorithm()
-            .output_len()
+        self.0.algorithm().digest_algorithm().output_len()
     }
 }

@@ -1,4 +1,3 @@
-
 use alloc::vec::Vec;
 use core::fmt::Debug;
 
@@ -159,7 +158,6 @@ pub trait ClientCertVerifier: Debug + Send + Sync {
     fn client_auth_mandatory(&self) -> bool {
         self.offer_client_auth()
     }
-
 
     /// Returns the [`DistinguishedName`] [subjects] that the server will hint to clients to
     /// identify acceptable authentication trust anchors.
@@ -332,7 +330,6 @@ impl DigitallySignedStruct {
     }
 }
 
-
 impl Codec<'_> for DigitallySignedStruct {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.scheme.encode(bytes);
@@ -346,7 +343,6 @@ impl Codec<'_> for DigitallySignedStruct {
         Ok(Self { scheme, sig })
     }
 }
-
 
 #[test]
 fn assertions_are_debug() {

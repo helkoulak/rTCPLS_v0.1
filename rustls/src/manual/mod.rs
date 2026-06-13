@@ -29,8 +29,6 @@ pub mod _04_features;
 #[path = "defaults.rs"]
 pub mod _05_defaults;
 
-
 /// This section provides guidance on using rustls with FIPS-approved cryptography.
 #[path = "fips.rs"]
 pub mod _06_fips;
-

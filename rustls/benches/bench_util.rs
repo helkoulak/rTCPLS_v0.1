@@ -1,8 +1,8 @@
 use cpu_time::ProcessTime;
 use criterion::measurement::Measurement;
 use criterion::measurement::ValueFormatter;
-use std::time::Duration;
 use criterion::Throughput;
+use std::time::Duration;
 
 const NANOS_PER_SEC: u64 = 1_000_000_000;
 
@@ -33,7 +33,6 @@ impl std::hash::Hasher for StreamIdHasher {
 /*type BuildStreamIdHasher = std::hash::BuildHasherDefault<StreamIdHasher>;
 
 pub type StreamIdHashMap<V> = std::collections::HashMap<u64, V, BuildStreamIdHasher>;*/
-
 
 pub struct CPUTime;
 impl Measurement for CPUTime {
@@ -68,9 +67,7 @@ impl Measurement for CPUTime {
 
 pub struct DurationFormatter;
 impl DurationFormatter {
-    fn bytes_per_second(
-        &self, bytes: f64, typical: f64, values: &mut [f64],
-    ) -> &'static str {
+    fn bytes_per_second(&self, bytes: f64, typical: f64, values: &mut [f64]) -> &'static str {
         let bytes_per_second = bytes * (1e9 / typical);
         let (denominator, unit) = if bytes_per_second < 1024.0 {
             (1.0, "  B/s")
@@ -90,9 +87,7 @@ impl DurationFormatter {
         unit
     }
 
-    fn elements_per_second(
-        &self, elems: f64, typical: f64, values: &mut [f64],
-    ) -> &'static str {
+    fn elements_per_second(&self, elems: f64, typical: f64, values: &mut [f64]) -> &'static str {
         let elems_per_second = elems * (1e9 / typical);
         let (denominator, unit) = if elems_per_second < 1000.0 {
             (1.0, " elem/s")
@@ -135,13 +130,14 @@ impl ValueFormatter for DurationFormatter {
     }
 
     fn scale_throughputs(
-        &self, typical: f64, throughput: &Throughput, values: &mut [f64],
+        &self,
+        typical: f64,
+        throughput: &Throughput,
+        values: &mut [f64],
     ) -> &'static str {
         match *throughput {
-            Throughput::Bytes(bytes) =>
-                self.bytes_per_second(bytes as f64, typical, values),
-            Throughput::Elements(elems) =>
-                self.elements_per_second(elems as f64, typical, values),
+            Throughput::Bytes(bytes) => self.bytes_per_second(bytes as f64, typical, values),
+            Throughput::Elements(elems) => self.elements_per_second(elems as f64, typical, values),
             Throughput::BytesDecimal(_) => todo!(),
         }
     }

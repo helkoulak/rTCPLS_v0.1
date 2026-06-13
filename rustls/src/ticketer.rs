@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
@@ -29,7 +28,6 @@ pub struct TicketSwitcher {
 }
 
 impl TicketSwitcher {
-
     /// Creates a new `TicketSwitcher`, which rotates through sub-ticketers
     /// based on the passage of time.
     ///
@@ -157,15 +155,11 @@ impl ProducesTickets for TicketSwitcher {
         let state = self.maybe_roll(UnixTime::now())?;
 
         // Decrypt with the current key; if that fails, try with the previous.
-        state
-            .current
-            .decrypt(ciphertext)
-            .or_else(|| {
-                state
-                    .previous
-                    .as_ref()
-                    .and_then(|previous| previous.decrypt(ciphertext))
-            })
+        state.current.decrypt(ciphertext).or_else(|| {
+            state
+                .previous
+                .as_ref()
+                .and_then(|previous| previous.decrypt(ciphertext))
+        })
     }
 }
-

@@ -5,10 +5,9 @@ use mio::net::{TcpListener, TcpStream};
 #[macro_use]
 extern crate log;
 
-use std::{fs, io};
 use std::io::{BufReader, Read, Write};
 use std::net;
-
+use std::{fs, io};
 
 #[macro_use]
 extern crate serde_derive;
@@ -32,8 +31,6 @@ use rustls::tcpls::{server_create_listener, TcplsSession};
 // Token for our listening socket.
 const LISTENER: Token = Token(100);
 
-
-
 /// This binds together a TCP listening socket, some outstanding
 /// connections, and a TLS server configuration.
 struct TlsServer {
@@ -44,7 +41,6 @@ struct TlsServer {
     closed: bool,
     back: Option<TcpStream>,
     tcpls_session: TcplsSession,
-
 }
 
 impl TlsServer {
@@ -62,7 +58,10 @@ impl TlsServer {
 
     fn accept(&mut self, registry: &mio::Registry, recv_map: &RecvBufMap) -> Result<(), io::Error> {
         loop {
-            match self.tcpls_session.server_accept_connection(&mut self.listener, self.tls_config.clone()) {
+            match self
+                .tcpls_session
+                .server_accept_connection(&mut self.listener, self.tls_config.clone())
+            {
                 Ok(conn_id) => {
                     debug!("Accepting new connection of id {:?}", conn_id);
 
@@ -82,12 +81,20 @@ impl TlsServer {
         }
     }
 
-    fn conn_event(&mut self, registry: &mio::Registry, event: &mio::event::Event, recv_map: &mut RecvBufMap) {
-
+    fn conn_event(
+        &mut self,
+        registry: &mio::Registry,
+        event: &mio::event::Event,
+        recv_map: &mut RecvBufMap,
+    ) {
         self.handle_event(registry, event, recv_map);
-
     }
-    fn handle_event(&mut self, registry: &mio::Registry, ev: &mio::event::Event, recv_map: &mut RecvBufMap) {
+    fn handle_event(
+        &mut self,
+        registry: &mio::Registry,
+        ev: &mio::event::Event,
+        recv_map: &mut RecvBufMap,
+    ) {
         // If we're readable: read some TLS.  Then
         // see if that yielded new plaintext.  Then
         // see if the backend is readable too.
@@ -96,9 +103,7 @@ impl TlsServer {
             self.do_read(recv_map, token.0 as u64);
 
             self.try_back_read();
-
         }
-
 
         if ev.is_writable() {
             self.do_tls_write_and_handle_error();
@@ -120,23 +125,27 @@ impl TlsServer {
         }
     }
 
-    pub fn verify_received(&mut self, recv_map: &mut RecvBufMap ) {
-
-
+    pub fn verify_received(&mut self, recv_map: &mut RecvBufMap) {
         for id in recv_map.readable() {
             let stream = recv_map.get_mut(id as u32).unwrap();
 
-
             if !stream.complete {
-                continue
+                continue;
             }
 
-            let hash_index = match find_pattern(&stream.as_ref_consumed(), vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice()) {
+            let hash_index = match find_pattern(
+                &stream.as_ref_consumed(),
+                vec![0x0f, 0x0f, 0x0f, 0x0f].as_slice(),
+            ) {
                 Some(n) => n + 4,
                 None => panic!("hash prefix does not exist"),
             };
 
-            assert_eq!(&stream.as_ref_consumed()[hash_index..], self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4]).as_ref());
+            assert_eq!(
+                &stream.as_ref_consumed()[hash_index..],
+                self.calculate_sha256_hash(&stream.as_ref_consumed()[..hash_index - 4])
+                    .as_ref()
+            );
             print!("\n \n Bytes received on stream {:?} : \n \n SHA-256 Hash {:?} \n Total length: {:?} \n",
                 id,
                 &stream.as_ref_consumed()[hash_index..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>(),
@@ -151,13 +160,11 @@ impl TlsServer {
         digest::digest(algorithm, data)
     }
 
-
     /// Close the backend connection for forwarded sessions.
     fn close_back(&mut self) {
         if self.back.is_some() {
             let back = self.back.as_mut().unwrap();
-            back.shutdown(net::Shutdown::Both)
-                .unwrap();
+            back.shutdown(net::Shutdown::Both).unwrap();
         }
         self.back = None;
     }
@@ -193,10 +200,7 @@ impl TlsServer {
                 return;
             }
         };
-
     }
-
-
 
     fn try_back_read(&mut self) {
         if self.back.is_none() {
@@ -224,8 +228,8 @@ impl TlsServer {
                 self.closing = true;
             }
             Some(len) => {
-                self.tcpls_session.
-                    tls_conn
+                self.tcpls_session
+                    .tls_conn
                     .as_mut()
                     .unwrap()
                     .writer()
@@ -235,7 +239,6 @@ impl TlsServer {
             None => {}
         };
     }
-
 
     fn tcpls_write(&mut self) -> Result<usize, Error> {
         self.tcpls_session.send_on_connection(None, None)
@@ -252,16 +255,21 @@ impl TlsServer {
     fn register(&mut self, registry: &mio::Registry, app_buf: &RecvBufMap, token: Token) {
         let event_set = self.event_set(app_buf);
         registry
-            .register(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket, token, event_set)
+            .register(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&0)
+                    .unwrap()
+                    .socket,
+                token,
+                event_set,
+            )
             .unwrap();
 
         if self.back.is_some() {
             registry
-                .register(
-                    self.back.as_mut().unwrap(),
-                    token,
-                    mio::Interest::READABLE,
-                )
+                .register(self.back.as_mut().unwrap(), token, mio::Interest::READABLE)
                 .unwrap();
         }
     }
@@ -269,27 +277,51 @@ impl TlsServer {
     fn reregister(&mut self, registry: &mio::Registry, app_buf: &RecvBufMap, token: Token) {
         let event_set = self.event_set(app_buf);
         registry
-            .reregister(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket, token, event_set)
+            .reregister(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&0)
+                    .unwrap()
+                    .socket,
+                token,
+                event_set,
+            )
             .unwrap();
     }
 
     fn deregister(&mut self, registry: &mio::Registry) {
         registry
-            .deregister(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket)
+            .deregister(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&0)
+                    .unwrap()
+                    .socket,
+            )
             .unwrap();
 
         if self.back.is_some() {
-            registry
-                .deregister(self.back.as_mut().unwrap())
-                .unwrap();
+            registry.deregister(self.back.as_mut().unwrap()).unwrap();
         }
     }
 
     /// What IO events we're currently waiting for,
     /// based on wants_read/wants_write.
     fn event_set(&self, app_buf: &RecvBufMap) -> mio::Interest {
-        let rd = self.tcpls_session.tls_conn.as_ref().unwrap().wants_read(app_buf);
-        let wr = self.tcpls_session.tls_conn.as_ref().unwrap().wants_write(None);
+        let rd = self
+            .tcpls_session
+            .tls_conn
+            .as_ref()
+            .unwrap()
+            .wants_read(app_buf);
+        let wr = self
+            .tcpls_session
+            .tls_conn
+            .as_ref()
+            .unwrap()
+            .wants_write(None);
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE
@@ -314,7 +346,6 @@ pub fn find_pattern(data: &[u8], pattern: &[u8]) -> Option<usize> {
     None
 }
 
-
 /// This used to be conveniently exposed by mio: map EWOULDBLOCK
 /// errors to something less-errory.
 fn try_read(r: io::Result<usize>) -> io::Result<Option<usize>> {
@@ -329,8 +360,6 @@ fn try_read(r: io::Result<usize>) -> io::Result<Option<usize>> {
         }
     }
 }
-
-
 
 const USAGE: &str = "
 Runs a TLS server on :PORT.  The default PORT is 443.
@@ -390,7 +419,6 @@ struct Args {
     flag_tickets: bool,
     /*arg_fport: Option<u16>,*/
 }
-
 
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in provider::ALL_CIPHER_SUITES {
@@ -528,16 +556,8 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
         rustls::ALL_VERSIONS.to_vec()
     };
 
-    let certs = load_certs(
-        args.flag_certs
-            .as_ref()
-            .expect("--certs option missing"),
-    );
-    let privkey = load_private_key(
-        args.flag_key
-            .as_ref()
-            .expect("--key option missing"),
-    );
+    let certs = load_certs(args.flag_certs.as_ref().expect("--certs option missing"));
+    let privkey = load_private_key(args.flag_key.as_ref().expect("--key option missing"));
     let ocsp = load_ocsp(&args.flag_ocsp);
 
     let mut config = rustls::ServerConfig::builder_with_provider(
@@ -545,13 +565,13 @@ fn make_config(args: &Args, num_of_tokens: usize) -> Arc<rustls::ServerConfig> {
             cipher_suites: suites,
             ..provider::default_provider()
         }
-            .into(),
+        .into(),
     )
-        .with_protocol_versions(&versions)
-        .expect("inconsistent cipher-suites/versions specified")
-        .with_client_cert_verifier(client_auth)
-        .with_single_cert_with_ocsp(certs, privkey, ocsp)
-        .expect("bad certificates/private key");
+    .with_protocol_versions(&versions)
+    .expect("inconsistent cipher-suites/versions specified")
+    .with_client_cert_verifier(client_auth)
+    .with_single_cert_with_ocsp(certs, privkey, ocsp)
+    .expect("bad certificates/private key");
 
     config.key_log = Arc::new(rustls::KeyLogFile::new());
 
@@ -587,7 +607,7 @@ fn main() {
 
     if args.flag_verbose {
         env_logger::builder()
-            .filter_level(LevelFilter::Trace)   // Set global log level to Trace
+            .filter_level(LevelFilter::Trace) // Set global log level to Trace
             .filter_module("mio", LevelFilter::Info) // Set specific level for mio
             .init();
     }
@@ -605,12 +625,11 @@ fn main() {
         .register(&mut listener, LISTENER, mio::Interest::READABLE)
         .unwrap();
 
-
     let mut tcpls_server = TlsServer::new(listener, config);
 
     let mut events = mio::Events::with_capacity(256);
     loop {
-       match poll.poll(&mut events, None){
+        match poll.poll(&mut events, None) {
             Ok(_) => {}
             // Polling can be interrupted (e.g. by a debugger) - retry if so.
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
@@ -631,13 +650,13 @@ fn main() {
                         .tcpls_session
                         .tls_conn
                         .as_ref()
-                        .unwrap().is_handshaking() {
-                        tcpls_server
-                            .verify_received(&mut recv_map);
+                        .unwrap()
+                        .is_handshaking()
+                    {
+                        tcpls_server.verify_received(&mut recv_map);
                     }
                 }
             }
         }
     }
 }
-

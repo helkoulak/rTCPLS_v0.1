@@ -28,9 +28,7 @@ impl SupportedKxGroup for KxGroup {
         let priv_key = agreement::EphemeralPrivateKey::generate(self.agreement_algorithm, &rng)
             .map_err(|_| GetRandomFailed)?;
 
-        let pub_key = priv_key
-            .compute_public_key()
-            .map_err(|_| GetRandomFailed)?;
+        let pub_key = priv_key.compute_public_key().map_err(|_| GetRandomFailed)?;
 
         Ok(Box::new(KeyExchange {
             name: self.name,

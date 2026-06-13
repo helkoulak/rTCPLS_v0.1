@@ -1,7 +1,7 @@
-use std::prelude::rust_2021::Vec;
-use octets::varint_len;
-use crate::{Error, InvalidMessage};
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
+use crate::{Error, InvalidMessage};
+use octets::varint_len;
+use std::prelude::rust_2021::Vec;
 
 /// chunk_num = 4 Bytes + Offset_step = 2 Bytes + Stream Id = 2 Bytes.
 pub const TCPLS_HEADER_SIZE: usize = 8;
@@ -61,7 +61,7 @@ pub enum Frame {
 
     Probe {
         random: u32,
-    }
+    },
 }
 
 impl Frame {
@@ -105,16 +105,12 @@ impl Frame {
             Self::Ping => {
                 b.put_varint(0x01).unwrap();
             }
-            Self::Stream {
-                length,
-                fin,
-            } => {
+            Self::Stream { length, fin } => {
                 b.put_u16(*length).unwrap();
                 match fin {
                     1 => b.put_u8(0x03).unwrap(),
                     0 => b.put_u8(0x02).unwrap(),
                     _ => panic!("invalid value for flag fin"),
-
                 };
             }
 
@@ -164,9 +160,7 @@ impl Frame {
                 b.put_varint(0x09).unwrap();
             }
 
-            Self::Probe {
-                random,
-            } => {
+            Self::Probe { random } => {
                 b.put_u32(*random).unwrap();
                 b.put_u8(0x0a).unwrap();
             }
@@ -176,29 +170,23 @@ impl Frame {
     }
 
     pub fn get_frame_size_reverse(b: &mut octets::Octets) -> Result<usize, InvalidMessage> {
-
         let frame_type = b.get_u8_reverse().expect("failed");
 
         let frame_size = match frame_type {
-            0x00 => 1 ,
+            0x00 => 1,
 
-            0x01 => 1 ,
+            0x01 => 1,
 
             0x02..=0x03 => 3,
 
             0x04 => {
-                1 + varint_len(b.get_varint_reverse().unwrap()) +
-                    varint_len(b.get_varint_reverse().unwrap())
-            },
-
-
-            0x05 => {
-                1 + varint_len(b.get_varint_reverse().unwrap()) + 32
-            },
-
-            0x06 => {
                 1 + varint_len(b.get_varint_reverse().unwrap())
-            },
+                    + varint_len(b.get_varint_reverse().unwrap())
+            }
+
+            0x05 => 1 + varint_len(b.get_varint_reverse().unwrap()) + 32,
+
+            0x06 => 1 + varint_len(b.get_varint_reverse().unwrap()),
 
             0x07 => {
                 let mut frame_len = 1 + varint_len(b.get_varint_reverse().unwrap());
@@ -206,37 +194,33 @@ impl Frame {
                     4 => {
                         b.rewind(4).unwrap();
                         4
-                    },
+                    }
                     6 => {
                         b.rewind(16).unwrap();
                         16
-                    },
+                    }
                     _ => panic!("Wrong ip address version"),
                 };
                 // one byte for address version + address length + length of port encoding
-                   frame_len += 1 + address_len + varint_len(b.get_varint_reverse().unwrap());
+                frame_len += 1 + address_len + varint_len(b.get_varint_reverse().unwrap());
                 frame_len
+            }
 
-            },
+            0x08 => 1 + varint_len(b.get_varint_reverse().unwrap()),
 
-            0x08 => { 1 + varint_len(b.get_varint_reverse().unwrap()) },
-
-            0x09 => { 1 + varint_len(b.get_varint_reverse().unwrap())
-                        + varint_len(b.get_varint_reverse().unwrap())
-            },
+            0x09 => {
+                1 + varint_len(b.get_varint_reverse().unwrap())
+                    + varint_len(b.get_varint_reverse().unwrap())
+            }
 
             _ => return Err(InvalidMessage::InvalidFrameType),
         };
 
         Ok(frame_size)
     }
-
-
-
 }
 
 fn parse_stream_frame(frame_type: u8, b: &mut octets::Octets) -> octets::Result<Frame> {
-
     let length = b.get_u16_reverse()?;
 
     let fin = match frame_type {
@@ -245,10 +229,7 @@ fn parse_stream_frame(frame_type: u8, b: &mut octets::Octets) -> octets::Result<
         _ => panic!("Invalid frame type"),
     };
 
-    Ok(Frame::Stream {
-        length,
-        fin,
-    })
+    Ok(Frame::Stream { length, fin })
 }
 
 fn parse_ack_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
@@ -309,7 +290,7 @@ fn parse_remove_address_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
 fn parse_probe_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
     let random = b.get_u32_reverse()?;
 
-    Ok(Frame::Probe {random})
+    Ok(Frame::Probe { random })
 }
 
 fn parse_stream_change_frame(b: &mut octets::Octets) -> octets::Result<Frame> {
@@ -336,10 +317,7 @@ impl TcplsHeader {
         }
     }
 
-    pub fn encode_tcpls_header(
-        &mut self,
-        b: &mut octets::OctetsMut,
-    ) -> Result<(), Error> {
+    pub fn encode_tcpls_header(&mut self, b: &mut octets::OctetsMut) -> Result<(), Error> {
         b.put_u32(self.chunk_num).unwrap();
         b.put_u32(self.stream_id).unwrap();
 
@@ -347,20 +325,20 @@ impl TcplsHeader {
     }
 
     pub fn decode_tcpls_header(b: &mut octets::Octets) -> Self {
-        Self{
+        Self {
             chunk_num: b.get_u32().unwrap(),
             stream_id: b.get_u32().unwrap(),
         }
     }
 
     pub fn decode_tcpls_header_from_slice(b: &[u8]) -> Self {
-        Self{
+        Self {
             chunk_num: u32::from_be_bytes(b[0..4].try_into().unwrap()),
             stream_id: u32::from_be_bytes(b[4..8].try_into().unwrap()),
         }
     }
 
-   /* pub fn get_header_size_reverse(b: &mut octets::Octets) -> usize {
+    /* pub fn get_header_size_reverse(b: &mut octets::Octets) -> usize {
         b.rewind(1).unwrap();
         1 + varint_len(b.get_varint_reverse().unwrap()) +
             varint_len(b.get_varint_reverse().unwrap()) +
@@ -381,10 +359,7 @@ impl TcplsHeader {
 fn test_encode_decode_stream_frame() {
     let mut buf = [0; 3];
 
-    let stream_frame = Frame::Stream {
-        length: 24,
-        fin: 1,
-    };
+    let stream_frame = Frame::Stream { length: 24, fin: 1 };
 
     let mut d = octets::OctetsMut::with_slice(&mut buf);
 
@@ -447,8 +422,6 @@ fn test_parse_new_address_frame() {
         address_version: 0x04,
         address_id: 47854755,
     };
-
-
 
     let mut d = octets::OctetsMut::with_slice(&mut v4);
 

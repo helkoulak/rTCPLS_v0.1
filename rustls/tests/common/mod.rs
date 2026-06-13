@@ -1,25 +1,23 @@
 #![allow(dead_code)]
-
 #![allow(clippy::duplicate_mod)]
 
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-
 use pki_types::{CertificateDer, CertificateRevocationListDer, PrivateKeyDer, ServerName};
 use rustls::client::{ServerCertVerifierBuilder, WebPkiServerVerifier};
 use rustls::crypto::CryptoProvider;
 use rustls::internal::msgs::codec::Reader;
 use rustls::internal::msgs::message::{Message, OutboundOpaqueMessage, PlainMessage};
+use rustls::recvbuf::RecvBufMap;
 use rustls::server::{ClientCertVerifierBuilder, WebPkiClientVerifier};
+use rustls::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 use rustls::{
     ClientConfig, ClientConnection, Connection, ConnectionCommon, Error, ProtocolVersion,
     RootCertStore, ServerConfig, ServerConnection, SideData, SupportedCipherSuite,
 };
 use webpki::anchor_from_trusted_cert;
-use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 
 use super::provider;
 
@@ -156,7 +154,6 @@ pub fn transfer(
     left: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
     right: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
     id: Option<u32>,
-
 ) -> usize {
     let mut buf = [0u8; 262144];
     let mut total = 0;
@@ -165,7 +162,8 @@ pub fn transfer(
         let sz = {
             let into_buf: &mut dyn io::Write = &mut &mut buf[..];
 
-            left.write_tls(into_buf, id.unwrap_or_else(|| DEFAULT_STREAM_ID)).unwrap()
+            left.write_tls(into_buf, id.unwrap_or_else(|| DEFAULT_STREAM_ID))
+                .unwrap()
         };
         total += sz;
         if sz == 0 {
@@ -219,7 +217,6 @@ where
 
         let mut reader = Reader::init(&buf[..sz]);
         while reader.any_left() {
-
             let message = OutboundOpaqueMessage::read(&mut reader).unwrap();
 
             // this is a bit of a falsehood: we don't know whether message
@@ -239,16 +236,13 @@ where
             };
 
             let message_enc_reader: &mut dyn io::Read = &mut &message_enc[..];
-            let len = right
-                .read_tls(message_enc_reader)
-                .unwrap();
+            let len = right.read_tls(message_enc_reader).unwrap();
             assert_eq!(len, message_enc.len());
         }
     }
 
     total
 }
-
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum KeyType {
@@ -278,7 +272,6 @@ impl KeyType {
             Self::Ed25519 => bytes_for("eddsa", part),
         }
     }
-
 
     pub fn get_chain(&self) -> Vec<CertificateDer<'static>> {
         rustls_pemfile::certs(&mut io::BufReader::new(self.bytes_for("end.fullchain")))
@@ -442,9 +435,7 @@ pub fn get_client_root_store(kt: KeyType) -> Arc<RootCertStore> {
     let chain = kt.get_chain();
     let trust_anchor = chain.last().unwrap();
     RootCertStore {
-        roots: vec![anchor_from_trusted_cert(trust_anchor)
-            .unwrap()
-            .to_owned()],
+        roots: vec![anchor_from_trusted_cert(trust_anchor).unwrap().to_owned()],
     }
     .into()
 }
@@ -524,7 +515,6 @@ pub fn finish_client_config_with_creds(
 }
 
 pub fn make_client_config(kt: KeyType) -> ClientConfig {
-
     finish_client_config(kt, client_config_builder())
 }
 
@@ -549,7 +539,6 @@ pub fn make_client_config_with_versions(
     kt: KeyType,
     versions: &[&'static rustls::SupportedProtocolVersion],
 ) -> ClientConfig {
-
     finish_client_config(kt, client_config_builder_with_versions(versions))
 }
 
@@ -597,7 +586,6 @@ pub fn make_pair(kt: KeyType) -> (ClientConnection, ServerConnection, RecvBufMap
 pub fn make_pair_for_configs(
     client_config: ClientConfig,
     server_config: ServerConfig,
-
 ) -> (ClientConnection, ServerConnection, RecvBufMap, RecvBufMap) {
     make_pair_for_arc_configs(&Arc::new(client_config), &Arc::new(server_config))
 }
@@ -605,7 +593,6 @@ pub fn make_pair_for_configs(
 pub fn make_pair_for_arc_configs(
     client_config: &Arc<ClientConfig>,
     server_config: &Arc<ServerConfig>,
-
 ) -> (ClientConnection, ServerConnection, RecvBufMap, RecvBufMap) {
     (
         ClientConnection::new(Arc::clone(client_config), server_name("localhost")).unwrap(),
@@ -620,14 +607,17 @@ pub fn do_handshake(
     server: &mut (impl DerefMut + Deref<Target = ConnectionCommon<impl SideData>>),
     serv: &mut RecvBufMap,
     clnt: &mut RecvBufMap,
-
 ) -> (usize, usize) {
     let (mut to_client, mut to_server) = (0, 0);
     while server.is_handshaking() || client.is_handshaking() {
         to_server += transfer(client, server, None);
-        server.process_new_packets(&mut SimpleIdHashMap::default(), serv).unwrap();
+        server
+            .process_new_packets(&mut SimpleIdHashMap::default(), serv)
+            .unwrap();
         to_client += transfer(server, client, None);
-        client.process_new_packets(&mut SimpleIdHashMap::default(), clnt).unwrap();
+        client
+            .process_new_packets(&mut SimpleIdHashMap::default(), clnt)
+            .unwrap();
     }
     (to_server, to_client)
 }
@@ -643,7 +633,6 @@ pub fn do_handshake_until_error(
     server: &mut ServerConnection,
     serv: &mut RecvBufMap,
     clnt: &mut RecvBufMap,
-
 ) -> Result<(), ErrorFromPeer> {
     while server.is_handshaking() || client.is_handshaking() {
         transfer(client, server, None);
@@ -664,7 +653,6 @@ pub fn do_handshake_until_both_error(
     server: &mut ServerConnection,
     serv: &mut RecvBufMap,
     clnt: &mut RecvBufMap,
-
 ) -> Result<(), Vec<ErrorFromPeer>> {
     match do_handshake_until_error(client, server, serv, clnt) {
         Err(server_err @ ErrorFromPeer::Server(_)) => {
@@ -694,7 +682,6 @@ pub fn do_handshake_until_both_error(
     }
 }
 
-
 pub fn server_name(name: &'static str) -> ServerName<'static> {
     name.try_into().unwrap()
 }
@@ -715,7 +702,6 @@ impl io::Read for FailsReads {
     }
 }
 
-
 pub fn do_suite_test(
     client_config: ClientConfig,
     server_config: ServerConfig,
@@ -727,7 +713,8 @@ pub fn do_suite_test(
         expect_version,
         expect_suite.suite()
     );
-    let (mut client, mut server, mut recv_svr, mut recv_clnt) = make_pair_for_configs(client_config, server_config);
+    let (mut client, mut server, mut recv_svr, mut recv_clnt) =
+        make_pair_for_configs(client_config, server_config);
 
     assert_eq!(None, client.negotiated_cipher_suite());
     assert_eq!(None, server.negotiated_cipher_suite());
@@ -737,7 +724,9 @@ pub fn do_suite_test(
     assert!(server.is_handshaking());
 
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr).unwrap();
+    server
+        .process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr)
+        .unwrap();
 
     assert!(client.is_handshaking());
     assert!(server.is_handshaking());
@@ -747,15 +736,21 @@ pub fn do_suite_test(
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut server, &mut client, None);
-    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
+    client
+        .process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt)
+        .unwrap();
 
     assert_eq!(Some(expect_suite), client.negotiated_cipher_suite());
     assert_eq!(Some(expect_suite), server.negotiated_cipher_suite());
 
     transfer(&mut client, &mut server, None);
-    server.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr).unwrap();
+    server
+        .process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_svr)
+        .unwrap();
     transfer(&mut server, &mut client, None);
-    client.process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt).unwrap();
+    client
+        .process_new_packets(&mut SimpleIdHashMap::default(), &mut recv_clnt)
+        .unwrap();
 
     assert!(!client.is_handshaking());
     assert!(!server.is_handshaking());

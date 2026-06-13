@@ -20,13 +20,13 @@ use rustls::crypto::ring as provider;
 #[cfg(feature = "ring")]
 use rustls::crypto::ring::{cipher_suite, Ticketer};
 use rustls::crypto::CryptoProvider;
+use rustls::recvbuf::RecvBufMap;
 use rustls::server::{NoServerSessionStorage, ServerSessionMemoryCache, WebPkiClientVerifier};
+use rustls::tcpls::stream::SimpleIdHashMap;
 use rustls::{
     ClientConfig, ClientConnection, ConnectionCommon, RootCertStore, ServerConfig,
     ServerConnection, SideData,
 };
-use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::SimpleIdHashMap;
 
 pub fn main() {
     let mut args = std::env::args();
@@ -66,14 +66,11 @@ where
     let mut app_bufs = RecvBufMap::new();
     let mut map = SimpleIdHashMap::default();
 
-
     loop {
         let mut sz = 0;
 
         while left.wants_write(None) {
-            let written = left
-                .write_tls(&mut tls_buf[sz..].as_mut(), 0)
-                .unwrap();
+            let written = left.write_tls(&mut tls_buf[sz..].as_mut(), 0).unwrap();
             if written == 0 {
                 break;
             }
@@ -370,9 +367,7 @@ fn make_client_config(
 
 fn apply_work_multiplier(work: u64) -> u64 {
     let mul = match env::var("BENCH_MULTIPLIER") {
-        Ok(val) => val
-            .parse::<f64>()
-            .expect("invalid BENCH_MULTIPLIER value"),
+        Ok(val) => val.parse::<f64>().expect("invalid BENCH_MULTIPLIER value"),
         Err(_) => 1.,
     };
 
@@ -542,25 +537,16 @@ fn bench_memory(params: &BenchmarkParam, conn_count: u64) {
     }
 
     for _step in 0..5 {
-        for (client, server) in clients
-            .iter_mut()
-            .zip(servers.iter_mut())
-        {
+        for (client, server) in clients.iter_mut().zip(servers.iter_mut()) {
             do_handshake_step(client, server);
         }
     }
 
     for client in clients.iter_mut() {
-        client
-            .writer()
-            .write_all(&[0u8; 1024])
-            .unwrap();
+        client.writer().write_all(&[0u8; 1024]).unwrap();
     }
 
-    for (client, server) in clients
-        .iter_mut()
-        .zip(servers.iter_mut())
-    {
+    for (client, server) in clients.iter_mut().zip(servers.iter_mut()) {
         transfer(client, server, Some(1024));
     }
 }
@@ -581,9 +567,7 @@ fn lookup_matching_benches(name: &str) -> Vec<&BenchmarkParam> {
 }
 
 fn selected_tests(mut args: env::Args) {
-    let mode = args
-        .next()
-        .expect("first argument must be mode");
+    let mode = args.next().expect("first argument must be mode");
 
     match mode.as_ref() {
         "bulk" => match args.next() {

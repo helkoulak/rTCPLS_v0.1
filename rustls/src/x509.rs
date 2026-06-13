@@ -1,6 +1,5 @@
 // Additional x509/asn1 functions to those provided in webpki/ring.
 
-
 use alloc::vec::Vec;
 
 pub(crate) fn asn1_wrap(tag: u8, bytes: &[u8]) -> Vec<u8> {
@@ -16,10 +15,7 @@ pub(crate) fn asn1_wrap(tag: u8, bytes: &[u8]) -> Vec<u8> {
     } else {
         // Long form
         let size = len.to_be_bytes();
-        let leading_zero_bytes = size
-            .iter()
-            .position(|&x| x != 0)
-            .unwrap_or(size.len());
+        let leading_zero_bytes = size.iter().position(|&x| x != 0).unwrap_or(size.len());
         assert!(leading_zero_bytes < size.len());
         let encoded_bytes = size.len() - leading_zero_bytes;
 

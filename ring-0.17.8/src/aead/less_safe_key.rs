@@ -12,11 +12,9 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-
 use super::{Aad, Algorithm, KeyInner, Nonce, Tag, UnboundKey, TAG_LEN};
 use crate::{constant_time, cpu, error};
 use core::ops::RangeFrom;
-
 
 /// Immutable keys for use in situations where `OpeningKey`/`SealingKey` and
 /// `NonceSequence` cannot reasonably be used.
@@ -74,8 +72,8 @@ impl LessSafeKey {
         out: &'in_out mut [u8],
         ciphertext: RangeFrom<usize>,
     ) -> Result<&'in_out mut [u8], error::Unspecified>
-        where
-            A: AsRef<[u8]>,
+    where
+        A: AsRef<[u8]>,
     {
         let aad = Aad::from(aad.as_ref());
         open_within_output_(self, nonce, aad, tag, in_out, out, ciphertext)
@@ -106,13 +104,11 @@ impl LessSafeKey {
         out: &'in_out mut [u8],
         offset: usize,
     ) -> Result<&'in_out mut [u8], error::Unspecified>
-        where
-            A: AsRef<[u8]>,
+    where
+        A: AsRef<[u8]>,
     {
         self.open_within_output(nonce, aad, &in_out[offset..], out, 0..)
-
     }
-
 
     /// Like [`super::OpeningKey::open_within()`], except it accepts an
     /// arbitrary nonce.
@@ -150,8 +146,8 @@ impl LessSafeKey {
         out: &'in_out mut [u8],
         ciphertext_and_tag: RangeFrom<usize>,
     ) -> Result<&'in_out mut [u8], error::Unspecified>
-        where
-            A: AsRef<[u8]>,
+    where
+        A: AsRef<[u8]>,
     {
         let tag_offset = in_out
             .len()
@@ -190,18 +186,18 @@ impl LessSafeKey {
         &self,
         nonce: Nonce,
         aad: Aad<A>,
-        in_out: & [u8],
-        output: & mut [u8],
+        in_out: &[u8],
+        output: &mut [u8],
         offset: usize,
     ) -> Result<(), error::Unspecified>
     where
         A: AsRef<[u8]>,
     {
-        let len  = in_out[offset..].len();
+        let len = in_out[offset..].len();
         let mut tagg = Tag([0u8; 16]);
-        self.seal_in_output_separate_tag(nonce, aad, & in_out[offset..], output.as_mut())
+        self.seal_in_output_separate_tag(nonce, aad, &in_out[offset..], output.as_mut())
             .map(|tag| tagg = tag)?;
-        for i in 0..tagg.0.len(){
+        for i in 0..tagg.0.len() {
             output[len..][i] = tagg.0[i];
         }
         Ok(())
@@ -215,9 +211,9 @@ impl LessSafeKey {
         in_out: &mut InOut,
         offset: usize,
     ) -> Result<(), error::Unspecified>
-        where
-            A: AsRef<[u8]>,
-            InOut: AsMut<[u8]> + for<'in_out> Extend<&'in_out u8>,
+    where
+        A: AsRef<[u8]>,
+        InOut: AsMut<[u8]> + for<'in_out> Extend<&'in_out u8>,
     {
         self.seal_in_place_separate_tag(nonce, aad, &mut in_out.as_mut()[offset..])
             .map(|tag| in_out.extend(tag.as_ref()))
@@ -240,19 +236,17 @@ impl LessSafeKey {
         seal_in_place_separate_tag_(self, nonce, Aad::from(aad.as_ref()), in_out)
     }
 
-
     #[inline]
     pub fn seal_in_output_separate_tag<A>(
         &self,
         nonce: Nonce,
         aad: Aad<A>,
-        in_out: & [u8],
+        in_out: &[u8],
         output: &mut [u8],
     ) -> Result<Tag, error::Unspecified>
     where
         A: AsRef<[u8]>,
     {
-
         seal_in_output_separate_tag_(self, nonce, Aad::from(aad.as_ref()), in_out, output)
     }
 
@@ -349,8 +343,8 @@ pub(super) fn seal_in_output_separate_tag_(
     key: &LessSafeKey,
     nonce: Nonce,
     aad: Aad<&[u8]>,
-    in_out: & [u8],
-    output:& mut [u8],
+    in_out: &[u8],
+    output: &mut [u8],
 ) -> Result<Tag, error::Unspecified> {
     (key.algorithm.seal_output)(&key.inner, nonce, aad, in_out, output, cpu::features())
 }

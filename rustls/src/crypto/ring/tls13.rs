@@ -1,4 +1,7 @@
-use crate::crypto::cipherx::{make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv, MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError};
+use crate::crypto::cipherx::{
+    make_tls13_aad, make_tls13_aad_tcpls, AeadKey, HeaderProtector, InboundOpaqueMessage, Iv,
+    MessageDecrypter, MessageEncrypter, Nonce, Tls13AeadAlgorithm, UnsupportedOperationError,
+};
 use crate::crypto::tls13::{Hkdf, HkdfExpander, OkmBlock, OutputLengthError};
 use crate::enums::{CipherSuite, ContentType, ProtocolVersion};
 use crate::error::Error;
@@ -8,7 +11,10 @@ use std::prelude::rust_2018::ToString;
 use std::vec;
 
 use crate::msgs::fragmenter::MAX_FRAGMENT_LEN;
-use crate::msgs::message::{InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload, CHUNK_NUM_SIZE, STREAM_ID_SIZE};
+use crate::msgs::message::{
+    InboundPlainMessage, OutboundOpaqueMessage, OutboundPlainMessage, PrefixedPayload,
+    CHUNK_NUM_SIZE, STREAM_ID_SIZE,
+};
 use crate::recvbuf::RecvBufMap;
 use crate::suites::{CipherSuiteCommon, ConnectionTrafficSecrets, SupportedCipherSuite};
 use crate::tcpls::frame::{Frame, TcplsHeader, STREAM_FRAME_HEADER_SIZE, TCPLS_HEADER_SIZE};
@@ -85,8 +91,8 @@ fn unpad_tls13_from_slice(v: &mut [u8]) -> (ContentType, usize) {
             content_type => {
                 let typ = ContentType::from(content_type);
                 v[last] = 0x00;
-                return (typ, last)
-            },
+                return (typ, last);
+            }
         }
     }
 }
@@ -206,7 +212,6 @@ struct Tls13MessageEncrypter {
     enc_key: aead::LessSafeKey,
     iv: Iv,
     write_seq_map: WriteSeqMap,
-
 }
 
 struct Tls13MessageDecrypter {
@@ -256,14 +261,13 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         header_encrypter: &mut HeaderProtector,
     ) -> Result<OutboundOpaqueMessage, Error> {
         let plain_len = msg.payload.len();
-        let hdr_len =  match frame_header.as_ref() {
+        let hdr_len = match frame_header.as_ref() {
             Some(_header) => STREAM_FRAME_HEADER_SIZE,
             None => 0,
         };
         let (enc_payload_len, tag_len) = self.encrypted_payload_len_tcpls(plain_len, hdr_len);
         let mut payload = PrefixedPayload::with_capacity_tcpls(enc_payload_len);
         let total_len = TCPLS_HEADER_SIZE + enc_payload_len;
-
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq, stream_id).0);
         let aad = aead::Aad::from(make_tls13_aad_tcpls(total_len, tcpls_header));
@@ -284,30 +288,39 @@ impl MessageEncrypter for Tls13MessageEncrypter {
         match frame_header {
             Some(ref header) => {
                 payload.extend_from_slice(vec![0u8; 4].as_slice());
-                let mut b =
-                    octets::OctetsMut::with_slice_at_offset(payload.as_mut(), plain_len + TCPLS_HEADER_SIZE);
+                let mut b = octets::OctetsMut::with_slice_at_offset(
+                    payload.as_mut(),
+                    plain_len + TCPLS_HEADER_SIZE,
+                );
                 header.encode(&mut b)?;
                 b.put_bytes(&msg.typ.to_array()).unwrap();
-
-            },
+            }
             None => {
                 payload.extend_from_slice(&msg.typ.to_array());
-
-            },
+            }
         }
-
 
         self.enc_key
             .seal_in_place_append_tag_tcpls(nonce, aad, &mut payload, TCPLS_HEADER_SIZE)
             .map_err(|_| Error::EncryptError)?;
 
         // Take the LSBs of calculated tag as input sample for hash function
-        let sample = payload.as_mut_tcpls_payload().rchunks(tag_len).next().unwrap();
+        let sample = payload
+            .as_mut_tcpls_payload()
+            .rchunks(tag_len)
+            .next()
+            .unwrap();
 
         // Encrypt sample AES(sample) and XOR with TCPLS header
-        for (i, byte) in header_encrypter.generate_mask(sample).into_iter().enumerate(){
+        for (i, byte) in header_encrypter
+            .generate_mask(sample)
+            .into_iter()
+            .enumerate()
+        {
             payload.as_mut_tcpls_header()[i] ^= byte;
-            if i == 7 {break}
+            if i == 7 {
+                break;
+            }
         }
 
         Ok(OutboundOpaqueMessage::new(
@@ -338,7 +351,7 @@ impl MessageEncrypter for Tls13MessageEncrypter {
     }
 
     fn reset_write_seq(&mut self) {
-       self.write_seq_map.reset_write_seq();
+        self.write_seq_map.reset_write_seq();
     }
 
     fn get_write_seq(&self, stream_id: u32) -> u64 {
@@ -376,7 +389,6 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         header_decrypted: bool,
         header_decrypter: &mut HeaderProtector,
     ) -> Result<(InboundPlainMessage<'a>, u64, u32, u32), Error> {
-
         let stream_id: u32;
         let chunk_num: u32;
 
@@ -387,34 +399,38 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         }
 
         match header_decrypted {
-            true => {},
+            true => {}
             false => {
                 // Take the LSBs of calculated tag as input sample for hash function
-                let sample = payload[..].rchunks(self.dec_key.algorithm().tag_len()).next().unwrap();
-
+                let sample = payload[..]
+                    .rchunks(self.dec_key.algorithm().tag_len())
+                    .next()
+                    .unwrap();
 
                 // Calculate hash(sample) XOR TCPLS header
-                for (i, byte) in header_decrypter.generate_mask(sample).into_iter().enumerate(){
+                for (i, byte) in header_decrypter
+                    .generate_mask(sample)
+                    .into_iter()
+                    .enumerate()
+                {
                     payload[..TCPLS_HEADER_SIZE][i] ^= byte;
-                    if i == 7 {break}
+                    if i == 7 {
+                        break;
+                    }
                 }
-            },
+            }
         }
 
-        chunk_num = u32::from_be_bytes(payload[..CHUNK_NUM_SIZE]
-            .try_into()
-            .unwrap());
-        stream_id = u32::from_be_bytes(payload[STREAM_ID_SIZE..TCPLS_HEADER_SIZE]
-            .try_into()
-            .unwrap());
-
-
-
+        chunk_num = u32::from_be_bytes(payload[..CHUNK_NUM_SIZE].try_into().unwrap());
+        stream_id = u32::from_be_bytes(
+            payload[STREAM_ID_SIZE..TCPLS_HEADER_SIZE]
+                .try_into()
+                .unwrap(),
+        );
 
         let seq = self.read_seq_map.get_or_create(stream_id as u64).read_seq;
 
         let recv_buf = app_bufs.get_or_create(stream_id as u64, None);
-
 
         if recv_buf.next_recv_pkt_num != chunk_num {
             return Err(Error::General("Record out of order".to_string()));
@@ -429,9 +445,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         let version = ProtocolVersion::TLSv1_2.to_array();
 
         let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&self.iv, seq, stream_id).0);
-        let aad = aead::Aad::from(
-
-        [
+        let aad = aead::Aad::from([
             ContentType::ApplicationData.into(),
             // Note: this is `legacy_record_version`, i.e. TLS1.2 even for TLS1.3.
             version[0],
@@ -445,11 +459,8 @@ impl MessageDecrypter for Tls13MessageDecrypter {
             (stream_id >> 24) as u8,
             (stream_id >> 16) as u8,
             (stream_id >> 8) as u8,
-            (stream_id & 0xff) as u8
-        ]
-        );
-
-
+            (stream_id & 0xff) as u8,
+        ]);
 
         let plain_len = self
             .dec_key
@@ -462,7 +473,7 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         }
 
         let type_pos;
-        (msg.typ, type_pos)  = unpad_tls13_from_slice(&mut recv_buf.get_mut()[..plain_len]);
+        (msg.typ, type_pos) = unpad_tls13_from_slice(&mut recv_buf.get_mut()[..plain_len]);
 
         let payload_len_no_type = recv_buf.get_mut()[..type_pos].len();
 
@@ -482,21 +493,31 @@ impl MessageDecrypter for Tls13MessageDecrypter {
         recv_buf.offset += payload_len_no_type as u64;
         recv_buf.last_data_type_decrypted = msg.typ.into();
 
-        Ok((InboundOpaqueMessage::new(msg.typ, ProtocolVersion::TLSv1_3, match msg.typ {
-            ContentType::ApplicationData => {
-                if recv_buf.get_ref()[current_offset as usize..][type_pos - 1] == 3{
-                    recv_buf.complete = true;
-                }
-                recv_buf.get_mut_consumed()
-            },
-            ContentType::Handshake => recv_buf.get_mut_at_index(current_offset as usize, payload_len_no_type),
-            _ => {
-                recv_buf.offset -= payload_len_no_type as u64;
-                recv_buf.get_mut_at_index(recv_buf.offset as usize, payload_len_no_type)
-            },
-
-        }).into_plain_message(),seq , chunk_num, stream_id))
-
+        Ok((
+            InboundOpaqueMessage::new(
+                msg.typ,
+                ProtocolVersion::TLSv1_3,
+                match msg.typ {
+                    ContentType::ApplicationData => {
+                        if recv_buf.get_ref()[current_offset as usize..][type_pos - 1] == 3 {
+                            recv_buf.complete = true;
+                        }
+                        recv_buf.get_mut_consumed()
+                    }
+                    ContentType::Handshake => {
+                        recv_buf.get_mut_at_index(current_offset as usize, payload_len_no_type)
+                    }
+                    _ => {
+                        recv_buf.offset -= payload_len_no_type as u64;
+                        recv_buf.get_mut_at_index(recv_buf.offset as usize, payload_len_no_type)
+                    }
+                },
+            )
+            .into_plain_message(),
+            seq,
+            chunk_num,
+            stream_id,
+        ))
     }
 
     fn increase_read_seq(&mut self, stream_id: u32) {
@@ -602,14 +623,12 @@ pub(crate) struct ReadSeqMap {
 impl ReadSeqMap {
     pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut ReadSeq {
         match self.map.entry(stream_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(ReadSeq::new())
-            },
+            hash_map::Entry::Vacant(v) => v.insert(ReadSeq::new()),
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
     }
 
-    pub(crate) fn get(&self, stream_id: u64) -> & ReadSeq {
+    pub(crate) fn get(&self, stream_id: u64) -> &ReadSeq {
         self.map.get(&stream_id).unwrap()
     }
 
@@ -618,7 +637,6 @@ impl ReadSeqMap {
             seq.1.read_seq = 0;
         }
     }
-
 }
 
 #[derive(Default)]
@@ -629,14 +647,12 @@ pub(crate) struct WriteSeqMap {
 impl WriteSeqMap {
     pub(crate) fn get_or_create(&mut self, stream_id: u64) -> &mut WriteSeq {
         match self.map.entry(stream_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(WriteSeq::new())
-            },
+            hash_map::Entry::Vacant(v) => v.insert(WriteSeq::new()),
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
     }
 
-    pub(crate) fn get(&self, stream_id: u64) -> & WriteSeq {
+    pub(crate) fn get(&self, stream_id: u64) -> &WriteSeq {
         self.map.get(&stream_id).unwrap()
     }
 
@@ -645,7 +661,6 @@ impl WriteSeqMap {
             seq.1.write_seq = 0;
         }
     }
-
 }
 #[derive(Default)]
 pub(crate) struct WriteSeq {
@@ -654,11 +669,8 @@ pub(crate) struct WriteSeq {
 
 impl WriteSeq {
     pub(crate) fn new() -> Self {
-        Self {
-            write_seq: 0,
-        }
+        Self { write_seq: 0 }
     }
-
 }
 pub(crate) struct ReadSeq {
     read_seq: u64,
@@ -666,9 +678,6 @@ pub(crate) struct ReadSeq {
 
 impl ReadSeq {
     pub(crate) fn new() -> Self {
-        Self {
-            read_seq: 0,
-        }
+        Self { read_seq: 0 }
     }
-
 }

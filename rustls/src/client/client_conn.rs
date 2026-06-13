@@ -1,4 +1,3 @@
-
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
@@ -32,7 +31,6 @@ use crate::WantsVerifier;
 use crate::{crypto, DistinguishedName};
 use crate::{sign, verify, versions, KeyLog, WantsVersions};
 
-
 /// A trait for the ability to store client session data, so that sessions
 /// can be resumed in future connections.
 ///
@@ -56,7 +54,6 @@ pub trait ClientSessionStore: fmt::Debug + Send + Sync {
     /// to the server.
 
     fn kx_hint(&self, server_name: &ServerName<'_>) -> Option<NamedGroup>;
-
 
     /// Remember a TLS1.2 session.
     ///
@@ -149,12 +146,10 @@ pub trait ResolvesClientCert: fmt::Debug + Send + Sync {
 /// * [`ClientConfig::alpn_protocols`]: the default is empty -- no ALPN protocol is negotiated.
 /// * [`ClientConfig::key_log`]: key material is not logged.
 
-
 ///
 /// [`RootCertStore`]: crate::RootCertStore
 #[derive(Debug)]
 pub struct ClientConfig {
-
     /// Which ALPN protocols we include in our client hello.
     /// If empty, no ALPN extension is sent.
     pub alpn_protocols: Vec<Vec<u8>>,
@@ -188,7 +183,6 @@ pub struct ClientConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-
     pub enable_secret_extraction: bool,
 
     /// Whether to send data on the first flight ("early data") in
@@ -201,7 +195,7 @@ pub struct ClientConfig {
 
     /// Enable Acknowledgements
     pub enable_ack: bool,
-    
+
     /// If set to `true`, requires the server to support the extended
     /// master secret extraction method defined in [RFC 7627].
     ///
@@ -467,7 +461,6 @@ impl Default for Resumption {
     /// Create an in-memory session store resumption with up to 256 server names, allowing
     /// a TLS 1.2 session to resume with a session id or RFC 5077 ticket.
     fn default() -> Self {
-
         #[cfg(feature = "std")]
         let ret = Self::in_memory_sessions(256);
 
@@ -496,9 +489,9 @@ pub enum Tls12Resumption {
 
 /// Container for unsafe APIs
 pub(super) mod danger {
-    use alloc::sync::Arc;
     use super::verify::ServerCertVerifier;
     use super::ClientConfig;
+    use alloc::sync::Arc;
 
     /// Accessor for dangerous configuration options.
     #[derive(Debug)]
@@ -523,7 +516,6 @@ enum EarlyDataState {
     AcceptedFinished,
     Rejected,
 }
-
 
 #[derive(Debug)]
 pub(super) struct EarlyData {
@@ -576,7 +568,6 @@ impl EarlyData {
         }
     }
 
-
     fn check_write_opt(&mut self, sz: usize) -> Option<usize> {
         match self.state {
             EarlyDataState::Disabled => unreachable!(),
@@ -609,8 +600,8 @@ mod connection {
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::suites::ExtractedSecrets;
-    use crate::ClientConfig;
     use crate::tcpls::stream::DEFAULT_STREAM_ID;
+    use crate::ClientConfig;
 
     /// Stub that implements io::Write and dispatches to `write_early_data`.
     pub struct WriteEarlyData<'a> {
@@ -625,12 +616,7 @@ mod connection {
         /// How many bytes you may send.  Writes will become short
         /// once this reaches zero.
         pub fn bytes_left(&self) -> usize {
-            self.sess
-                .inner
-                .core
-                .data
-                .early_data
-                .bytes_left()
+            self.sess.inner.core.data.early_data.bytes_left()
         }
     }
 
@@ -662,8 +648,7 @@ mod connection {
 
     impl fmt::Debug for ClientConnection {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            f.debug_struct("ClientConnection")
-                .finish()
+            f.debug_struct("ClientConnection").finish()
         }
     }
 
@@ -696,13 +681,7 @@ mod connection {
         /// in this case the data is lost but the connection continues.  You
         /// can tell this happened using `is_early_data_accepted`.
         pub fn early_data(&mut self) -> Option<WriteEarlyData> {
-            if self
-                .inner
-                .core
-                .data
-                .early_data
-                .is_enabled()
-            {
+            if self.inner.core.data.early_data.is_enabled() {
                 Some(WriteEarlyData::new(self))
             } else {
                 None
@@ -798,10 +777,7 @@ impl ConnectionCore<ClientConnectionData> {
         Ok(Self::new(state, data, common_state))
     }
 
-
-
-
-   /* pub(crate) fn join_tcp_connection(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
+    /* pub(crate) fn join_tcp_connection(config: &Arc<ClientConfig>, common: &mut CommonState) -> Result<(), Error>{
         hs::start_fake_handshake(config, common)
     }*/
 
@@ -848,13 +824,7 @@ impl TransmitTlsData<'_, ClientConnectionData> {
     ///
     /// IF allowed by the protocol
     pub fn may_encrypt_early_data(&mut self) -> Option<MayEncryptEarlyData> {
-        if self
-            .conn
-            .core
-            .data
-            .early_data
-            .is_enabled()
-        {
+        if self.conn.core.data.early_data.is_enabled() {
             Some(MayEncryptEarlyData { conn: self.conn })
         } else {
             None

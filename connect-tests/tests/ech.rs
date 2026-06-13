@@ -40,13 +40,10 @@ mod ech_config {
             .expect("failed to lookup HTTPS record type")
             .record_iter()
             .find_map(|r| match r.data() {
-                Some(RData::HTTPS(svcb)) => svcb
-                    .svc_params()
-                    .iter()
-                    .find_map(|sp| match sp {
-                        (SvcParamKey::EchConfig, SvcParamValue::EchConfig(e)) => Some(e.clone().0),
-                        _ => None,
-                    }),
+                Some(RData::HTTPS(svcb)) => svcb.svc_params().iter().find_map(|sp| match sp {
+                    (SvcParamKey::EchConfig, SvcParamValue::EchConfig(e)) => Some(e.clone().0),
+                    _ => None,
+                }),
                 _ => None,
             })
             .expect("missing expected HTTPS SvcParam EchConfig record")

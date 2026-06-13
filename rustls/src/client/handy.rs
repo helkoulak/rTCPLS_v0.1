@@ -1,4 +1,3 @@
-
 use alloc::sync::Arc;
 
 use pki_types::ServerName;
@@ -34,7 +33,6 @@ impl client::ClientSessionStore for NoClientSessionStorage {
         None
     }
 }
-
 
 #[cfg(feature = "std")]
 mod cache {
@@ -150,15 +148,15 @@ mod cache {
             server_name: ServerName<'static>,
             value: persist::Tls13ClientSessionValue,
         ) {
-            self.servers
-                .lock()
-                .unwrap()
-                .get_or_insert_default_and_edit(server_name.clone(), |data| {
+            self.servers.lock().unwrap().get_or_insert_default_and_edit(
+                server_name.clone(),
+                |data| {
                     if data.tls13.len() == data.tls13.capacity() {
                         data.tls13.pop_front();
                     }
                     data.tls13.push_back(value);
-                });
+                },
+            );
         }
 
         fn take_tls13_ticket(
@@ -176,8 +174,7 @@ mod cache {
     impl fmt::Debug for ClientSessionMemoryCache {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             // Note: we omit self.servers as it may contain sensitive data.
-            f.debug_struct("ClientSessionMemoryCache")
-                .finish()
+            f.debug_struct("ClientSessionMemoryCache").finish()
         }
     }
 }
@@ -201,7 +198,6 @@ impl client::ResolvesClientCert for FailResolveClientCert {
         false
     }
 }
-
 
 #[derive(Debug)]
 pub(super) struct AlwaysResolvesClientCert(Arc<sign::CertifiedKey>);

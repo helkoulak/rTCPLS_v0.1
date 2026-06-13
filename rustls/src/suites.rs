@@ -1,4 +1,3 @@
-
 use core::fmt;
 
 use crate::common_state::Protocol;
@@ -13,12 +12,10 @@ use crate::tls13::Tls13CipherSuite;
 use crate::versions::TLS12;
 use crate::versions::{SupportedProtocolVersion, TLS13};
 
-
 /// Common state for cipher suites (both for TLS 1.2 and TLS 1.3)
 pub struct CipherSuiteCommon {
     /// The TLS enumeration naming this cipher suite.
     pub suite: CipherSuite,
-
 
     /// Which hash function the suite uses.
     pub hash_provider: &'static dyn crypto::hash::Hash,
@@ -59,13 +56,11 @@ pub enum SupportedCipherSuite {
     Tls13(&'static Tls13CipherSuite),
 }
 
-
 impl SupportedCipherSuite {
     /// The cipher suite's identifier
     pub fn suite(&self) -> CipherSuite {
         self.common().suite
     }
-
 
     /// The hash function the ciphersuite uses.
     pub(crate) fn hash_provider(&self) -> &'static dyn crypto::hash::Hash {
@@ -79,7 +74,6 @@ impl SupportedCipherSuite {
             Self::Tls13(inner) => &inner.common,
         }
     }
-
 
     /// Return the inner `Tls13CipherSuite` for this suite, if it is a TLS1.3 suite.
     pub fn tls13(&self) -> Option<&'static Tls13CipherSuite> {
@@ -105,13 +99,9 @@ impl SupportedCipherSuite {
         match self {
             Self::Tls13(_) => true, // no constraint expressed by ciphersuite (e.g., TLS1.3)
             #[cfg(feature = "tls12")]
-            Self::Tls12(inner) => inner
-                .sign
-                .iter()
-                .any(|scheme| scheme.sign() == _sig_alg),
+            Self::Tls12(inner) => inner.sign.iter().any(|scheme| scheme.sign() == _sig_alg),
         }
     }
-
 
     /// Return true if this suite is usable for the given [`Protocol`].
     ///
@@ -121,10 +111,7 @@ impl SupportedCipherSuite {
         match proto {
             Protocol::Tcp => true,
             Protocol::Tcpls => true,
-            Protocol::Quic => self
-                .tls13()
-                .and_then(|cs| cs.quic)
-                .is_some(),
+            Protocol::Quic => self.tls13().and_then(|cs| cs.quic).is_some(),
         }
     }
 
@@ -221,7 +208,6 @@ pub enum ConnectionTrafficSecrets {
 
     /// Secrets for the AES_256_GCM AEAD algorithm
     Aes256Gcm {
-
         /// AEAD Key
         key: AeadKey,
         /// Initialization vector

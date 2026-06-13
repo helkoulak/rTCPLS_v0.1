@@ -13,13 +13,8 @@ impl HkdfExpanderUsingHmac {
     fn expand_unchecked(&self, info: &[&[u8]], output: &mut [u8]) {
         let mut term = hmac::Tag::new(b"");
 
-        for (n, chunk) in output
-            .chunks_mut(self.0.tag_len())
-            .enumerate()
-        {
-            term = self
-                .0
-                .sign_concat(term.as_ref(), info, &[(n + 1) as u8]);
+        for (n, chunk) in output.chunks_mut(self.0.tag_len()).enumerate() {
+            term = self.0.sign_concat(term.as_ref(), info, &[(n + 1) as u8]);
             chunk.copy_from_slice(&term.as_ref()[..chunk.len()]);
         }
     }
@@ -74,12 +69,8 @@ impl<'a> Hkdf for HkdfUsingHmac<'a> {
             None => &zeroes[..self.0.hash_output_len()],
         };
         Box::new(HkdfExpanderUsingHmac(
-            self.0.with_key(
-                self.0
-                    .with_key(salt)
-                    .sign(&[secret])
-                    .as_ref(),
-            ),
+            self.0
+                .with_key(self.0.with_key(salt).sign(&[secret]).as_ref()),
         ))
     }
 
@@ -88,9 +79,7 @@ impl<'a> Hkdf for HkdfUsingHmac<'a> {
     }
 
     fn hmac_sign(&self, key: &OkmBlock, message: &[u8]) -> hmac::Tag {
-        self.0
-            .with_key(key.as_ref())
-            .sign(&[message])
+        self.0.with_key(key.as_ref()).sign(&[message])
     }
 }
 
@@ -276,11 +265,8 @@ mod tests {
             &[0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9],
         ];
 
-        let output: ByteArray<42> = expand(
-            hkdf.extract_from_secret(Some(salt), ikm)
-                .as_ref(),
-            info,
-        );
+        let output: ByteArray<42> =
+            expand(hkdf.extract_from_secret(Some(salt), ikm).as_ref(), info);
 
         assert_eq!(
             &output.0,
@@ -300,8 +286,7 @@ mod tests {
         let info: Vec<u8> = (0xb0u8..=0xff).collect();
 
         let output: ByteArray<82> = expand(
-            hkdf.extract_from_secret(Some(&salt), &ikm)
-                .as_ref(),
+            hkdf.extract_from_secret(Some(&salt), &ikm).as_ref(),
             &[&info],
         );
 
@@ -325,11 +310,8 @@ mod tests {
         let salt = &[];
         let info = &[];
 
-        let output: ByteArray<42> = expand(
-            hkdf.extract_from_secret(Some(salt), ikm)
-                .as_ref(),
-            info,
-        );
+        let output: ByteArray<42> =
+            expand(hkdf.extract_from_secret(Some(salt), ikm).as_ref(), info);
 
         assert_eq!(
             &output.0,
@@ -353,11 +335,7 @@ mod tests {
         let ikm = &[0x0b; 40];
         let info = &[&b"hel"[..], &b"lo"[..]];
 
-        let output: ByteArray<96> = expand(
-            hkdf.extract_from_secret(None, ikm)
-                .as_ref(),
-            info,
-        );
+        let output: ByteArray<96> = expand(hkdf.extract_from_secret(None, ikm).as_ref(), info);
 
         assert_eq!(
             &output.0,

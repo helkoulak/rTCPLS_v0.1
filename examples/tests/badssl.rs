@@ -4,8 +4,4 @@
 #[allow(dead_code)]
 mod common;
 
-mod online {
-
-
-
-}
+mod online {}

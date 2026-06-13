@@ -1,4 +1,3 @@
-
 use core::ops::{Deref, DerefMut};
 use std::io::{IoSlice, Read, Result, Write};
 
@@ -18,7 +17,6 @@ pub struct Stream<'a, C: 'a + ?Sized, T: 'a + Read + Write + ?Sized> {
     pub sock: &'a mut T,
 
     pub recv_conn: &'a mut RecvBufMap,
-
 }
 
 impl<'a, C, T, S> Stream<'a, C, T>
@@ -31,18 +29,23 @@ where
     /// `sock`.  This does not fail and does no IO.
 
     pub fn new(conn: &'a mut C, sock: &'a mut T, recv_conn: &'a mut RecvBufMap) -> Self {
-        Self { conn, sock, recv_conn }
+        Self {
+            conn,
+            sock,
+            recv_conn,
+        }
     }
 
     /// If we're handshaking, complete all the IO for that.
     /// If we have data to write, write it all.
     fn complete_prior_io(&mut self) -> Result<()> {
-
         if self.conn.is_handshaking() {
-            self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?;
+            self.conn
+                .complete_io(self.sock, Some(&mut self.recv_conn))?;
         }
         if self.conn.wants_write(None) {
-            self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?;
+            self.conn
+                .complete_io(self.sock, Some(&mut self.recv_conn))?;
         }
 
         Ok(())
@@ -64,11 +67,15 @@ where
 
         // hit.
         while self.conn.wants_read(self.recv_conn) {
-            if self.conn.complete_io(self.sock, Some(&mut self.recv_conn))?.0 == 0 {
+            if self
+                .conn
+                .complete_io(self.sock, Some(&mut self.recv_conn))?
+                .0
+                == 0
+            {
                 break;
             }
         }
-
 
         self.conn.reader().read(buf)
     }
@@ -114,10 +121,7 @@ where
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
         self.complete_prior_io()?;
 
-        let len = self
-            .conn
-            .writer()
-            .write_vectored(bufs)?;
+        let len = self.conn.writer().write_vectored(bufs)?;
 
         // Try to write the underlying transport here, but don't let
         // any errors mask the fact we've consumed `len` bytes.
@@ -133,7 +137,6 @@ where
 
         self.conn.writer().flush()?;
         if self.conn.wants_write(None) {
-
             self.conn.complete_io(self.sock, None)?;
         }
         Ok(())
@@ -168,7 +171,11 @@ where
     /// moved into the StreamOwned.
 
     pub fn new(conn: C, sock: T, recv_conn: RecvBufMap) -> Self {
-        Self { conn, sock, recv_conn }
+        Self {
+            conn,
+            sock,
+            recv_conn,
+        }
     }
 
     /// Get a reference to the underlying socket
@@ -180,7 +187,6 @@ where
     pub fn get_mut(&mut self) -> &mut T {
         &mut self.sock
     }
-
 
     /// Extract the `conn` and `sock` parts from the `StreamOwned`
     pub fn into_parts(self) -> (C, T) {

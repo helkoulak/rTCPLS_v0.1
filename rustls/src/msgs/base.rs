@@ -1,4 +1,3 @@
-
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -126,7 +125,6 @@ impl PayloadU16 {
         bytes.extend_from_slice(slice);
     }
 }
-
 
 impl Codec<'_> for PayloadU16 {
     fn encode(&self, bytes: &mut Vec<u8>) {

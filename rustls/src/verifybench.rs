@@ -1,7 +1,6 @@
 // This program does benchmarking of the functions in verify.rs,
 // that do certificate chain validation and signature verification.
 
-
 #![cfg(bench)]
 
 use core::time::Duration;
@@ -187,11 +186,7 @@ struct Context {
 impl Context {
     fn new(provider: CryptoProvider, domain: &'static str, certs: &[&'static [u8]]) -> Self {
         let mut roots = RootCertStore::empty();
-        roots.extend(
-            webpki_roots::TLS_SERVER_ROOTS
-                .iter()
-                .cloned(),
-        );
+        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
         Self {
             server_name: domain.try_into().unwrap(),
             chain: certs

@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -138,7 +137,6 @@ pub struct ClientHello<'a> {
 impl<'a> ClientHello<'a> {
     /// Creates a new ClientHello
     pub(super) fn new(
-
         server_name: &'a Option<DnsName>,
         signature_schemes: &'a [SignatureScheme],
         alpn: Option<&'a Vec<ProtocolName>>,
@@ -191,11 +189,8 @@ impl<'a> ClientHello<'a> {
     /// The server can specify supported ALPN protocols by setting [`ServerConfig::alpn_protocols`].
     /// During the handshake, the server will select the first protocol configured that the client supports.
     pub fn alpn(&self) -> Option<impl Iterator<Item = &'a [u8]>> {
-        self.alpn.map(|protocols| {
-            protocols
-                .iter()
-                .map(|proto| proto.as_ref())
-        })
+        self.alpn
+            .map(|protocols| protocols.iter().map(|proto| proto.as_ref()))
     }
 
     /// Get cipher suites.
@@ -254,7 +249,6 @@ pub struct ServerConfig {
     /// How to produce tickets.
     pub ticketer: Arc<dyn ProducesTickets>,
 
-
     /// How to choose a server cert and key. This is usually set by
     /// [ConfigBuilder::with_single_cert] or [ConfigBuilder::with_cert_resolver].
     /// For async applications, see also [Acceptor].
@@ -266,7 +260,6 @@ pub struct ServerConfig {
 
     /// Supported protocol versions, in no particular order.
     /// The default is all supported versions.
-
     pub(super) versions: versions::EnabledVersions,
 
     /// How to verify client certificates.
@@ -278,7 +271,6 @@ pub struct ServerConfig {
 
     /// Allows traffic secrets to be extracted after the handshake,
     /// e.g. for kTLS setup.
-
     pub enable_secret_extraction: bool,
 
     /// Amount of early data to accept for sessions created by
@@ -380,12 +372,10 @@ impl Clone for ServerConfig {
             require_ems: self.require_ems,
             time_provider: Arc::clone(&self.time_provider),
         }
-
     }
 }
 
 impl ServerConfig {
-
     /// Create a builder for a server configuration with
     /// [the process-default `CryptoProvider`][CryptoProvider#using-the-per-process-default-cryptoprovider]
     /// and safe protocol version defaults.
@@ -505,7 +495,6 @@ impl ServerConfig {
                 .any(|cs| cs.version().version == v)
     }
 
-
     #[cfg(feature = "std")]
     pub(crate) fn supports_protocol(&self, proto: Protocol) -> bool {
         self.provider
@@ -532,7 +521,7 @@ mod connection {
     use std::io;
 
     use super::{Accepted, Accepting, EarlyDataState, ServerConfig, ServerConnectionData};
-    use crate::common_state::{CommonState, Context, DEFAULT_BUFFER_LIMIT, Side};
+    use crate::common_state::{CommonState, Context, Side, DEFAULT_BUFFER_LIMIT};
     use crate::conn::{ConnectionCommon, ConnectionCore};
     use crate::error::Error;
     use crate::recvbuf::RecvBufMap;
@@ -669,8 +658,7 @@ mod connection {
 
     impl Debug for ServerConnection {
         fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-            f.debug_struct("ServerConnection")
-                .finish()
+            f.debug_struct("ServerConnection").finish()
         }
     }
 
@@ -855,9 +843,9 @@ mod connection {
     }
 }
 
+use crate::ContentType::ApplicationData;
 #[cfg(feature = "std")]
 pub use connection::{AcceptedAlert, Acceptor, ReadEarlyData, ServerConnection};
-use crate::ContentType::ApplicationData;
 
 /// Unbuffered version of `ServerConnection`
 ///
@@ -889,13 +877,11 @@ impl Deref for UnbufferedServerConnection {
     }
 }
 
-
 impl DerefMut for UnbufferedServerConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
 }
-
 
 impl UnbufferedConnectionCommon<ServerConnectionData> {
     pub(crate) fn pop_early_data(&mut self) -> Option<Vec<u8>> {
@@ -961,7 +947,6 @@ impl Accepted {
         })
     }
 
-
     fn client_hello_payload<'a>(message: &'a Message) -> &'a ClientHelloPayload {
         match &message.payload {
             crate::msgs::message::MessagePayload::Handshake { parsed, .. } => match &parsed.payload
@@ -973,7 +958,6 @@ impl Accepted {
         }
     }
 }
-
 
 impl Debug for Accepted {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -1054,7 +1038,6 @@ impl EarlyDataState {
     }
 
     pub(super) fn take_received_plaintext(&mut self, bytes: Payload) -> bool {
-
         let available = bytes.bytes().len();
         match self {
             Self::Accepted(ref mut received) if received.apply_limit(available) == available => {
@@ -1065,7 +1048,6 @@ impl EarlyDataState {
         }
     }
 }
-
 
 impl Debug for EarlyDataState {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -1092,7 +1074,6 @@ impl ConnectionCore<ServerConnectionData> {
             common,
         ))
     }
-
 
     #[cfg(feature = "std")]
     pub(crate) fn reject_early_data(&mut self) {

@@ -1,4 +1,3 @@
-
 use pki_types::CertificateDer;
 
 use crate::sign;

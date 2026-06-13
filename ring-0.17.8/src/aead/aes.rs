@@ -145,8 +145,8 @@ fn ctr32_encrypt_blocks_out_(
         key: &AES_KEY,
         ivec: &Counter,
     ),
-    in_out: & [u8],
-    out:&mut [u8],
+    in_out: &[u8],
+    out: &mut [u8],
     src: RangeFrom<usize>,
     key: &AES_KEY,
     ctr: &mut Counter,
@@ -156,7 +156,7 @@ fn ctr32_encrypt_blocks_out_(
 
     let blocks = in_out_len / BLOCK_LEN;
     #[allow(clippy::cast_possible_truncation)]
-        let blocks_u32 = blocks as u32;
+    let blocks_u32 = blocks as u32;
     assert_eq!(blocks, polyfill::usize_from_u32(blocks_u32));
 
     let input = in_out[src].as_ptr().cast::<[u8; BLOCK_LEN]>();
@@ -323,8 +323,8 @@ impl Key {
     #[inline]
     pub(super) fn ctr32_encrypt_within_out(
         &self,
-        in_out:& [u8],
-        out:&mut [u8],
+        in_out: &[u8],
+        out: &mut [u8],
         src: RangeFrom<usize>,
         ctr: &mut Counter,
         cpu_features: cpu::Features,
@@ -335,20 +335,27 @@ impl Key {
 
         match detect_implementation(cpu_features) {
             #[cfg(any(
-            target_arch = "aarch64",
-            target_arch = "arm",
-            target_arch = "x86_64",
-            target_arch = "x86"
+                target_arch = "aarch64",
+                target_arch = "arm",
+                target_arch = "x86_64",
+                target_arch = "x86"
             ))]
             Implementation::HWAES => {
-                ctr32_encrypt_blocks_out!(aes_hw_ctr32_encrypt_blocks, in_out, out, src, &self.inner, ctr)
+                ctr32_encrypt_blocks_out!(
+                    aes_hw_ctr32_encrypt_blocks,
+                    in_out,
+                    out,
+                    src,
+                    &self.inner,
+                    ctr
+                )
             }
 
             #[cfg(any(target_arch = "aarch64", target_arch = "arm", target_arch = "x86_64"))]
             Implementation::VPAES_BSAES => {
                 // 8 blocks is the cut-off point where it's faster to use BSAES.
                 #[cfg(target_arch = "arm")]
-                    let in_out = if in_out_len >= 8 * BLOCK_LEN {
+                let in_out = if in_out_len >= 8 * BLOCK_LEN {
                     let remainder = in_out_len % (8 * BLOCK_LEN);
                     let bsaes_in_out_len = if remainder < (4 * BLOCK_LEN) {
                         in_out_len - remainder
@@ -379,7 +386,14 @@ impl Key {
                     in_out
                 };
 
-                ctr32_encrypt_blocks_out!(vpaes_ctr32_encrypt_blocks, in_out, out, src, &self.inner, ctr)
+                ctr32_encrypt_blocks_out!(
+                    vpaes_ctr32_encrypt_blocks,
+                    in_out,
+                    out,
+                    src,
+                    &self.inner,
+                    ctr
+                )
             }
 
             #[cfg(target_arch = "x86")]
@@ -390,7 +404,14 @@ impl Key {
             }
 
             Implementation::NOHW => {
-                ctr32_encrypt_blocks_out!(aes_nohw_ctr32_encrypt_blocks, in_out, out, src, &self.inner, ctr)
+                ctr32_encrypt_blocks_out!(
+                    aes_nohw_ctr32_encrypt_blocks,
+                    in_out,
+                    out,
+                    src,
+                    &self.inner,
+                    ctr
+                )
             }
         }
     }

@@ -1,8 +1,8 @@
+use crate::tcpls::frame::Frame;
+use if_addrs::get_if_addrs;
 use std::eprintln;
 use std::net::IpAddr;
 use std::prelude::rust_2021::Vec;
-use if_addrs::get_if_addrs;
-use crate::tcpls::frame::Frame;
 
 pub struct AddressMap {
     /// a collection of local addresses of type Frame::NewAddress
@@ -56,17 +56,11 @@ impl AddressMap {
     }
 
     pub fn ip_addr_to_bytes(ip: IpAddr) -> Option<Vec<u8>> {
-            match ip {
-                IpAddr::V4(v4) => {
-                    Some(v4.octets().to_vec())
-                }
-                IpAddr::V6(v6) => {
-                    Some(v6.octets().to_vec())
-                }
-            }
+        match ip {
+            IpAddr::V4(v4) => Some(v4.octets().to_vec()),
+            IpAddr::V6(v6) => Some(v6.octets().to_vec()),
         }
-
-
+    }
 
     /*fn is_private_ip(ip: &IpAddr) -> bool {
         match ip {

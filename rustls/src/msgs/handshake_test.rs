@@ -1,4 +1,3 @@
-
 use std::prelude::v1::*;
 use std::{format, println, vec};
 
@@ -14,7 +13,6 @@ use crate::msgs::enums::{
     KeyUpdateRequest, NamedGroup, PSKKeyExchangeMode, ServerNameType,
 };
 use crate::msgs::handshake::{
-
     CertReqExtension, CertificateChain, CertificateEntry, CertificateExtension,
     CertificatePayloadTls13, CertificateRequestPayload, CertificateRequestPayloadTls13,
     CertificateStatus, CertificateStatusRequest, ClientExtension, ClientHelloPayload,
@@ -80,7 +78,6 @@ fn accepts_short_sessionid() {
     let sess = SessionId::read(&mut rd).unwrap();
     println!("{:?}", sess);
 
-
     #[cfg(feature = "tls12")]
     assert!(!sess.is_empty());
     assert_ne!(sess, SessionId::empty());
@@ -139,7 +136,6 @@ fn refuses_server_ext_with_unparsed_bytes() {
 
 #[test]
 fn refuses_certificate_ext_with_unparsed_bytes() {
-
     let bytes = [0x00u8, 0x05, 0x00, 0x03, 0x00, 0x00, 0x01];
     let mut rd = Reader::init(&bytes);
     assert!(CertificateExtension::read(&mut rd).is_err());
@@ -208,7 +204,6 @@ fn get_single_hostname_returns_none_for_other_sni_name_types() {
     let mut rd = Reader::init(&bytes);
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
-
 
     assert_eq!(ext.ext_type(), ExtensionType::ServerName);
     if let ClientExtension::ServerName(snr) = ext {
@@ -336,7 +331,6 @@ fn can_roundtrip_multi_proto() {
     let ext = ClientExtension::read(&mut rd).unwrap();
     println!("{:?}", ext);
 
-
     assert_eq!(ext.ext_type(), ExtensionType::ALProtocolNegotiation);
 
     assert_eq!(ext.get_encoding(), bytes.to_vec());
@@ -378,7 +372,6 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
         cipher_suites: vec![CipherSuite::TLS_NULL_WITH_NULL_NULL],
         compression_methods: vec![Compression::Null],
         extensions: vec![
-
             ClientExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
             ClientExtension::NamedGroups(vec![NamedGroup::X25519]),
             ClientExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
@@ -402,12 +395,10 @@ fn get_sample_clienthellopayload() -> ClientHelloPayload {
             ClientExtension::Cookie(PayloadU16(vec![1, 2, 3])),
             ClientExtension::ExtendedMasterSecretRequest,
             ClientExtension::CertificateStatusRequest(CertificateStatusRequest::build_ocsp()),
-
             ClientExtension::TransportParameters(vec![1, 2, 3]),
             ClientExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
                 payload: Payload::Borrowed(&[1, 2, 3]),
-
             }),
         ],
     }
@@ -486,7 +477,6 @@ fn test_truncated_client_extension_is_detected() {
         // these extension types don't have any internal encoding that rustls validates:
 
         match ext.ext_type() {
-
             ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
                 continue;
             }
@@ -517,7 +507,6 @@ fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPaylo
         typ,
 
         payload: Payload::Borrowed(&[]),
-
     })];
     assert!(!getter(&chp));
 }
@@ -526,23 +515,19 @@ fn test_client_extension_getter(typ: ExtensionType, getter: fn(&ClientHelloPaylo
 fn client_get_sni_extension() {
     test_client_extension_getter(ExtensionType::ServerName, |chp| {
         chp.sni_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_sigalgs_extension() {
     test_client_extension_getter(ExtensionType::SignatureAlgorithms, |chp| {
-
         chp.sigalgs_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_namedgroups_extension() {
     test_client_extension_getter(ExtensionType::EllipticCurves, |chp| {
-
         chp.namedgroups_extension().is_some()
     });
 }
@@ -558,52 +543,40 @@ fn client_get_ecpoints_extension() {
 #[test]
 fn client_get_alpn_extension() {
     test_client_extension_getter(ExtensionType::ALProtocolNegotiation, |chp| {
-
         chp.alpn_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_quic_params_extension() {
     test_client_extension_getter(ExtensionType::TransportParameters, |chp| {
-
         chp.quic_params_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_versions_extension() {
     test_client_extension_getter(ExtensionType::SupportedVersions, |chp| {
-
         chp.versions_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_keyshare_extension() {
     test_client_extension_getter(ExtensionType::KeyShare, |chp| {
-
         chp.keyshare_extension().is_some()
-
     });
 }
 
 #[test]
 fn client_get_psk() {
-
     test_client_extension_getter(ExtensionType::PreSharedKey, |chp| chp.psk().is_some());
-
 }
 
 #[test]
 fn client_get_psk_modes() {
     test_client_extension_getter(ExtensionType::PSKKeyExchangeModes, |chp| {
-
         chp.psk_modes().is_some()
-
     });
 }
 
@@ -624,7 +597,6 @@ fn test_truncated_helloretry_extension_is_detected() {
         // these extension types don't have any internal encoding that rustls validates:
 
         if let ExtensionType::Unknown(_) = ext.ext_type() {
-
             continue;
         }
 
@@ -644,7 +616,6 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
     let mut exts = core::mem::take(&mut hrr.extensions);
     exts.retain(|ext| ext.ext_type() == typ);
 
-
     assert!(!getter(&hrr));
 
     hrr.extensions = exts;
@@ -654,7 +625,6 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
         typ,
 
         payload: Payload::Borrowed(&[]),
-
     })];
     assert!(!getter(&hrr));
 }
@@ -662,26 +632,19 @@ fn test_helloretry_extension_getter(typ: ExtensionType, getter: fn(&HelloRetryRe
 #[test]
 fn helloretry_get_requested_key_share_group() {
     test_helloretry_extension_getter(ExtensionType::KeyShare, |hrr| {
-
-        hrr.requested_key_share_group()
-
-            .is_some()
+        hrr.requested_key_share_group().is_some()
     });
 }
 
 #[test]
 fn helloretry_get_cookie() {
-
     test_helloretry_extension_getter(ExtensionType::Cookie, |hrr| hrr.cookie().is_some());
-
 }
 
 #[test]
 fn helloretry_get_supported_versions() {
     test_helloretry_extension_getter(ExtensionType::SupportedVersions, |hrr| {
-
         hrr.supported_versions().is_some()
-
     });
 }
 
@@ -702,7 +665,6 @@ fn test_truncated_server_extension_is_detected() {
         // these extension types don't have any internal encoding that rustls validates:
 
         match ext.ext_type() {
-
             ExtensionType::TransportParameters | ExtensionType::Unknown(_) => {
                 continue;
             }
@@ -733,31 +695,24 @@ fn test_server_extension_getter(typ: ExtensionType, getter: fn(&ServerHelloPaylo
         typ,
 
         payload: Payload::Borrowed(&[]),
-
     })];
     assert!(!getter(&shp));
 }
 
 #[test]
 fn server_get_key_share() {
-
     test_server_extension_getter(ExtensionType::KeyShare, |shp| shp.key_share().is_some());
-
 }
 
 #[test]
 fn server_get_psk_index() {
-
     test_server_extension_getter(ExtensionType::PreSharedKey, |shp| shp.psk_index().is_some());
-
 }
 
 #[test]
 fn server_get_ecpoints_extension() {
     test_server_extension_getter(ExtensionType::ECPointFormats, |shp| {
-
         shp.ecpoints_extension().is_some()
-
     });
 }
 
@@ -766,18 +721,14 @@ fn server_get_ecpoints_extension() {
 fn server_get_supported_versions() {
     test_server_extension_getter(ExtensionType::SupportedVersions, |shp| {
         shp.supported_versions().is_some()
-
     });
 }
 
 fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) -> bool) {
-    let mut ce = get_sample_certificatepayloadtls13()
-        .entries
-        .remove(0);
+    let mut ce = get_sample_certificatepayloadtls13().entries.remove(0);
 
     let mut exts = core::mem::take(&mut ce.exts);
     exts.retain(|ext| ext.ext_type() == typ);
-
 
     assert!(!getter(&ce));
 
@@ -788,7 +739,6 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
         typ,
 
         payload: Payload::Borrowed(&[]),
-
     })];
     assert!(!getter(&ce));
 }
@@ -796,7 +746,6 @@ fn test_cert_extension_getter(typ: ExtensionType, getter: fn(&CertificateEntry) 
 #[test]
 fn certentry_get_ocsp_response() {
     test_cert_extension_getter(ExtensionType::StatusRequest, |ce| {
-
         ce.ocsp_response().is_some()
     });
 }
@@ -809,9 +758,7 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
         cipher_suite: CipherSuite::TLS_NULL_WITH_NULL_NULL,
         compression_method: Compression::Null,
         extensions: vec![
-
             ServerExtension::EcPointFormats(ECPointFormat::SUPPORTED.to_vec()),
-
             ServerExtension::ServerNameAck,
             ServerExtension::SessionTicketAck,
             ServerExtension::RenegotiationInfo(PayloadU8(vec![0])),
@@ -820,15 +767,12 @@ fn get_sample_serverhellopayload() -> ServerHelloPayload {
             ServerExtension::PresharedKey(3),
             ServerExtension::ExtendedMasterSecretAck,
             ServerExtension::CertificateStatusAck,
-
-
             ServerExtension::SupportedVersions(ProtocolVersion::TLSv1_2),
             ServerExtension::TransportParameters(vec![1, 2, 3]),
             ServerExtension::Unknown(UnknownExtension {
                 typ: ExtensionType::Unknown(12345),
 
                 payload: Payload::Borrowed(&[1, 2, 3]),
-
             }),
         ],
     }
@@ -857,12 +801,10 @@ fn get_sample_helloretryrequest() -> HelloRetryRequest {
                 typ: ExtensionType::Unknown(12345),
 
                 payload: Payload::Borrowed(&[1, 2, 3]),
-
             }),
         ],
     }
 }
-
 
 fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
     CertificatePayloadTls13 {
@@ -874,11 +816,9 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
                 CertificateExtension::CertificateStatus(CertificateStatus {
                     ocsp_response: PayloadU24(vec![1, 2, 3]),
                 }),
-
                 CertificateExtension::Unknown(UnknownExtension {
                     typ: ExtensionType::Unknown(12345),
                     payload: Payload::Borrowed(&[1, 2, 3]),
-
                 }),
             ],
         }],
@@ -886,16 +826,13 @@ fn get_sample_certificatepayloadtls13() -> CertificatePayloadTls13 {
 }
 
 fn get_sample_serverkeyexchangepayload_ecdhe() -> ServerKeyExchangePayload {
-
     ServerKeyExchangePayload::Known(ServerKeyExchange {
         params: ServerKeyExchangeParams::Ecdh(ServerEcdhParams {
             curve_params: EcParameters {
-
                 curve_type: ECCurveType::NamedCurve,
                 named_group: NamedGroup::X25519,
             },
             public: PayloadU8(vec![1, 2, 3]),
-
         }),
         dss: DigitallySignedStruct::new(SignatureScheme::RSA_PSS_SHA256, vec![1, 2, 3]),
     })
@@ -914,9 +851,7 @@ fn get_sample_serverkeyexchangepayload_dhe() -> ServerKeyExchangePayload {
 }
 
 fn get_sample_serverkeyexchangepayload_unknown() -> ServerKeyExchangePayload {
-
     ServerKeyExchangePayload::Unknown(Payload::Borrowed(&[1, 2, 3]))
-
 }
 
 fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
@@ -927,10 +862,8 @@ fn get_sample_certificaterequestpayload() -> CertificateRequestPayload {
     }
 }
 
-
 fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTls13 {
     CertificateRequestPayloadTls13 {
-
         context: PayloadU8(vec![1, 2, 3]),
         extensions: vec![
             CertReqExtension::SignatureAlgorithms(vec![SignatureScheme::ECDSA_NISTP256_SHA256]),
@@ -939,7 +872,6 @@ fn get_sample_certificaterequestpayloadtls13() -> CertificateRequestPayloadTls13
                 typ: ExtensionType::Unknown(12345),
 
                 payload: Payload::Borrowed(&[1, 2, 3]),
-
             }),
         ],
     }
@@ -952,10 +884,8 @@ fn get_sample_newsessionticketpayload() -> NewSessionTicketPayload {
     }
 }
 
-
 fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTls13 {
     NewSessionTicketPayloadTls13 {
-
         lifetime: 123,
         age_add: 1234,
         nonce: PayloadU8(vec![1, 2, 3]),
@@ -964,7 +894,6 @@ fn get_sample_newsessionticketpayloadtls13() -> NewSessionTicketPayloadTls13 {
             typ: ExtensionType::Unknown(12345),
 
             payload: Payload::Borrowed(&[1, 2, 3]),
-
         })],
     }
 }
@@ -979,9 +908,7 @@ fn get_sample_certificatestatus() -> CertificateStatus {
     }
 }
 
-
 fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
-
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
@@ -1005,7 +932,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             payload: HandshakePayload::Certificate(CertificateChain(vec![CertificateDer::from(
                 vec![1, 2, 3],
             )])),
-
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
@@ -1037,7 +963,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::ClientKeyExchange,
 
             payload: HandshakePayload::ClientKeyExchange(Payload::Borrowed(&[1, 2, 3])),
-
         },
         HandshakeMessagePayload {
             typ: HandshakeType::NewSessionTicket,
@@ -1059,7 +984,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::Finished,
 
             payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-
         },
         HandshakeMessagePayload {
             typ: HandshakeType::CertificateStatus,
@@ -1069,7 +993,6 @@ fn get_all_tls12_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::Unknown(99),
 
             payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-
         },
     ]
 }
@@ -1125,9 +1048,7 @@ fn can_detect_truncation_of_all_tls12_handshake_payloads() {
     }
 }
 
-
 fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
-
     vec![
         HandshakeMessagePayload {
             typ: HandshakeType::HelloRequest,
@@ -1149,7 +1070,6 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::Certificate,
 
             payload: HandshakePayload::CertificateTls13(get_sample_certificatepayloadtls13()),
-
         },
         HandshakeMessagePayload {
             typ: HandshakeType::ServerKeyExchange,
@@ -1173,7 +1093,6 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::CertificateRequest,
 
             payload: HandshakePayload::CertificateRequestTls13(
-
                 get_sample_certificaterequestpayloadtls13(),
             ),
         },
@@ -1196,7 +1115,6 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
         HandshakeMessagePayload {
             typ: HandshakeType::NewSessionTicket,
             payload: HandshakePayload::NewSessionTicketTls13(
-
                 get_sample_newsessionticketpayloadtls13(),
             ),
         },
@@ -1216,7 +1134,6 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::Finished,
 
             payload: HandshakePayload::Finished(Payload::Borrowed(&[1, 2, 3])),
-
         },
         HandshakeMessagePayload {
             typ: HandshakeType::CertificateStatus,
@@ -1226,7 +1143,6 @@ fn get_all_tls13_handshake_payloads() -> Vec<HandshakeMessagePayload<'static>> {
             typ: HandshakeType::Unknown(99),
 
             payload: HandshakePayload::Unknown(Payload::Borrowed(&[1, 2, 3])),
-
         },
     ]
 }
@@ -1333,7 +1249,6 @@ fn can_decode_server_hello_from_api_devicecheck_apple_com() {
     let hm = HandshakeMessagePayload::read(&mut r).unwrap();
     println!("msg: {:?}", hm);
 }
-
 
 #[test]
 fn wrapped_dn_encoding() {

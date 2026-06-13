@@ -2,7 +2,6 @@ use std::io;
 use std::io::Write;
 use std::ops::{Deref, DerefMut};
 
-
 mod perf;
 
 #[path = "../tests/common/mod.rs"]
@@ -54,7 +53,6 @@ where
     fn write(&mut self, input: &[u8]) -> io::Result<usize> {
         let mut buf = input;
         self.sess.read_tls(&mut buf)
-
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -90,86 +88,107 @@ where
     }
 }
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput, BenchmarkId, BatchSize};
-use rustls::{Connection, ConnectionCommon, ServerConnection, SideData};
-use rustls::recvbuf::RecvBufMap;
-use rustls::tcpls::stream::SimpleIdHashMap;
-use rustls::tcpls::TcplsSession;
 use crate::bench_util::CPUTime;
+use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use rustls::crypto::ring as provider;
+use rustls::recvbuf::RecvBufMap;
 use rustls::server::ServerConnectionData;
 use rustls::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
+use rustls::tcpls::stream::SimpleIdHashMap;
+use rustls::tcpls::TcplsSession;
+use rustls::{Connection, ConnectionCommon, ServerConnection, SideData};
 
-pub(crate) fn process_received(pipe: &mut OtherSession<ServerConnection,
-    ServerConnectionData>, app_bufs: &mut RecvBufMap) {
-    let conn_ids: Vec<u32> = vec![0,1];
+pub(crate) fn process_received(
+    pipe: &mut OtherSession<ServerConnection, ServerConnectionData>,
+    app_bufs: &mut RecvBufMap,
+) {
+    let conn_ids: Vec<u32> = vec![0, 1];
     let str_ids: Vec<u32> = vec![1];
-    for str_id in str_ids{
+    for str_id in str_ids {
         loop {
             for id in &conn_ids {
                 pipe.sess.set_connection_in_use(*id);
-                pipe.sess.process_new_packets(&mut SimpleIdHashMap::default(), app_bufs).unwrap();
+                pipe.sess
+                    .process_new_packets(&mut SimpleIdHashMap::default(), app_bufs)
+                    .unwrap();
             }
-            if app_bufs.get(str_id).unwrap().complete { break }
+            if app_bufs.get(str_id).unwrap().complete {
+                break;
+            }
         }
     }
-
 }
 mod bench_util;
 fn criterion_benchmark(c: &mut Criterion<CPUTime>) {
-    let data_len= 50 * MAX_TCPLS_FRAGMENT_LEN;
+    let data_len = 50 * MAX_TCPLS_FRAGMENT_LEN;
     let capacity = 70 * MAX_TCPLS_FRAGMENT_LEN;
     let sendbuf1 = vec![1u8; data_len];
 
     let mut group = c.benchmark_group("Data_recv");
     group.throughput(Throughput::Bytes((data_len) as u64));
-    group.bench_with_input(BenchmarkId::new("Data_recv_single_stream_two_connection", data_len ), &sendbuf1,
-                           |b, _sendbuf| {
+    group.bench_with_input(
+        BenchmarkId::new("Data_recv_single_stream_two_connection", data_len),
+        &sendbuf1,
+        |b, _sendbuf| {
+            b.iter_batched_ref(
+                || {
+                    // Finish handshake
+                    let (mut client, mut server, mut recv_svr, mut recv_clnt) =
+                        make_pair(KeyType::Rsa);
+                    client.activate_ack(false);
+                    server.activate_ack(false);
+                    do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
 
-                               b.iter_batched_ref(|| {
-                                   // Finish handshake
-                                   let (mut client, mut server, mut recv_svr, mut recv_clnt) =
-                                       make_pair(KeyType::Rsa);
-                                   client.activate_ack(false);
-                                   server.activate_ack(false);
-                                   do_handshake(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
+                    let mut tcpls_client = TcplsSession::new(false);
+                    let _ = tcpls_client.tls_conn.insert(Connection::from(client));
+                    tcpls_client
+                        .tls_conn
+                        .as_mut()
+                        .unwrap()
+                        .set_buffer_limit(None, 1);
 
-                                   let mut tcpls_client = TcplsSession::new(false);
-                                   let _ = tcpls_client.tls_conn.insert(Connection::from(client));
-                                   tcpls_client.tls_conn.as_mut().unwrap().set_buffer_limit(None, 1);
+                    //Encrypt data and buffer it in send buffer
+                    tcpls_client
+                        .stream_send(1, sendbuf1.as_slice())
+                        .expect("Buffering in send buffer failed");
 
+                    let mut pipe = OtherSession::new(server);
+                    let mut conn_id: u32 = 0;
+                    let stream_ids: Vec<u32> = vec![1];
 
-                                   //Encrypt data and buffer it in send buffer
-                                   tcpls_client.stream_send(1, sendbuf1.as_slice()).expect("Buffering in send buffer failed");
+                    for str_id in stream_ids {
+                        while tcpls_client
+                            .tls_conn
+                            .as_mut()
+                            .unwrap()
+                            .wants_write(Some(str_id))
+                        {
+                            pipe.sess.set_connection_in_use(conn_id);
+                            tcpls_client
+                                .tls_conn
+                                .as_mut()
+                                .unwrap()
+                                .write_chunk(&mut pipe, str_id)
+                                .unwrap();
+                            conn_id += 1;
+                            if conn_id == 2 {
+                                conn_id = 0;
+                            }
+                        }
+                    }
 
-                                   let mut pipe = OtherSession::new(server);
-                                   let mut conn_id: u32 = 0;
-                                   let stream_ids: Vec<u32> = vec![1];
+                    // Create app receive buffer
+                    recv_svr.get_or_create(1, Some(capacity));
 
-                                   for str_id in stream_ids {
-                                       while tcpls_client.tls_conn.as_mut().unwrap().wants_write(Some(str_id)) {
-                                           pipe.sess.set_connection_in_use(conn_id);
-                                           tcpls_client.tls_conn.as_mut().unwrap().write_chunk(&mut pipe, str_id).unwrap();
-                                           conn_id += 1;
-                                           if conn_id == 2 {
-                                               conn_id = 0;
-                                           }
-                                       }
-                                   }
-
-
-                                   // Create app receive buffer
-                                   recv_svr.get_or_create(1, Some(capacity));
-
-                                   (pipe, recv_svr)
-                               },
-
-                                                  |(ref mut pipe, recv_svr)| process_received(pipe, recv_svr),
-                                                  BatchSize::SmallInput)
-                           });
+                    (pipe, recv_svr)
+                },
+                |(ref mut pipe, recv_svr)| process_received(pipe, recv_svr),
+                BatchSize::SmallInput,
+            )
+        },
+    );
     group.finish();
 }
-
 
 /*criterion_group!{
     name = benches;
@@ -190,11 +209,7 @@ criterion_main!(benches);*/
     targets = criterion_benchmark
 }*/
 
-
-
-
-
-criterion_group!{
+criterion_group! {
     name = benches;
     // This can be any expression that returns a `Criterion` object.
     config = Criterion::default()

@@ -321,7 +321,7 @@
     trivial_numeric_casts,
     unreachable_pub,
     unused_import_braces,
-    unused_extern_crates,
+    unused_extern_crates
 )]
 // Relax these clippy lints:
 // - ptr_arg: this triggers on references to type aliases that are Vec
@@ -341,7 +341,6 @@
     clippy::new_without_default
 )]
 // Enable documentation for all features on docs.rs
-
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 // XXX: Because of https://github.com/rust-lang/rust/issues/54726, we cannot
 // write `#![rustversion::attr(nightly, feature(read_buf))]` here. Instead,
@@ -352,7 +351,6 @@
 // is used to avoid needing `rustversion` to be compiled twice during
 // cross-compiling.
 #![cfg_attr(read_buf, feature(read_buf))]
-
 #![cfg_attr(read_buf, feature(core_io_borrowed_buf))]
 #![cfg_attr(bench, feature(test))]
 #![no_std]
@@ -384,7 +382,6 @@ mod log {
     macro_rules! trace    ( ($($tt:tt)*) => {{}} );
     macro_rules! debug    ( ($($tt:tt)*) => {{}} );
     macro_rules! warn     ( ($($tt:tt)*) => {{}} );
-
 }
 
 #[macro_use]
@@ -426,10 +423,7 @@ mod webpki;
 
 /// Internal classes that are used in integration tests.
 /// The contents of this section DO NOT form part of the stable interface.
-#[allow(missing_docs,
-    unused_assignments,
-    unused_variables
-)]
+#[allow(missing_docs, unused_assignments, unused_variables)]
 pub mod internal {
     /// Low-level TLS message parsing and encoding functions.
     pub mod msgs {
@@ -630,7 +624,6 @@ pub mod version {
     pub use crate::versions::TLS13;
 }
 
-
 /// Re-exports the contents of the [rustls-pki-types](https://docs.rs/rustls-pki-types) crate for easy access
 pub mod pki_types {
     pub use pki_types::*;
@@ -653,8 +646,7 @@ pub mod manual;
 
 pub mod time_provider;
 
-
-/// APIs for implementing TCPLS TLS
-pub mod tcpls;
 /// Implementation of TCPLS receive buffer.
 pub mod recvbuf;
+/// APIs for implementing TCPLS TLS
+pub mod tcpls;

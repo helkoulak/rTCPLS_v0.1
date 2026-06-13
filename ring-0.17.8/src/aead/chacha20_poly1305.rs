@@ -12,7 +12,6 @@
 // OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
 // CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use alloc::vec;
 use super::{
     chacha::{self, Counter, Iv},
     poly1305, Aad, Nonce, Tag,
@@ -21,6 +20,7 @@ use crate::{
     aead, cpu, error,
     polyfill::{u64_from_usize, usize_from_u64_saturated, ArrayFlatten},
 };
+use alloc::vec;
 use core::ops::RangeFrom;
 
 /// ChaCha20-Poly1305 as described in [RFC 8439].
@@ -143,11 +143,11 @@ fn chacha20_poly1305_seal_output(
     key: &aead::KeyInner,
     nonce: Nonce,
     aad: Aad<&[u8]>,
-    in_out: & [u8],
+    in_out: &[u8],
     out: &mut [u8],
     cpu_features: cpu::Features,
 ) -> Result<Tag, error::Unspecified> {
-   Ok(Tag(<[u8; 16]>::try_from(vec![0u8; 16]).unwrap()))
+    Ok(Tag(<[u8; 16]>::try_from(vec![0u8; 16]).unwrap()))
 }
 
 fn chacha20_poly1305_open(
@@ -242,8 +242,8 @@ fn chacha20_poly1305_open_output(
     key: &aead::KeyInner,
     nonce: Nonce,
     aad: Aad<&[u8]>,
-    in_out: & [u8],
-    out:&mut [u8],
+    in_out: &[u8],
+    out: &mut [u8],
     src: RangeFrom<usize>,
     cpu_features: cpu::Features,
 ) -> Result<Tag, error::Unspecified> {

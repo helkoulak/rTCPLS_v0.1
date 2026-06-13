@@ -38,7 +38,7 @@ pub static AES_256_GCM: aead::Algorithm = aead::Algorithm {
     seal: aes_gcm_seal,
     seal_output: aes_gcm_seal_output,
     open: aes_gcm_open,
-    open_output:aes_gcm_open_output,
+    open_output: aes_gcm_open_output,
     id: aead::AlgorithmID::AES_256_GCM,
 };
 
@@ -186,8 +186,8 @@ fn aes_gcm_seal_output(
     key: &aead::KeyInner,
     nonce: Nonce,
     aad: Aad<&[u8]>,
-    in_out: & [u8],
-    out:&mut [u8],
+    in_out: &[u8],
+    out: &mut [u8],
     cpu_features: cpu::Features,
 ) -> Result<Tag, error::Unspecified> {
     let Key { gcm_key, aes_key } = match key {
@@ -201,7 +201,7 @@ fn aes_gcm_seal_output(
     let tag_iv = ctr.increment();
 
     #[cfg(target_arch = "x86_64")]
-    let (mut output_remaining, input_remaining ) = {
+    let (mut output_remaining, input_remaining) = {
         if !aes_key.is_aes_hw(cpu_features) || !auth.is_avx() {
             (out, in_out)
         } else {
@@ -278,11 +278,16 @@ fn aes_gcm_seal_output(
     };
     let mut output = 0;
     for chunk in whole.chunks(CHUNK_BLOCKS * BLOCK_LEN) {
-        aes_key.ctr32_encrypt_within_out(chunk, &mut output_remaining[output..][..chunk.len()], 0.., &mut ctr, cpu_features);
+        aes_key.ctr32_encrypt_within_out(
+            chunk,
+            &mut output_remaining[output..][..chunk.len()],
+            0..,
+            &mut ctr,
+            cpu_features,
+        );
         auth.update_blocks(&output_remaining[output..][..chunk.len()]);
         output += chunk.len();
     }
-
 
     if !remainder.is_empty() {
         let mut input = Block::zero();
@@ -433,13 +438,12 @@ fn aes_gcm_open(
     Ok(finish(aes_key, auth, tag_iv))
 }
 
-
 fn aes_gcm_open_output(
     key: &aead::KeyInner,
     nonce: Nonce,
     aad: Aad<&[u8]>,
-    in_buf: & [u8],
-    out:&mut [u8],
+    in_buf: &[u8],
+    out: &mut [u8],
     src: RangeFrom<usize>,
     cpu_features: cpu::Features,
 ) -> Result<Tag, error::Unspecified> {
@@ -461,9 +465,8 @@ fn aes_gcm_open_output(
 
     let in_prefix_len = src.start;
 
-
     #[cfg(target_arch = "x86_64")]
-      let (mut output_remaining, input_remaining )= {
+    let (mut output_remaining, input_remaining) = {
         if !aes_key.is_aes_hw(cpu_features) || !auth.is_avx() {
             (out, in_buf)
         } else {
@@ -498,7 +501,7 @@ fn aes_gcm_open_output(
     };
 
     #[cfg(target_arch = "aarch64")]
-        let in_out = {
+    let in_out = {
         if !aes_key.is_aes_hw(cpu_features) || !auth.is_clmul() {
             in_out
         } else {
@@ -552,7 +555,7 @@ fn aes_gcm_open_output(
 
             auth.update_blocks(&input_remaining[input..][..chunk_len]);
             aes_key.ctr32_encrypt_within_out(
-                & input_remaining[output..][..(chunk_len + in_prefix_len)],
+                &input_remaining[output..][..(chunk_len + in_prefix_len)],
                 &mut output_remaining[output..][..(chunk_len + in_prefix_len)],
                 in_prefix_len..,
                 &mut ctr,

@@ -81,9 +81,6 @@ impl<'a> InboundOpaqueMessage<'a> {
     }
 }
 
-
-
-
 pub struct BorrowedPayload<'a>(&'a mut [u8]);
 
 impl Deref for BorrowedPayload<'_> {
@@ -106,9 +103,7 @@ impl<'a> BorrowedPayload<'a> {
             return;
         }
 
-        self.0 = core::mem::take(&mut self.0)
-            .split_at_mut(len)
-            .0;
+        self.0 = core::mem::take(&mut self.0).split_at_mut(len).0;
     }
 
     pub(crate) fn read(r: &mut ReaderMut<'a>) -> Self {

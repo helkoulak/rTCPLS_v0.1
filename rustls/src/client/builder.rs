@@ -33,10 +33,7 @@ impl ConfigBuilder<ClientConfig, WantsVerifier> {
         self,
         root_store: impl Into<Arc<webpki::RootCertStore>>,
     ) -> ConfigBuilder<ClientConfig, WantsClientCert> {
-        let algorithms = self
-            .state
-            .provider
-            .signature_verification_algorithms;
+        let algorithms = self.state.provider.signature_verification_algorithms;
         self.with_webpki_verifier(
             WebPkiServerVerifier::new_without_revocation(root_store, algorithms).into(),
         )
@@ -129,11 +126,7 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         cert_chain: Vec<CertificateDer<'static>>,
         key_der: PrivateKeyDer<'static>,
     ) -> Result<ClientConfig, Error> {
-        let private_key = self
-            .state
-            .provider
-            .key_provider
-            .load_private_key(key_der)?;
+        let private_key = self.state.provider.key_provider.load_private_key(key_der)?;
         let resolver =
             handy::AlwaysResolvesClientCert::new(private_key, CertificateChain(cert_chain))?;
         Ok(self.with_client_cert_resolver(Arc::new(resolver)))
@@ -150,7 +143,6 @@ impl ConfigBuilder<ClientConfig, WantsClientCert> {
         client_auth_cert_resolver: Arc<dyn ResolvesClientCert>,
     ) -> ClientConfig {
         ClientConfig {
-
             provider: self.state.provider,
 
             alpn_protocols: Vec::new(),

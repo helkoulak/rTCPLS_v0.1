@@ -1,13 +1,12 @@
-use std::{cmp, io, vec};
+use crate::tcpls::stream::{SimpleIdHashMap, SimpleIdHashSet, StreamIter, DEFAULT_BUFFER_LIMIT};
 use std::collections::hash_map;
 use std::collections::hash_map::{Iter, IterMut};
 use std::io::Error;
 use std::prelude::rust_2021::Vec;
-use crate::tcpls::stream::{DEFAULT_BUFFER_LIMIT, SimpleIdHashMap, SimpleIdHashSet, StreamIter};
+use std::{cmp, io, vec};
 
 /// The application receive buffer
-#[derive(Default)]
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct RecvBuf {
     pub id: u64,
     data: Vec<u8>,
@@ -31,8 +30,6 @@ pub struct RecvBuf {
     pub last_data_type_decrypted: u8,
 
     pub complete: bool,
-
-
 }
 
 impl RecvBuf {
@@ -41,19 +38,18 @@ impl RecvBuf {
         if let Some(capacity) = capacity {
             let mut recv_buf = Self {
                 id: stream_id,
-                data :vec![0; capacity],
+                data: vec![0; capacity],
                 ..Default::default()
             };
-            unsafe {recv_buf.data.set_len(capacity)};
+            unsafe { recv_buf.data.set_len(capacity) };
             recv_buf
-
         } else {
             let mut recv_buf = Self {
                 id: stream_id,
                 data: vec![0; DEFAULT_BUFFER_LIMIT],
                 ..Default::default()
             };
-            unsafe {recv_buf.data.set_len(DEFAULT_BUFFER_LIMIT)};
+            unsafe { recv_buf.data.set_len(DEFAULT_BUFFER_LIMIT) };
             recv_buf
         }
     }
@@ -61,12 +57,12 @@ impl RecvBuf {
         &mut self.data[self.offset as usize..]
     }
 
-    pub fn get_ref(&self) -> & [u8] {
+    pub fn get_ref(&self) -> &[u8] {
         &self.data
     }
 
     ///Gives immutable reference to the still unconsumed slice of the buffer
-    pub fn as_ref_consumed(&self) -> & [u8] {
+    pub fn as_ref_consumed(&self) -> &[u8] {
         &self.data[self.consumed..self.offset as usize]
     }
 
@@ -74,16 +70,16 @@ impl RecvBuf {
     pub fn get_mut_consumed(&mut self) -> &mut [u8] {
         &mut self.data[self.consumed..self.offset as usize]
     }
-   /* ///Gives mutable reference to slice of last written chunk of bytes. Mainly used in case of handshake
+    /* ///Gives mutable reference to slice of last written chunk of bytes. Mainly used in case of handshake
     /// messages because they are always written at offset zero
     pub fn get_mut_last_decrypted(&mut self) -> &mut [u8] {
         let offset = self.offset as usize;
         &mut self.data[offset.. offset + self.last_decrypted]
     }*/
     ///Gives immutable reference to slice of last written chunk of bytes. Mainly used for non hs records
-    pub fn get_last_decrypted(& self) -> & [u8] {
+    pub fn get_last_decrypted(&self) -> &[u8] {
         let offset = self.offset as usize;
-        & self.data[offset.. offset + self.last_decrypted]
+        &self.data[offset..offset + self.last_decrypted]
     }
 
     ///Used  for Handshake records
@@ -93,17 +89,17 @@ impl RecvBuf {
         }
         let end_offset = self.offset as usize + self.total_decrypted;
         self.total_decrypted = 0;
-        &mut self.data[self.offset as usize.. end_offset ]
+        &mut self.data[self.offset as usize..end_offset]
     }
 
     /// Get a mutable ref for the desirable slice
     pub fn get_mut_at_index(&mut self, index: usize, len: usize) -> &mut [u8] {
-        &mut self.data[index.. index + len]
+        &mut self.data[index..index + len]
     }
 
     /// Get an immutable ref for the desirable slice
     pub fn get_at_index(&self, index: usize, len: usize) -> &[u8] {
-        &self.data[index.. index + len]
+        &self.data[index..index + len]
     }
     ///Gives immutable reference to slice of last written chunk of bytes. Mainly used in case of handshake
     /// messages because they are always written at offset zero
@@ -116,16 +112,16 @@ impl RecvBuf {
         & self.data[self.offset as usize.. end_offset ]
     }*/
 
-    pub  fn get_offset(&self) -> u64 {
+    pub fn get_offset(&self) -> u64 {
         self.offset
     }
 
-    pub  fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.offset == 0
     }
 
-    pub  fn is_full(&self) -> bool {
-     self.data.len() >= self.data.capacity()
+    pub fn is_full(&self) -> bool {
+        self.data.len() >= self.data.capacity()
     }
 
     /// How many bytes written in buffer in the last decryption
@@ -140,10 +136,9 @@ impl RecvBuf {
     /// For a proposed write of `len` bytes, how many
     /// bytes should we actually write to adhere to the
     /// capacity of the buffer?
-    pub  fn apply_limit(&self, len: usize) -> usize {
+    pub fn apply_limit(&self, len: usize) -> usize {
         let space = self.capacity();
         cmp::min(len, space)
-
     }
 
     pub fn consume(&mut self, used: usize) {
@@ -154,12 +149,13 @@ impl RecvBuf {
         self.consumed as u64 == self.offset
     }
 
-    pub fn truncate_processed(&mut self) { self.offset -= self.last_decrypted as u64; }
+    pub fn truncate_processed(&mut self) {
+        self.offset -= self.last_decrypted as u64;
+    }
 
     pub fn subtract_offset(&mut self, sub: u64) {
         self.offset -= sub;
     }
-
 
     pub fn data_length(&self) -> u64 {
         self.offset
@@ -188,34 +184,31 @@ impl RecvBuf {
         self.last_data_type_decrypted = 0;
         self.total_decrypted = 0;
         self.complete = false;
-
     }
 
     /// Read data out of this object, writing it into `buf`
     /// and returning how many bytes were written there.
     pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, Error> {
-
         let to_read_length;
 
         match self.is_empty() {
             true => {
                 to_read_length = cmp::min(buf.len(), self.get_last_decrypted().len());
                 buf[..to_read_length].copy_from_slice(&self.get_last_decrypted()[..to_read_length]);
-            },
+            }
 
             false => {
                 to_read_length = cmp::min(buf.len(), self.as_ref_consumed().len());
                 buf[..to_read_length].copy_from_slice(&self.as_ref_consumed()[..to_read_length]);
                 self.consume(to_read_length);
-            },
+            }
         }
 
         Ok(to_read_length)
     }
 }
 
-#[derive(Default)]
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct RecvBufMap {
     buffers: SimpleIdHashMap<RecvBuf>,
     /// Set of stream IDs corresponding to streams that have outstanding data
@@ -225,23 +218,18 @@ pub struct RecvBufMap {
 }
 
 impl RecvBufMap {
-
     pub fn new() -> Self {
         Self {
             ..Default::default()
         }
     }
 
-
     pub fn get_or_create(&mut self, stream_id: u64, capacity: Option<usize>) -> &mut RecvBuf {
         match self.buffers.entry(stream_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(RecvBuf::new(stream_id, capacity))
-            },
+            hash_map::Entry::Vacant(v) => v.insert(RecvBuf::new(stream_id, capacity)),
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
     }
-
 
     pub fn get(&self, id: u32) -> Option<&RecvBuf> {
         self.buffers.get(&(id as u64))
@@ -261,14 +249,13 @@ impl RecvBufMap {
         all_empty
     }
 
-    pub fn get_iter(&self) -> Iter<'_, u64, RecvBuf>{
+    pub fn get_iter(&self) -> Iter<'_, u64, RecvBuf> {
         self.buffers.iter()
     }
 
     pub fn get_iter_mut(&mut self) -> IterMut<'_, u64, RecvBuf> {
         self.buffers.iter_mut()
     }
-
 
     /// Removes the stream ID from the readable streams set.
     pub fn remove_readable(&mut self, stream_id: u64) {
@@ -277,7 +264,7 @@ impl RecvBufMap {
 
     /// Creates an iterator over streams that have outstanding data to read.
     pub fn readable(&self) -> StreamIter {
-       StreamIter::from(&self.readable)
+        StreamIter::from(&self.readable)
     }
 
     pub fn insert_readable(&mut self, stream_id: u64) {
@@ -292,7 +279,9 @@ impl RecvBufMap {
     pub fn bytes_to_read(&self) -> usize {
         let mut bytes = 0;
         for stream in &self.readable {
-            bytes += self.buffers.get(stream)
+            bytes += self
+                .buffers
+                .get(stream)
                 .map(|buffer| buffer.as_ref_consumed().len())
                 .unwrap_or(0);
         }
@@ -303,7 +292,6 @@ impl RecvBufMap {
         self.buffers = SimpleIdHashMap::default();
         self.readable = SimpleIdHashSet::default();
     }
-
 
     /*pub(crate) fn read_mut(&mut self, stream_id: u64, stream: &mut Stream) -> Result<&mut [u8], Error> {
         let buf = match self.buffers.entry(stream_id) {
@@ -341,14 +329,13 @@ impl RecvBufMap {
     }*/
 
     /* pub fn collect(&mut self, stream_id: u64) {
-         if let Some(mut buf) = self.buffers.remove(&stream_id) {
-             if self.recycled_buffers.len() < self.recycled_buffers.capacity() {
-                 buf.clear();
-                 self.recycled_buffers.push_back(buf);
-             }
-         }
-     }*/
-
+        if let Some(mut buf) = self.buffers.remove(&stream_id) {
+            if self.recycled_buffers.len() < self.recycled_buffers.capacity() {
+                buf.clear();
+                self.recycled_buffers.push_back(buf);
+            }
+        }
+    }*/
 }
 
 pub struct ReaderAppBufs {
@@ -357,7 +344,12 @@ pub struct ReaderAppBufs {
 }
 
 impl ReaderAppBufs {
-    pub fn read_app_bufs(&mut self, buf: &mut [u8], app_bufs: &mut RecvBufMap, id: u16) -> io::Result<usize> {
+    pub fn read_app_bufs(
+        &mut self,
+        buf: &mut [u8],
+        app_bufs: &mut RecvBufMap,
+        id: u16,
+    ) -> io::Result<usize> {
         let len = app_bufs.get_or_create(id as u64, None).read(buf)?;
 
         if len == 0 && !buf.is_empty() {
@@ -379,10 +371,10 @@ impl ReaderAppBufs {
 
 #[cfg(test)]
 mod test {
-    use std::vec;
     use crate::recvbuf::RecvBuf;
     use crate::tcpls::stream::DEFAULT_BUFFER_LIMIT;
     use crate::vecbuf::ChunkVecBuffer;
+    use std::vec;
 
     #[test]
     fn short_append_copy_with_limit() {
@@ -398,7 +390,7 @@ mod test {
     }
     #[test]
     fn test_reset_stream() {
-        let  vector = vec![0x0A; DEFAULT_BUFFER_LIMIT];
+        let vector = vec![0x0A; DEFAULT_BUFFER_LIMIT];
         let mut stream = RecvBuf::new(0, Some(DEFAULT_BUFFER_LIMIT));
         stream.data.copy_from_slice(vector.as_slice());
         stream.last_decrypted = 1234;
@@ -437,7 +429,6 @@ mod test {
 
         assert_eq!(data_read, buffer.len());
         assert_eq!(buffer, stream.data[..data_read]);
-
     }
 
     #[cfg(read_buf)]

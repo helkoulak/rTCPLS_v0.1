@@ -68,21 +68,16 @@ fn parse_dh_params_pem(data: &[u8]) -> (Vec<u8>, Vec<u8>) {
 
     let stripped = &output_str_lines[1..last_line];
 
-    let base64_encoded = stripped
-        .iter()
-        .fold(String::new(), |acc, l| acc + l);
+    let base64_encoded = stripped.iter().fold(String::new(), |acc, l| acc + l);
 
-    let base64_decoded = BASE64_STANDARD
-        .decode(base64_encoded)
-        .unwrap();
+    let base64_decoded = BASE64_STANDARD.decode(base64_encoded).unwrap();
 
     let res: asn1::ParseResult<_> = asn1::parse(&base64_decoded, |d| {
-        d.read_element::<asn1::Sequence>()?
-            .parse(|d| {
-                let p = d.read_element::<asn1::BigUint>()?;
-                let g = d.read_element::<asn1::BigUint>()?;
-                Ok((p, g))
-            })
+        d.read_element::<asn1::Sequence>()?.parse(|d| {
+            let p = d.read_element::<asn1::BigUint>()?;
+            let g = d.read_element::<asn1::BigUint>()?;
+            Ok((p, g))
+        })
     });
     let res = res.unwrap();
     (res.0.as_bytes().to_vec(), res.1.as_bytes().to_vec())

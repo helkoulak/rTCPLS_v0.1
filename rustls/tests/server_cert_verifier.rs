@@ -1,6 +1,5 @@
 //! Tests for configuring and using a [`ServerCertVerifier`] for a client.
 
-
 #[macro_use]
 mod macros;
 
@@ -27,9 +26,9 @@ fn client_can_override_certificate_verification() {
         let server_config = Arc::new(make_server_config(*kt));
 
         for version in rustls::ALL_VERSIONS {
-               if version.version == rustls::ProtocolVersion::TLSv1_2 {
-            continue
-        }
+            if version.version == rustls::ProtocolVersion::TLSv1_2 {
+                continue;
+            }
             let mut client_config = make_client_config_with_versions(*kt, &[version]);
             client_config
                 .dangerous()
@@ -52,9 +51,9 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
         let server_config = Arc::new(make_server_config(*kt));
 
         for version in rustls::ALL_VERSIONS {
-                if version.version != rustls::ProtocolVersion::TLSv1_3 {
-            continue
-        }
+            if version.version != rustls::ProtocolVersion::TLSv1_3 {
+                continue;
+            }
             let mut client_config = make_client_config_with_versions(*kt, &[version]);
             client_config
                 .dangerous()
@@ -62,7 +61,12 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
 
             let (mut client, mut server, mut recv_svr, mut recv_clnt) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let errs = do_handshake_until_both_error(&mut client, &mut server,  &mut recv_svr, &mut recv_clnt);
+            let errs = do_handshake_until_both_error(
+                &mut client,
+                &mut server,
+                &mut recv_svr,
+                &mut recv_clnt,
+            );
             assert_eq!(
                 errs,
                 Err(vec![
@@ -76,8 +80,6 @@ fn client_can_override_certificate_verification_and_reject_certificate() {
     }
 }
 
-
-
 #[test]
 fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
     for kt in ALL_KEY_TYPES.iter() {
@@ -86,15 +88,14 @@ fn client_can_override_certificate_verification_and_reject_tls13_signatures() {
             Error::InvalidMessage(InvalidMessage::HandshakePayloadTooLarge),
         ));
 
-        client_config
-            .dangerous()
-            .set_certificate_verifier(verifier);
+        client_config.dangerous().set_certificate_verifier(verifier);
 
         let server_config = Arc::new(make_server_config(*kt));
 
         let (mut client, mut server, mut recv_svr, mut recv_clnt) =
             make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-        let errs = do_handshake_until_both_error(&mut client, &mut server,  &mut recv_svr, &mut recv_clnt);
+        let errs =
+            do_handshake_until_both_error(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
         assert_eq!(
             errs,
             Err(vec![
@@ -115,17 +116,22 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
         let server_config = Arc::new(make_server_config(*kt));
 
         for version in rustls::ALL_VERSIONS {
-                if version.version == rustls::ProtocolVersion::TLSv1_2 {
-            continue
-        }
+            if version.version == rustls::ProtocolVersion::TLSv1_2 {
+                continue;
+            }
             let mut client_config = make_client_config_with_versions(*kt, &[version]);
             client_config
                 .dangerous()
                 .set_certificate_verifier(verifier.clone());
 
-            let (mut client, mut server,  mut recv_svr, mut recv_clnt) =
+            let (mut client, mut server, mut recv_svr, mut recv_clnt) =
                 make_pair_for_arc_configs(&Arc::new(client_config), &server_config);
-            let errs = do_handshake_until_both_error(&mut client, &mut server, &mut recv_svr, &mut recv_clnt);
+            let errs = do_handshake_until_both_error(
+                &mut client,
+                &mut server,
+                &mut recv_svr,
+                &mut recv_clnt,
+            );
             assert_eq!(
                 errs,
                 Err(vec![
@@ -138,7 +144,6 @@ fn client_can_override_certificate_verification_and_offer_no_signature_schemes()
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct MockServerVerifier {
@@ -207,7 +212,6 @@ impl ServerCertVerifier for MockServerVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
         self.signature_schemes.clone()
     }
-
 }
 
 impl MockServerVerifier {
@@ -264,5 +268,3 @@ impl Default for MockServerVerifier {
         }
     }
 }
-
-

@@ -1,3 +1,9 @@
+use crate::common_state::OutboundTlsMessage;
+#[cfg(feature = "std")]
+use crate::msgs::message::OutboundChunks;
+use crate::tcpls::frame::TcplsHeader;
+use crate::ContentType;
+use crate::ContentType::{ApplicationData, Handshake};
 use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::cmp;
@@ -7,12 +13,6 @@ use std::io;
 #[cfg(feature = "std")]
 use std::io::Read;
 use std::time::Instant;
-use crate::common_state::OutboundTlsMessage;
-use crate::ContentType;
-use crate::ContentType::{ApplicationData, Handshake};
-#[cfg(feature = "std")]
-use crate::msgs::message::OutboundChunks;
-use crate::tcpls::frame::TcplsHeader;
 
 /// This is a byte buffer that is built from a vector
 /// of byte vectors.  This avoids extra copies when
@@ -28,7 +28,6 @@ pub(crate) struct ChunkVecBuffer {
     current_offset: u64,
     /// The offset immediately behind "current_offset"
     previous_offset: u64,
-
 }
 
 impl ChunkVecBuffer {
@@ -39,22 +38,21 @@ impl ChunkVecBuffer {
             ..Default::default()
         }
     }
-  /*  #[inline]
+    /*  #[inline]
     pub(crate)  fn get_current_offset(&self) -> u64 {
         self.current_offset
     }*/
 
-   /* /// Output is of type u16 as maximum payload size for a TLS record is 16384 bytes
+    /* /// Output is of type u16 as maximum payload size for a TLS record is 16384 bytes
     #[inline]
     pub(crate)  fn get_offset_diff(&self) -> u16 {
         self.current_offset.saturating_sub(self.previous_offset) as u16
     }*/
     #[inline]
-    pub(crate)  fn advance_offset(&mut self, added: u64) {
+    pub(crate) fn advance_offset(&mut self, added: u64) {
         self.previous_offset = self.current_offset;
         self.current_offset += added;
     }
-
 
     /// Sets the upper limit on how many bytes this
     /// object can store.
@@ -70,16 +68,18 @@ impl ChunkVecBuffer {
 
     /// If we're empty
     #[inline]
-    pub(crate)  fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
     #[inline]
-    pub(crate)  fn shuffle_records(&mut self, n: usize) {
+    pub(crate) fn shuffle_records(&mut self, n: usize) {
         self.chunks.rotate_left(n)
     }
 
     #[inline]
-    pub(crate) fn mut_iter_not_ack(&mut self) -> impl Iterator<Item = (&u32, &mut OutboundTlsMessage)> {
+    pub(crate) fn mut_iter_not_ack(
+        &mut self,
+    ) -> impl Iterator<Item = (&u32, &mut OutboundTlsMessage)> {
         self.not_acked.iter_mut()
     }
 
@@ -110,9 +110,13 @@ impl ChunkVecBuffer {
         }
     }
 
-
     /// Take and append the given `bytes`.
-    pub(crate) fn append(&mut self, bytes: Vec<u8>, tcpls_header: Option<&TcplsHeader>, data_type: ContentType) -> usize {
+    pub(crate) fn append(
+        &mut self,
+        bytes: Vec<u8>,
+        tcpls_header: Option<&TcplsHeader>,
+        data_type: ContentType,
+    ) -> usize {
         let len = bytes.len();
         let chunk_num = match tcpls_header {
             Some(hdr) => hdr.chunk_num,
@@ -120,7 +124,8 @@ impl ChunkVecBuffer {
         };
 
         if !bytes.is_empty() {
-            self.chunks.push_back(OutboundTlsMessage::new(bytes, chunk_num, None, data_type));
+            self.chunks
+                .push_back(OutboundTlsMessage::new(bytes, chunk_num, None, data_type));
         }
         len
     }
@@ -130,7 +135,7 @@ impl ChunkVecBuffer {
     pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
         match self.chunks.pop_front() {
             Some(chunk) => Some(chunk.data),
-            None => None
+            None => None,
         }
     }
 
@@ -151,7 +156,6 @@ impl ChunkVecBuffer {
     pub(crate) fn remove_ack(&mut self, chunk_num: u32) {
         self.not_acked.remove(&chunk_num);
     }
-
 
     #[cfg(read_buf)]
     /// Read data out of this object, writing it into `cursor`.
@@ -189,10 +193,7 @@ impl ChunkVecBuffer {
         let mut offs = 0;
 
         while offs < buf.len() && !self.is_empty() {
-            let used = self.chunks[0]
-                .data
-                .as_slice()
-                .read(&mut buf[offs..])?;
+            let used = self.chunks[0].data.as_slice().read(&mut buf[offs..])?;
 
             self.consume(used);
             offs += used;
@@ -200,7 +201,6 @@ impl ChunkVecBuffer {
 
         Ok(offs)
     }
-
 
     fn consume(&mut self, mut used: usize) {
         while let Some(mut buf) = self.chunks.pop_front() {
@@ -214,20 +214,30 @@ impl ChunkVecBuffer {
         }
     }
 
-
     pub(crate) fn consume_chunk(&mut self, used: usize, chunk: OutboundTlsMessage) {
         let mut buf = chunk.data;
         if used < buf.len() {
-            self.chunks.push_front(OutboundTlsMessage::new(buf.split_off(used), chunk.chunk_num, None, chunk.typ));
+            self.chunks.push_front(OutboundTlsMessage::new(
+                buf.split_off(used),
+                chunk.chunk_num,
+                None,
+                chunk.typ,
+            ));
         } else {
             match chunk.typ {
-                Handshake | ContentType::ChangeCipherSpec => {},
+                Handshake | ContentType::ChangeCipherSpec => {}
                 _ => {
-                    _ = self.not_acked.insert(chunk.chunk_num, OutboundTlsMessage::new(buf, chunk.chunk_num, Some(Instant::now()), chunk.typ))
-                },
-
+                    _ = self.not_acked.insert(
+                        chunk.chunk_num,
+                        OutboundTlsMessage::new(
+                            buf,
+                            chunk.chunk_num,
+                            Some(Instant::now()),
+                            chunk.typ,
+                        ),
+                    )
+                }
             }
-
         }
     }
 
@@ -262,16 +272,15 @@ impl ChunkVecBuffer {
         }
     }
 
-   /* #[inline]
+    /* #[inline]
     pub(crate) fn pop_front(&mut self) -> Option<Vec<u8>> {
        self.chunks.pop_front()
     }*/
 
- /*   #[inline]
+    /*   #[inline]
     pub(crate) fn push_front(&mut self, buf: Vec<u8>) {
         self.chunks.push_front(buf)
     }*/
-
 }
 
 #[cfg(all(test, feature = "std"))]
@@ -290,7 +299,6 @@ mod tests {
         assert_eq!(cvb.read(&mut buf).unwrap(), 12);
         assert_eq!(buf.to_vec(), b"helloworldhe".to_vec());
     }
-
 
     #[cfg(read_buf)]
     #[test]

@@ -1,4 +1,3 @@
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -246,7 +245,7 @@ pub enum PeerMisbehaved {
     TcplsJoinExtensionNotFound,
     EmptyTcplsJoinExtension,
     InvalidTcplsJoinToken,
-    InvalidTcplsTokensExtension
+    InvalidTcplsTokensExtension,
 }
 
 impl From<PeerMisbehaved> for Error {
@@ -349,7 +348,6 @@ pub enum CertificateError {
     /// not covered by the above common cases.
     ///
     /// Enums holding this variant will never compare equal to each other.
-
     Other(OtherError),
 }
 
@@ -396,7 +394,6 @@ impl From<CertificateError> for AlertDescription {
             // certificate_unknown
             //  Some other (unspecified) issue arose in processing the
             //  certificate, rendering it unacceptable.
-
             Other(..) => Self::CertificateUnknown,
         }
     }
@@ -543,7 +540,6 @@ impl fmt::Display for Error {
         }
     }
 }
-
 
 #[cfg(feature = "std")]
 impl From<SystemTimeError> for Error {
@@ -702,7 +698,6 @@ mod tests {
             super::PeerMisbehaved::UnsolicitedCertExtension.into(),
             Error::AlertReceived(AlertDescription::ExportRestriction),
             super::CertificateError::Expired.into(),
-
             Error::General("undocumented error".to_string()),
             Error::FailedToGetCurrentTime,
             Error::FailedToGetRandomBytes,
@@ -710,7 +705,6 @@ mod tests {
             Error::PeerSentOversizedRecord,
             Error::NoApplicationProtocol,
             Error::BadMaxFragmentSize,
-
             Error::InvalidCertRevocationList(CertRevocationListError::BadSignature),
             Error::Other(OtherError(
                 #[cfg(feature = "std")]
@@ -730,7 +724,6 @@ mod tests {
         let err: Error = rand::GetRandomFailed.into();
         assert_eq!(err, Error::FailedToGetRandomBytes);
     }
-
 
     #[cfg(feature = "std")]
     #[test]

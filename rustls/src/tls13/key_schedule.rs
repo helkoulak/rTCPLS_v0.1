@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::string::ToString;
 
@@ -99,14 +98,11 @@ impl KeyScheduleEarly {
         );
 
         match common.side {
-            Side::Client => self
-                .ks
-                .set_encrypter(&client_early_traffic_secret, common),
+            Side::Client => self.ks.set_encrypter(&client_early_traffic_secret, common),
             Side::Server => self
                 .ks
                 .set_decrypter(&client_early_traffic_secret, common, true),
         }
-
 
         if common.is_quic() {
             // If 0-RTT should be rejected, this will be clobbered by ExtensionProcessing
@@ -142,14 +138,12 @@ impl KeySchedulePreHandshake {
         }
     }
 
-
     pub(crate) fn into_handshake(
         mut self,
         kx: Box<dyn ActiveKeyExchange>,
         peer_public_key: &[u8],
     ) -> Result<KeyScheduleHandshakeStart, Error> {
-        self.ks
-            .input_from_key_exchange(kx, peer_public_key)?;
+        self.ks.input_from_key_exchange(kx, peer_public_key)?;
         Ok(KeyScheduleHandshakeStart { ks: self.ks })
     }
 }
@@ -280,19 +274,21 @@ impl KeyScheduleHandshake {
         match skip_requested {
             None => self.ks.set_decrypter(secret, common, false),
             Some(max_early_data_size) => {
-                let (md, expander) = self.ks
+                let (md, expander) = self
+                    .ks
                     .derive_decrypter(&self.client_handshake_traffic_secret);
                 common
                     .record_layer
-                    .set_message_decrypter_with_trial_decryption(md,
-                                                                 max_early_data_size);
-                if !common.record_layer.header_decrypter_is_set(){
-                    common.record_layer.set_header_decrypter(HeaderProtector::new(
-                        expander.as_ref(), self.ks.suite.aead_alg.key_len())
-                    )
+                    .set_message_decrypter_with_trial_decryption(md, max_early_data_size);
+                if !common.record_layer.header_decrypter_is_set() {
+                    common
+                        .record_layer
+                        .set_header_decrypter(HeaderProtector::new(
+                            expander.as_ref(),
+                            self.ks.suite.aead_alg.key_len(),
+                        ))
                 }
-            },
-
+            }
         }
     }
 
@@ -311,9 +307,7 @@ impl KeyScheduleHandshake {
             &traffic.current_server_traffic_secret,
         );
 
-        traffic
-            .ks
-            .set_encrypter(server_secret, common);
+        traffic.ks.set_encrypter(server_secret, common);
 
         if common.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
@@ -355,20 +349,12 @@ impl KeyScheduleClientBeforeFinished {
     pub(crate) fn into_traffic(self, common: &mut CommonState) -> KeyScheduleTraffic {
         debug_assert_eq!(common.side, Side::Client);
         let (client_secret, server_secret) = (
-            &self
-                .traffic
-                .current_client_traffic_secret,
-            &self
-                .traffic
-                .current_server_traffic_secret,
+            &self.traffic.current_client_traffic_secret,
+            &self.traffic.current_server_traffic_secret,
         );
 
-        self.traffic
-            .ks
-            .set_decrypter(server_secret, common, false);
-        self.traffic
-            .ks
-            .set_encrypter(client_secret, common);
+        self.traffic.ks.set_decrypter(server_secret, common, false);
+        self.traffic.ks.set_encrypter(client_secret, common);
 
         if common.is_quic() {
             common.quic.traffic_secrets = Some(quic::Secrets::new(
@@ -413,11 +399,9 @@ impl KeyScheduleTrafficWithClientFinishedPending {
             .sign_finish(&self.handshake_client_traffic_secret, hs_hash);
 
         // Install keying to read future messages.
-        self.traffic.ks.set_decrypter(
-            &self
-                .traffic
-                .current_client_traffic_secret,
-            common, false);
+        self.traffic
+            .ks
+            .set_decrypter(&self.traffic.current_client_traffic_secret, common, false);
 
         (self.traffic, tag)
     }
@@ -481,7 +465,6 @@ impl KeyScheduleTraffic {
         self.ks.set_decrypter(&secret, common, false);
     }
 
-
     pub(crate) fn next_application_traffic_secret(&mut self, side: Side) -> OkmBlock {
         let current = match side {
             Side::Client => &mut self.current_client_traffic_secret,
@@ -502,8 +485,7 @@ impl KeyScheduleTraffic {
         let resumption_master_secret = self
             .ks
             .derive(SecretKind::ResumptionMasterSecret, hs_hash.as_ref());
-        self.ks
-            .derive_ticket_psk(&resumption_master_secret, nonce)
+        self.ks.derive_ticket_psk(&resumption_master_secret, nonce)
     }
 
     pub(crate) fn export_keying_material(
@@ -515,7 +497,6 @@ impl KeyScheduleTraffic {
         self.ks
             .export_keying_material(&self.current_exporter_secret, out, label, context)
     }
-
 
     pub(crate) fn extract_secrets(&self, side: Side) -> Result<PartiallyExtractedSecrets, Error> {
         fn expand(
@@ -541,16 +522,8 @@ impl KeyScheduleTraffic {
             self.ks.suite.hkdf_provider,
             self.ks.suite.aead_alg.key_len(),
         );
-        let client_secrets = self
-            .ks
-            .suite
-            .aead_alg
-            .extract_keys(client_key, client_iv)?;
-        let server_secrets = self
-            .ks
-            .suite
-            .aead_alg
-            .extract_keys(server_key, server_iv)?;
+        let client_secrets = self.ks.suite.aead_alg.extract_keys(client_key, client_iv)?;
+        let server_secrets = self.ks.suite.aead_alg.extract_keys(server_key, server_iv)?;
 
         let (tx, rx) = match side {
             Side::Client => (client_secrets, server_secrets),
@@ -562,28 +535,23 @@ impl KeyScheduleTraffic {
 
 impl KeySchedule {
     fn new(suite: &'static Tls13CipherSuite, secret: &[u8]) -> Self {
-
         Self {
-            current: suite
-                .hkdf_provider
-                .extract_from_secret(None, secret),
+            current: suite.hkdf_provider.extract_from_secret(None, secret),
             suite,
         }
     }
 
-
     fn set_encrypter(&self, secret: &OkmBlock, common: &mut CommonState) {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(secret);
+        let expander = self.suite.hkdf_provider.expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(expander.as_ref());
         if !common.record_layer.header_encrypter_is_set() {
-            common.record_layer
+            common
+                .record_layer
                 .set_header_encrypter(HeaderProtector::new(
-                    expander.as_ref(), self.suite.aead_alg.key_len())
-                ) ;
+                    expander.as_ref(),
+                    self.suite.aead_alg.key_len(),
+                ));
         }
         common
             .record_layer
@@ -592,23 +560,24 @@ impl KeySchedule {
 
     fn set_decrypter(&self, secret: &OkmBlock, common: &mut CommonState, early_secret: bool) {
         let (md, expander) = self.derive_decrypter(secret);
-        common
-            .record_layer
-            .set_message_decrypter(md);
-        if !common.record_layer.header_decrypter_is_set() &&
-            (!early_secret || common.record_layer.early_data_request())
+        common.record_layer.set_message_decrypter(md);
+        if !common.record_layer.header_decrypter_is_set()
+            && (!early_secret || common.record_layer.early_data_request())
         {
-                common.record_layer.set_header_decrypter(HeaderProtector::new(
-                    expander.as_ref(), self.suite.aead_alg.key_len()))
+            common
+                .record_layer
+                .set_header_decrypter(HeaderProtector::new(
+                    expander.as_ref(),
+                    self.suite.aead_alg.key_len(),
+                ))
         }
     }
 
-
-    fn derive_decrypter(&self, secret: &OkmBlock) -> (Box<dyn MessageDecrypter>, Box<dyn HkdfExpander>) {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(secret);
+    fn derive_decrypter(
+        &self,
+        secret: &OkmBlock,
+    ) -> (Box<dyn MessageDecrypter>, Box<dyn HkdfExpander>) {
+        let expander = self.suite.hkdf_provider.expander_for_okm(secret);
         let key = derive_traffic_key(expander.as_ref(), self.suite.aead_alg.key_len());
         let iv = derive_traffic_iv(expander.as_ref());
         (self.suite.aead_alg.decrypter(key, iv), expander)
@@ -616,16 +585,13 @@ impl KeySchedule {
 
     fn new_with_empty_secret(suite: &'static Tls13CipherSuite) -> Self {
         Self {
-            current: suite
-                .hkdf_provider
-                .extract_from_zero_ikm(None),
+            current: suite.hkdf_provider.extract_from_zero_ikm(None),
             suite,
         }
     }
 
     /// Input the empty secret.
     fn input_empty(&mut self) {
-
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
         self.current = self
             .suite
@@ -650,10 +616,11 @@ impl KeySchedule {
         peer_public_key: &[u8],
     ) -> Result<(), Error> {
         let salt = self.derive_for_empty_hash(SecretKind::DerivedSecret);
-        self.current = self
-            .suite
-            .hkdf_provider
-            .extract_from_kx_shared_secret(Some(salt.as_ref()), kx, peer_public_key)?;
+        self.current = self.suite.hkdf_provider.extract_from_kx_shared_secret(
+            Some(salt.as_ref()),
+            kx,
+            peer_public_key,
+        )?;
         Ok(())
     }
 
@@ -668,15 +635,11 @@ impl KeySchedule {
         hs_hash: &[u8],
         key_log: &dyn KeyLog,
         client_random: &[u8; 32],
-
     ) -> OkmBlock {
         let output = self.derive(kind, hs_hash);
 
-        let log_label = kind
-            .log_label()
-            .expect("not a loggable secret");
+        let log_label = kind.log_label().expect("not a loggable secret");
         if key_log.will_log(log_label) {
-
             key_log.log(log_label, client_random, output.as_ref());
         }
         output
@@ -688,12 +651,7 @@ impl KeySchedule {
     /// `SecretKind::DerivedSecret`.
 
     fn derive_for_empty_hash(&self, kind: SecretKind) -> OkmBlock {
-        let empty_hash = self
-            .suite
-            .common
-            .hash_provider
-            .start()
-            .finish();
+        let empty_hash = self.suite.common.hash_provider.start().finish();
         self.derive(kind, empty_hash.as_ref())
     }
 
@@ -708,10 +666,7 @@ impl KeySchedule {
     /// `base_key`.
 
     fn sign_verify_data(&self, base_key: &OkmBlock, hs_hash: &hash::Output) -> hmac::Tag {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(base_key);
+        let expander = self.suite.hkdf_provider.expander_for_okm(base_key);
         let hmac_key = hkdf_expand_label_block(expander.as_ref(), b"finished", &[]);
 
         self.suite
@@ -721,10 +676,7 @@ impl KeySchedule {
 
     /// Derive the next application traffic secret, returning it.
     fn derive_next(&self, base_key: &OkmBlock) -> OkmBlock {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(base_key);
+        let expander = self.suite.hkdf_provider.expander_for_okm(base_key);
         hkdf_expand_label_block(expander.as_ref(), b"traffic upd", &[])
     }
 
@@ -732,10 +684,7 @@ impl KeySchedule {
     /// ticket_nonce.
 
     fn derive_ticket_psk(&self, rms: &OkmBlock, nonce: &[u8]) -> OkmBlock {
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(rms);
+        let expander = self.suite.hkdf_provider.expander_for_okm(rms);
         hkdf_expand_label_block(expander.as_ref(), b"resumption", nonce)
     }
 
@@ -746,13 +695,8 @@ impl KeySchedule {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<(), Error> {
-
         let secret = {
-            let h_empty = self
-                .suite
-                .common
-                .hash_provider
-                .hash(&[]);
+            let h_empty = self.suite.common.hash_provider.hash(&[]);
 
             let expander = self
                 .suite
@@ -761,16 +705,9 @@ impl KeySchedule {
             hkdf_expand_label_block(expander.as_ref(), label, h_empty.as_ref())
         };
 
-        let h_context = self
-            .suite
-            .common
-            .hash_provider
-            .hash(context.unwrap_or(&[]));
+        let h_context = self.suite.common.hash_provider.hash(context.unwrap_or(&[]));
 
-        let expander = self
-            .suite
-            .hkdf_provider
-            .expander_for_okm(&secret);
+        let expander = self.suite.hkdf_provider.expander_for_okm(&secret);
         hkdf_expand_label_slice(expander.as_ref(), b"exporter", h_context.as_ref(), out)
             .map_err(|_| Error::General("exporting too much".to_string()))
     }
@@ -858,7 +795,6 @@ where
         &context_len[..],
         context,
     ];
-
 
     f(expander, info)
 }
@@ -1050,7 +986,6 @@ test_for_each_provider! {
         seal_output
     }
 }
-
 
 bench_for_each_provider! {
     #[bench]

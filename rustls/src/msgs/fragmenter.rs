@@ -1,13 +1,10 @@
-
 use crate::enums::{ContentType, ProtocolVersion};
 use crate::msgs::message::{OutboundChunks, OutboundPlainMessage, PlainMessage};
-use crate::Error;
 use crate::tcpls::frame::MAX_TCPLS_FRAGMENT_LEN;
+use crate::Error;
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const PACKET_OVERHEAD: usize = 1 + 2 + 2;
-
-
 
 pub struct MessageFragmenter {
     max_frag: usize,
@@ -17,13 +14,11 @@ impl Default for MessageFragmenter {
     fn default() -> Self {
         Self {
             max_frag: MAX_TCPLS_FRAGMENT_LEN,
-
         }
     }
 }
 
 impl MessageFragmenter {
-
     /// Take `msg` and fragment it into new messages with the same type and version.
     ///
     /// Each returned message size is no more than `max_frag`.
@@ -68,7 +63,6 @@ impl MessageFragmenter {
     /// Returns BadMaxFragmentSize if the size is smaller than 32 or larger than 16389.
     pub fn set_max_fragment_size(&mut self, max_fragment_size: Option<usize>) -> Result<(), Error> {
         self.max_frag = match max_fragment_size {
-
             Some(sz @ 32..=MAX_TCPLS_FRAGMENT_LEN) => sz - PACKET_OVERHEAD,
             None => MAX_TCPLS_FRAGMENT_LEN,
             _ => return Err(Error::BadMaxFragmentSize),
@@ -76,7 +70,6 @@ impl MessageFragmenter {
         Ok(())
     }
 }
-
 
 /// An iterator over borrowed fragments of a payload
 struct Chunker<'a> {
@@ -150,11 +143,8 @@ mod tests {
         };
 
         let mut frag = MessageFragmenter::default();
-        frag.set_max_fragment_size(Some(32))
-            .unwrap();
-        let q = frag
-            .fragment_message(&m)
-            .collect::<Vec<_>>();
+        frag.set_max_fragment_size(Some(32)).unwrap();
+        let q = frag.fragment_message(&m).collect::<Vec<_>>();
         assert_eq!(q.len(), 3);
         msg_eq(
             &q[0],
@@ -194,11 +184,8 @@ mod tests {
         };
 
         let mut frag = MessageFragmenter::default();
-        frag.set_max_fragment_size(Some(32))
-            .unwrap();
-        let q = frag
-            .fragment_message(&m)
-            .collect::<Vec<_>>();
+        frag.set_max_fragment_size(Some(32)).unwrap();
+        let q = frag.fragment_message(&m).collect::<Vec<_>>();
         assert_eq!(q.len(), 1);
         msg_eq(
             &q[0],

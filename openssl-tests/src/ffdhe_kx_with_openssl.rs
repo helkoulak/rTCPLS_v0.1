@@ -40,32 +40,21 @@ fn test_rustls_server_with_ffdhe_kx(
         for _ in 0..iters {
             let mut server = rustls::ServerConnection::new(config.clone()).unwrap();
             let (mut tcp_stream, _addr) = listener.accept().unwrap();
-            server
-                .writer()
-                .write_all(message.as_bytes())
-                .unwrap();
-            server
-                .complete_io(&mut tcp_stream)
-                .unwrap();
+            server.writer().write_all(message.as_bytes()).unwrap();
+            server.complete_io(&mut tcp_stream).unwrap();
             tcp_stream.flush().unwrap();
         }
     });
 
     let mut connector = openssl::ssl::SslConnector::builder(SslMethod::tls()).unwrap();
-    connector
-        .set_ca_file(CA_PEM_FILE)
-        .unwrap();
-    connector
-        .set_groups_list("ffdhe2048")
-        .unwrap();
+    connector.set_ca_file(CA_PEM_FILE).unwrap();
+    connector.set_groups_list("ffdhe2048").unwrap();
 
     let connector = connector.build();
 
     for _iter in 0..iters {
         let stream = TcpStream::connect(("localhost", port)).unwrap();
-        let mut stream = connector
-            .connect("testserver.com", stream)
-            .unwrap();
+        let mut stream = connector.connect("testserver.com", stream).unwrap();
 
         let mut buf = String::new();
         stream.read_to_string(&mut buf).unwrap();
@@ -88,9 +77,7 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
     println!("crate openssl version: {}", openssl::version::version());
 
     let mut acceptor = SslAcceptor::mozilla_modern_v5(SslMethod::tls()).unwrap();
-    acceptor
-        .set_groups_list("ffdhe2048")
-        .unwrap();
+    acceptor.set_groups_list("ffdhe2048").unwrap();
     acceptor
         .set_private_key_file(PRIV_KEY_FILE, SslFiletype::PEM)
         .unwrap();
@@ -130,17 +117,10 @@ fn test_rustls_client_with_ffdhe_kx(iters: usize) {
             "localhost".try_into().unwrap(),
         )
         .unwrap();
-        client
-            .writer()
-            .write_all(message.as_bytes())
-            .unwrap();
-        client
-            .complete_io(&mut tcp_stream)
-            .unwrap();
+        client.writer().write_all(message.as_bytes()).unwrap();
+        client.complete_io(&mut tcp_stream).unwrap();
         client.send_close_notify();
-        client
-            .write_tls(&mut tcp_stream)
-            .unwrap();
+        client.write_tls(&mut tcp_stream).unwrap();
         tcp_stream.flush().unwrap();
     }
 
@@ -194,10 +174,7 @@ fn load_certs() -> Vec<CertificateDer<'static>> {
 fn load_private_key() -> PrivateKeyDer<'static> {
     let mut reader = BufReader::new(File::open(PRIV_KEY_FILE).unwrap());
 
-    match rustls_pemfile::read_one(&mut reader)
-        .unwrap()
-        .unwrap()
-    {
+    match rustls_pemfile::read_one(&mut reader).unwrap().unwrap() {
         Item::Pkcs1Key(key) => key.into(),
         Item::Pkcs8Key(key) => key.into(),
         Item::Sec1Key(key) => key.into(),

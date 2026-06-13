@@ -457,10 +457,7 @@ mod tests {
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP256_SHA256);
         // nb. signature is variable length and asn.1-encoded
-        assert!(s
-            .sign(b"hello")
-            .unwrap()
-            .starts_with(&[0x30]));
+        assert!(s.sign(b"hello").unwrap().starts_with(&[0x30]));
     }
 
     #[test]
@@ -507,10 +504,7 @@ mod tests {
         );
         assert_eq!(s.scheme(), SignatureScheme::ECDSA_NISTP384_SHA384);
         // nb. signature is variable length and asn.1-encoded
-        assert!(s
-            .sign(b"hello")
-            .unwrap()
-            .starts_with(&[0x30]));
+        assert!(s.sign(b"hello").unwrap().starts_with(&[0x30]));
     }
 
     #[test]
@@ -539,9 +533,7 @@ mod tests {
         assert!(k
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
             .is_none());
-        let s = k
-            .choose_scheme(&[SignatureScheme::ED25519])
-            .unwrap();
+        let s = k.choose_scheme(&[SignatureScheme::ED25519]).unwrap();
         assert_eq!(format!("{:?}", s), "Ed25519Signer { scheme: ED25519 }");
         assert_eq!(s.scheme(), SignatureScheme::ED25519);
         assert_eq!(s.sign(b"hello").unwrap().len(), 64);
@@ -579,13 +571,9 @@ mod tests {
         assert!(k
             .choose_scheme(&[SignatureScheme::ECDSA_NISTP256_SHA256])
             .is_none());
-        assert!(k
-            .choose_scheme(&[SignatureScheme::ED25519])
-            .is_none());
+        assert!(k.choose_scheme(&[SignatureScheme::ED25519]).is_none());
 
-        let s = k
-            .choose_scheme(&[SignatureScheme::RSA_PSS_SHA256])
-            .unwrap();
+        let s = k.choose_scheme(&[SignatureScheme::RSA_PSS_SHA256]).unwrap();
         assert_eq!(format!("{:?}", s), "RsaSigner { scheme: RSA_PSS_SHA256 }");
         assert_eq!(s.scheme(), SignatureScheme::RSA_PSS_SHA256);
         assert_eq!(s.sign(b"hello").unwrap().len(), 256);
@@ -641,11 +629,7 @@ mod benchmarks {
             .unwrap();
 
         b.iter(|| {
-            test::black_box(
-                signer
-                    .sign(SAMPLE_TLS13_MESSAGE)
-                    .unwrap(),
-            );
+            test::black_box(signer.sign(SAMPLE_TLS13_MESSAGE).unwrap());
         });
     }
 
@@ -660,11 +644,7 @@ mod benchmarks {
             .unwrap();
 
         b.iter(|| {
-            test::black_box(
-                signer
-                    .sign(SAMPLE_TLS13_MESSAGE)
-                    .unwrap(),
-            );
+            test::black_box(signer.sign(SAMPLE_TLS13_MESSAGE).unwrap());
         });
     }
 
@@ -674,16 +654,10 @@ mod benchmarks {
             &include_bytes!("../../testdata/eddsakey.der")[..],
         ));
         let sk = super::any_supported_type(&key).unwrap();
-        let signer = sk
-            .choose_scheme(&[SignatureScheme::ED25519])
-            .unwrap();
+        let signer = sk.choose_scheme(&[SignatureScheme::ED25519]).unwrap();
 
         b.iter(|| {
-            test::black_box(
-                signer
-                    .sign(SAMPLE_TLS13_MESSAGE)
-                    .unwrap(),
-            );
+            test::black_box(signer.sign(SAMPLE_TLS13_MESSAGE).unwrap());
         });
     }
 
@@ -698,11 +672,7 @@ mod benchmarks {
             .unwrap();
 
         b.iter(|| {
-            test::black_box(
-                signer
-                    .sign(SAMPLE_TLS13_MESSAGE)
-                    .unwrap(),
-            );
+            test::black_box(signer.sign(SAMPLE_TLS13_MESSAGE).unwrap());
         });
     }
 
@@ -717,11 +687,7 @@ mod benchmarks {
             .unwrap();
 
         b.iter(|| {
-            test::black_box(
-                signer
-                    .sign(SAMPLE_TLS13_MESSAGE)
-                    .unwrap(),
-            );
+            test::black_box(signer.sign(SAMPLE_TLS13_MESSAGE).unwrap());
         });
     }
 

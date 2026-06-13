@@ -1,9 +1,7 @@
-
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::prelude::v1::*;
 use std::{format, fs, println, vec};
-
 
 use super::base::Payload;
 use super::codec::Reader;
@@ -43,9 +41,7 @@ fn test_read_fuzz_corpus() {
             Err(_) => continue,
         };
 
-        let enc = PlainMessage::from(msg)
-            .into_unencrypted_opaque()
-            .encode();
+        let enc = PlainMessage::from(msg).into_unencrypted_opaque().encode();
         assert_eq!(bytes.to_vec(), enc);
         assert_eq!(bytes[..rd.used()].to_vec(), enc);
     }
@@ -96,7 +92,6 @@ fn construct_all_types() {
         &b"\x18\x03\x04\x00\x04\x11\x22\x33\x44"[..],
     ];
     for &bytes in samples.iter() {
-
         let m = OutboundOpaqueMessage::read(&mut Reader::init(bytes)).unwrap();
         println!("m = {:?}", m);
         let m = Message::try_from(m.into_plain_message());
@@ -106,7 +101,6 @@ fn construct_all_types() {
 
 #[test]
 fn debug_payload() {
-
     assert_eq!("01020304", format!("{:?}", Payload::new(vec![1, 2, 3, 4])));
     assert_eq!("01020304", format!("{:?}", PayloadU8(vec![1, 2, 3, 4])));
     assert_eq!("01020304", format!("{:?}", PayloadU16(vec![1, 2, 3, 4])));

@@ -24,25 +24,19 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-
-use std::collections::{hash_map, HashMap, HashSet};
 use std::collections::hash_map::IterMut;
+use std::collections::{hash_map, HashMap, HashSet};
 
-
-use smallvec::SmallVec;
 use crate::Error;
-
+use smallvec::SmallVec;
 
 use crate::tcpls::frame::TcplsHeader;
 use crate::vecbuf::ChunkVecBuffer;
 
 pub const DEFAULT_BUFFER_LIMIT: usize = 64 * 1024;
-pub const DEFAULT_STREAM_ID:u32 = 0;
-
+pub const DEFAULT_STREAM_ID: u32 = 0;
 
 pub struct Stream {
-
     pub id: u32,
 
     /// buffers encrypted TLS records that to be sent on the TCP socket
@@ -58,7 +52,7 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(id: u32) -> Self {
-        Self{
+        Self {
             id,
             send: ChunkVecBuffer::new(Some(DEFAULT_BUFFER_LIMIT)),
             next_snd_pkt_num: 0,
@@ -66,8 +60,6 @@ impl Stream {
             conn_shares: None,
         }
     }
-
-
 
     /// Returns true if the stream has enough capacity to be
     /// written to, and is not finished.
@@ -114,13 +106,18 @@ impl Stream {
     }
 
     pub fn insert_conn_share(&mut self, conn_id: u64, share: usize) {
-        self.conn_shares.get_or_insert_with(SimpleIdHashMap::default).insert(conn_id, share);
+        self.conn_shares
+            .get_or_insert_with(SimpleIdHashMap::default)
+            .insert(conn_id, share);
     }
 
     pub fn get_share(&mut self, conn_id: u64) -> &mut usize {
-        self.conn_shares.as_mut().unwrap().get_mut(&conn_id).unwrap()
+        self.conn_shares
+            .as_mut()
+            .unwrap()
+            .get_mut(&conn_id)
+            .unwrap()
     }
-
 }
 
 /// A simple no-op hasher for Stream IDs.
@@ -164,7 +161,6 @@ pub struct StreamMap {
     /// enough flow control credits to send at least some of that data.
     flushable: SimpleIdHashSet,
 
-
     /// Set of stream IDs corresponding to streams that have enough flow control
     /// capacity to be written to, and is not finished. This is used to generate
     /// a `StreamIter` of streams without having to iterate over the full list
@@ -177,7 +173,6 @@ pub struct StreamMap {
     /// streams to save memory, but we still need to keep track of previously
     /// created streams, to prevent peers from re-creating them.
     collected: SimpleIdHashSet,
-
 }
 
 impl StreamMap {
@@ -213,9 +208,7 @@ impl StreamMap {
     /// count limits. If one of these limits is violated, the `StreamLimit`
     /// error is returned.
     #[inline]
-    pub fn get_or_create(
-        &mut self, stream_id: u32,
-    ) -> Result<&mut Stream, Error> {
+    pub fn get_or_create(&mut self, stream_id: u32) -> Result<&mut Stream, Error> {
         let (stream, is_new_and_writable) = match self.streams.entry(stream_id as u64) {
             hash_map::Entry::Vacant(v) => {
                 // Stream has already been closed and garbage collected.
@@ -228,11 +221,10 @@ impl StreamMap {
                 let is_writable = s.is_writable();
 
                 (v.insert(s), is_writable)
-            },
+            }
 
             hash_map::Entry::Occupied(v) => (v.into_mut(), false),
         };
-
 
         if is_new_and_writable {
             self.writable.insert(stream_id as u64);
@@ -240,8 +232,6 @@ impl StreamMap {
 
         Ok(stream)
     }
-
-
 
     /// Adds the stream ID to the writable streams set.
     ///
@@ -277,7 +267,9 @@ impl StreamMap {
 
     /// Removes the stream ID from the flushable streams set.
     #[inline]
-    pub fn remove_flushable(&mut self, stream_id: u64) { self.flushable.remove(&stream_id); }
+    pub fn remove_flushable(&mut self, stream_id: u64) {
+        self.flushable.remove(&stream_id);
+    }
 
     /// Adds the stream ID to the collected streams set.
     ///
@@ -291,23 +283,27 @@ impl StreamMap {
 
     /// Removes the stream ID from the collected streams set.
     #[inline]
-    pub fn remove_collected(&mut self, stream_id: u64) { self.collected.remove(&stream_id); }
-
-
-
+    pub fn remove_collected(&mut self, stream_id: u64) {
+        self.collected.remove(&stream_id);
+    }
 
     /// Creates an iterator over streams that can be written to.
     #[inline]
-    pub fn writable(&self) -> StreamIter { StreamIter::from(&self.writable) }
+    pub fn writable(&self) -> StreamIter {
+        StreamIter::from(&self.writable)
+    }
 
     /// Creates an iterator over streams that have data to send.
     #[inline]
-    pub fn flushable(&self) -> StreamIter { StreamIter::from(&self.flushable) }
+    pub fn flushable(&self) -> StreamIter {
+        StreamIter::from(&self.flushable)
+    }
 
     /// Creates an iterator over streams that have been collected.
     #[inline]
-    pub fn collected(&self) -> StreamIter { StreamIter::from(&self.collected) }
-
+    pub fn collected(&self) -> StreamIter {
+        StreamIter::from(&self.collected)
+    }
 
     pub fn streams_to_flush(&self, flushables: &mut SimpleIdHashSet) -> StreamIter {
         StreamIter::from(flushables)
@@ -326,8 +322,10 @@ impl StreamMap {
         self.streams.iter_mut()
     }
 
-        /// Returns true if the stream has been collected.
-    pub fn is_collected(&self, stream_id: u64) -> bool { self.collected.contains(&stream_id) }
+    /// Returns true if the stream has been collected.
+    pub fn is_collected(&self, stream_id: u64) -> bool {
+        self.collected.contains(&stream_id)
+    }
 
     /// Returns true if there are any streams that have data to write.
     pub fn has_flushable(&self) -> bool {
@@ -343,14 +341,11 @@ impl StreamMap {
         all_empty
     }
 
-
-
     /// Returns the number of active streams in the map.
     #[cfg(test)]
     pub fn len(&self) -> usize {
         self.streams.len()
     }
-
 
     /// Rewind the Stream_id's receive buffer of num bytes
     pub fn rewind_recv_buf(&mut self, _stream_id: u64, _num: usize) -> Result<(), Error> {
@@ -372,8 +367,6 @@ impl StreamMap {
         self.get_mut(id).unwrap().reset_stream()
     }
 }
-
-
 
 /// An iterator over TCPLS streams.
 #[derive(Default)]
@@ -412,7 +405,7 @@ impl ExactSizeIterator for StreamIter {
 
 #[test]
 
-fn test_create_stream(){
+fn test_create_stream() {
     let mut map = StreamMap::new();
     let stream = map.get_or_create(55).unwrap();
     assert_eq!(stream.send.is_empty(), true)

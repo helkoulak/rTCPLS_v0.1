@@ -1,4 +1,3 @@
-
 use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -168,11 +167,8 @@ pub struct ConfigBuilder<Side: ConfigSide, State> {
 
 impl<Side: ConfigSide, State: fmt::Debug> fmt::Debug for ConfigBuilder<Side, State> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-
         let side_name = core::any::type_name::<Side>();
-        let (ty, _) = side_name
-            .split_once('<')
-            .unwrap_or((side_name, ""));
+        let (ty, _) = side_name.split_once('<').unwrap_or((side_name, ""));
         let (_, name) = ty.rsplit_once("::").unwrap_or(("", ty));
 
         f.debug_struct(&format!("ConfigBuilder<{}, _>", name,))
@@ -216,7 +212,6 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
             return Err(Error::General("no usable cipher suites configured".into()));
         }
 
-
         if self.state.provider.kx_groups.is_empty() {
             return Err(Error::General("no kx groups configured".into()));
         }
@@ -237,10 +232,7 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 
         for cs in self.state.provider.cipher_suites.iter() {
             let cs_kx = cs.key_exchange_algorithms();
-            if cs_kx
-                .iter()
-                .any(|kx| supported_kx_algos.contains(kx))
-            {
+            if cs_kx.iter().any(|kx| supported_kx_algos.contains(kx)) {
                 continue;
             }
             let suite_name = cs.common().suite;
@@ -266,7 +258,6 @@ impl<S: ConfigSide> ConfigBuilder<S, WantsVersions> {
 /// For more information, see the [`ConfigBuilder`] documentation.
 #[derive(Clone, Debug)]
 pub struct WantsVerifier {
-
     pub(crate) provider: Arc<CryptoProvider>,
     pub(crate) versions: versions::EnabledVersions,
     pub(crate) time_provider: Arc<dyn TimeProvider>,

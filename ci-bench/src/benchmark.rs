@@ -28,10 +28,7 @@ pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
     }
 
     // Detect dangling benchmark references
-    let all_names: FxHashSet<_> = benchmarks
-        .iter()
-        .map(|b| b.name.as_str())
-        .collect();
+    let all_names: FxHashSet<_> = benchmarks.iter().map(|b| b.name.as_str()).collect();
     let referenced_names: FxHashSet<_> = benchmarks
         .iter()
         .flat_map(|b| match &b.reporting_mode {
@@ -40,10 +37,7 @@ pub fn validate_benchmarks(benchmarks: &[Benchmark]) -> anyhow::Result<()> {
         })
         .collect();
 
-    let undefined_names: Vec<_> = referenced_names
-        .difference(&all_names)
-        .cloned()
-        .collect();
+    let undefined_names: Vec<_> = referenced_names.difference(&all_names).cloned().collect();
     if !undefined_names.is_empty() {
         anyhow::bail!("The following benchmark names are referenced, but have no corresponding benchmarks: {}",
             undefined_names.join(", "));

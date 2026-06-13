@@ -247,16 +247,8 @@ pub fn diff(baseline: &Path, candidate: &Path, scenario: &str) -> anyhow::Result
         // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehash17hc60392f3f3eac4b2E.llvm.9716880419886440089 ->
         // _ZN9hashbrown3raw21RawTable$LT$T$C$A$GT$14reserve_rehashE
         .arg("--mod-funcname=s/17h[0-9a-f]+E\\.llvm\\.\\d+/E/")
-        .arg(
-            baseline
-                .join(CACHEGRIND_OUTPUT_SUBDIR)
-                .join(scenario),
-        )
-        .arg(
-            candidate
-                .join(CACHEGRIND_OUTPUT_SUBDIR)
-                .join(scenario),
-        )
+        .arg(baseline.join(CACHEGRIND_OUTPUT_SUBDIR).join(scenario))
+        .arg(candidate.join(CACHEGRIND_OUTPUT_SUBDIR).join(scenario))
         .stdout(Stdio::from(tmp))
         .spawn()
         .context("cannot spawn cg_diff subprocess")?

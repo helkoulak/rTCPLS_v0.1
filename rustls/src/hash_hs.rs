@@ -1,4 +1,3 @@
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
@@ -38,9 +37,7 @@ impl HandshakeHashBuffer {
     /// Hash/buffer a handshake message.
     pub(crate) fn add_message(&mut self, m: &Message) {
         if let MessagePayload::Handshake { encoded, .. } = &m.payload {
-            self.buffer
-
-                .extend_from_slice(encoded.bytes());
+            self.buffer.extend_from_slice(encoded.bytes());
         }
     }
 
@@ -120,7 +117,6 @@ impl HandshakeHash {
         self
     }
 
-
     pub(crate) fn hash_given(&self, extra: &[u8]) -> hash::Output {
         let mut ctx = self.ctx.fork();
         ctx.update(extra);
@@ -164,7 +160,6 @@ impl HandshakeHash {
     pub(crate) fn take_handshake_buf(&mut self) -> Option<Vec<u8>> {
         self.client_auth.take()
     }
-
 
     /// The hashing algorithm
     pub(crate) fn algorithm(&self) -> HashAlgorithm {

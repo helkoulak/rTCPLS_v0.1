@@ -1,6 +1,5 @@
 //! The single place where we generate random material for our own use.
 
-
 use alloc::vec;
 use alloc::vec::Vec;
 

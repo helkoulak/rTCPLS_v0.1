@@ -48,10 +48,11 @@ where
     in_out[..in_out_len].copy_from_slice(&block.as_ref()[..in_out_len]);
 }
 
-
-pub fn shift_partial_output<F>((in_prefix_len, in_out, output): (usize, & [u8], &mut [u8]), transform: F)
-    where
-        F: FnOnce(&[u8]) -> Block,
+pub fn shift_partial_output<F>(
+    (in_prefix_len, in_out, output): (usize, &[u8], &mut [u8]),
+    transform: F,
+) where
+    F: FnOnce(&[u8]) -> Block,
 {
     let (block, in_out_len) = {
         let input = &in_out[in_prefix_len..];

@@ -1,23 +1,20 @@
 use crate::bench_util::CPUTime;
 use rustls::{ContentType, Error, ProtocolVersion};
 
-
 mod bench_util;
 use criterion::{criterion_group, criterion_main, Criterion};
-
-
 
 use ring::aead::{LessSafeKey, UnboundKey, AES_128_GCM};
 use ring::rand::SecureRandom;
 use ring::{aead, rand};
-use rustls::crypto::cipherx::{make_tls13_aad, HeaderProtector, OutboundChunks, PrefixedPayload, NONCE_LEN};
+use rustls::crypto::cipherx::{
+    make_tls13_aad, HeaderProtector, OutboundChunks, PrefixedPayload, NONCE_LEN,
+};
 
 use rustls::tcpls::frame::{Frame, TcplsHeader};
 
 pub(crate) const MAX_FRAGMENT_LEN: usize = 16384;
 pub(crate) const HEADER_SIZE: usize = 1 + 2 + 2;
-
-
 
 pub const TCPLS_HEADER_SIZE: usize = 8;
 
@@ -27,10 +24,10 @@ pub const STREAM_FRAME_HEADER_SIZE: usize = 3;
 
 pub const MAX_TCPLS_FRAGMENT_LEN: usize = MAX_FRAGMENT_LEN - rustls::tcpls::frame::TCPLS_OVERHEAD;
 
-pub const TCPLS_OVERHEAD: usize = rustls::tcpls::frame::TCPLS_HEADER_SIZE + rustls::tcpls::frame::STREAM_FRAME_HEADER_SIZE;
+pub const TCPLS_OVERHEAD: usize =
+    rustls::tcpls::frame::TCPLS_HEADER_SIZE + rustls::tcpls::frame::STREAM_FRAME_HEADER_SIZE;
 
 pub const TCPLS_PAYLOAD_OFFSET: usize = 13;
-
 
 #[derive(Default)]
 pub struct Iv([u8; NONCE_LEN]);
@@ -42,12 +39,10 @@ impl From<[u8; NONCE_LEN]> for Iv {
 }
 pub struct Nonce(pub [u8; NONCE_LEN]);
 
-
 pub(crate) fn put_u64(v: u64, bytes: &mut [u8]) {
     let bytes: &mut [u8; 8] = (&mut bytes[..8]).try_into().unwrap();
     *bytes = u64::to_be_bytes(v);
 }
-
 
 pub(crate) fn put_u32(v: u32, bytes: &mut [u8]) {
     let bytes: &mut [u8; 4] = (&mut bytes[..4]).try_into().unwrap();
@@ -61,14 +56,10 @@ impl Nonce {
     pub fn new(iv: &Iv, seq: u64, stream_id: u32) -> Self {
         let mut nonce = Self([0u8; NONCE_LEN]);
         put_u64(seq, &mut nonce.0[4..]);
-        put_u32(stream_id,&mut nonce.0[..4]);
-        nonce
-            .0
-            .iter_mut()
-            .zip(iv.0.iter())
-            .for_each(|(nonce, iv)| {
-                *nonce ^= *iv;
-            });
+        put_u32(stream_id, &mut nonce.0[..4]);
+        nonce.0.iter_mut().zip(iv.0.iter()).for_each(|(nonce, iv)| {
+            *nonce ^= *iv;
+        });
 
         nonce
     }
@@ -97,7 +88,7 @@ fn build_aad_inner(payload_len: usize, header: &TcplsHeader, version: [u8; 2]) -
         (header.stream_id >> 24) as u8,
         (header.stream_id >> 16) as u8,
         (header.stream_id >> 8) as u8,
-        (header.stream_id & 0xff) as u8
+        (header.stream_id & 0xff) as u8,
     ]
 }
 
@@ -119,7 +110,11 @@ fn write_header(tcpls_header: &TcplsHeader, payload: &mut PrefixedPayload) {
 fn encrypted_payload_len(payload_len: usize, enc_key: &LessSafeKey) -> usize {
     payload_len + 1 + enc_key.algorithm().tag_len()
 }
-fn encrypted_payload_len_tcpls(payload_len: usize, header_len: usize, less_safe_key: &LessSafeKey) -> (usize, usize) {
+fn encrypted_payload_len_tcpls(
+    payload_len: usize,
+    header_len: usize,
+    less_safe_key: &LessSafeKey,
+) -> (usize, usize) {
     let tag_len = less_safe_key.algorithm().tag_len();
 
     (payload_len + header_len + 1 + tag_len, tag_len)
@@ -137,17 +132,17 @@ fn encrypt_header(
     tcpls_header: &TcplsHeader,
     frame_header: Option<&Frame>,
     header_encrypter: &mut HeaderProtector,
-    msg_encrypter: & Tls13MessageEncrypter,
+    msg_encrypter: &Tls13MessageEncrypter,
 ) -> Result<(), Error> {
     let plain_len = msg.len();
-    let hdr_len =  match frame_header.as_ref() {
+    let hdr_len = match frame_header.as_ref() {
         Some(_header) => STREAM_FRAME_HEADER_SIZE,
         None => 0,
     };
-    let (enc_payload_len, tag_len) = encrypted_payload_len_tcpls(plain_len, hdr_len, &msg_encrypter.enc_key);
+    let (enc_payload_len, tag_len) =
+        encrypted_payload_len_tcpls(plain_len, hdr_len, &msg_encrypter.enc_key);
     let mut payload = PrefixedPayload::with_capacity_tcpls(enc_payload_len);
     let total_len = TCPLS_HEADER_SIZE + enc_payload_len;
-
 
     let nonce = aead::Nonce::assume_unique_for_key(Nonce::new(&msg_encrypter.iv, seq, stream_id).0);
     let aad = aead::Aad::from(make_tls13_aad_tcpls(total_len, tcpls_header));
@@ -160,25 +155,32 @@ fn encrypt_header(
     match frame_header {
         Some(ref header) => {
             payload.extend_from_slice(vec![0u8; 4].as_slice());
-            let mut b =
-                octets::OctetsMut::with_slice_at_offset(payload.as_mut(), plain_len + TCPLS_HEADER_SIZE);
+            let mut b = octets::OctetsMut::with_slice_at_offset(
+                payload.as_mut(),
+                plain_len + TCPLS_HEADER_SIZE,
+            );
             header.encode(&mut b).unwrap();
-            b.put_bytes(&ContentType::ApplicationData.to_array()).unwrap();
+            b.put_bytes(&ContentType::ApplicationData.to_array())
+                .unwrap();
             ()
-        },
+        }
         None => {
             payload.extend_from_slice(&ContentType::ApplicationData.to_array());
             ()
-        },
+        }
     }
 
-
-    msg_encrypter.enc_key
+    msg_encrypter
+        .enc_key
         .seal_in_place_append_tag_tcpls(nonce, aad, &mut payload, TCPLS_HEADER_SIZE)
         .map_err(|_| Error::EncryptError)?;
 
     // Take the LSBs of calculated tag as input sample for hash function
-    let sample = payload.as_mut_tcpls_payload().rchunks(tag_len).next().unwrap();
+    let sample = payload
+        .as_mut_tcpls_payload()
+        .rchunks(tag_len)
+        .next()
+        .unwrap();
 
     let mut i = 0;
     let mask = header_encrypter.generate_mask(sample);
@@ -191,13 +193,7 @@ fn encrypt_header(
     Ok(())
 }
 
-
-
-fn encrypt(
-    msg: &Vec<u8>,
-    seq: u64,
-    msg_encrypter: & Tls13MessageEncrypter,
-) -> Result<(), Error> {
+fn encrypt(msg: &Vec<u8>, seq: u64, msg_encrypter: &Tls13MessageEncrypter) -> Result<(), Error> {
     let total_len = encrypted_payload_len(msg.len(), &msg_encrypter.enc_key);
     let mut payload = PrefixedPayload::with_capacity(total_len);
 
@@ -206,7 +202,8 @@ fn encrypt(
     payload.extend_from_chunks(&OutboundChunks::Single(msg));
     payload.extend_from_slice(&ContentType::ApplicationData.to_array());
 
-    msg_encrypter.enc_key
+    msg_encrypter
+        .enc_key
         .seal_in_place_append_tag(nonce, aad, &mut payload)
         .map_err(|_| Error::EncryptError)?;
 
@@ -221,7 +218,6 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
     let enc_tcpls_header = TcplsHeader {
         chunk_num: 636873673,
         stream_id: 64684,
-
     };
     let frame_header: Option<&Frame> = Some(&Frame::Stream {
         length: MAX_TCPLS_FRAGMENT_LEN as u16,
@@ -237,32 +233,34 @@ fn encryption_benchmark(c: &mut Criterion<CPUTime>) {
     rng.fill(&mut iv).expect("Generate rand failed");
     rng.fill(&mut key_bytes).expect("Generate rand failed");
     rng.fill(&mut nonce_bytes).expect("Generate rand failed");
-    rng.fill(&mut header_protection_key).expect("Generate rand failed");
+    rng.fill(&mut header_protection_key)
+        .expect("Generate rand failed");
 
-    let msg_encrypter = Tls13MessageEncrypter{
+    let msg_encrypter = Tls13MessageEncrypter {
         iv: Iv::from(iv),
         enc_key: less_safe_key,
     };
 
-    let mut header_protector: HeaderProtector = HeaderProtector::new_with_key(&header_protection_key);
+    let mut header_protector: HeaderProtector =
+        HeaderProtector::new_with_key(&header_protection_key);
 
     c.bench_function("AES_128_GCM encryption without tcpls header", |b| {
-
-        b.iter(|| {
-            encrypt(&msg, 0, &msg_encrypter)
-        });
+        b.iter(|| encrypt(&msg, 0, &msg_encrypter));
     });
     c.bench_function("AES_128_GCM encryption with tcpls header", |b| {
-
         b.iter(|| {
-            encrypt_header(&msg, 0, 0, &enc_tcpls_header, frame_header,
-                                     &mut header_protector, &msg_encrypter)
+            encrypt_header(
+                &msg,
+                0,
+                0,
+                &enc_tcpls_header,
+                frame_header,
+                &mut header_protector,
+                &msg_encrypter,
+            )
         });
     });
-
-
 }
-
 
 /*criterion_group!{
     name = benches;

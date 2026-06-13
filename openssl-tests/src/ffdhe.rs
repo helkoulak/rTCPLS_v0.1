@@ -16,9 +16,7 @@ pub struct FfdheKxGroup(pub NamedGroup);
 impl SupportedKxGroup for FfdheKxGroup {
     fn start(&self) -> Result<Box<dyn ActiveKeyExchange>, rustls::Error> {
         let mut x = vec![0; 64];
-        provider::default_provider()
-            .secure_random
-            .fill(&mut x)?;
+        provider::default_provider().secure_random.fill(&mut x)?;
         let x = BigUint::from_bytes_be(&x);
 
         let group = FfdheGroup::from_named_group(self.0).unwrap();

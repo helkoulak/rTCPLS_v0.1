@@ -1,33 +1,30 @@
 #[macro_use]
 extern crate serde_derive;
 
-use std::{fs, process};
+use rustls::crypto::{ring as provider, CryptoProvider};
 use std::io;
 use std::io::BufReader;
 use std::net::ToSocketAddrs;
-use rustls::crypto::{ring as provider, CryptoProvider};
+use std::{fs, process};
 
-use std::str;
-use std::sync::Arc;
 use docopt::Docopt;
 use log::LevelFilter;
 use mio::Token;
 use pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use ring::digest;
 use rustls::recvbuf::RecvBufMap;
-use rustls::RootCertStore;
 use rustls::tcpls::TcplsSession;
+use rustls::RootCertStore;
+use std::str;
+use std::sync::Arc;
 
 const CLIENT: Token = Token(0);
-
-
 
 struct TlsClient {
     closing: bool,
     clean_closure: bool,
     tcpls_session: TcplsSession,
     data_sent: bool,
-
 }
 
 impl TlsClient {
@@ -47,8 +44,14 @@ impl TlsClient {
         if ev.is_readable() {
             self.do_read(recv_map, token.0 as u64);
 
-            if !self.tcpls_session.tls_conn.as_ref().unwrap().is_handshaking() && !self.data_sent{
-
+            if !self
+                .tcpls_session
+                .tls_conn
+                .as_ref()
+                .unwrap()
+                .is_handshaking()
+                && !self.data_sent
+            {
                 self.send_data(vec![0u8; 60000].as_slice(), 0).expect("");
                 self.send_data(vec![1u8; 60000].as_slice(), 1).expect("");
                 self.send_data(vec![2u8; 60000].as_slice(), 2).expect("");
@@ -60,13 +63,11 @@ impl TlsClient {
             self.do_write();
         }
 
-
         if self.is_closed() {
             println!("Connection closed");
             process::exit(if self.clean_closure { 0 } else { 1 });
         }
     }
-
 
     /// We're ready to do a read.
     fn do_read(&mut self, app_buffers: &mut RecvBufMap, id: u64) {
@@ -106,7 +107,6 @@ impl TlsClient {
             }
         };
 
-
         // If wethat fails, the peer might have started a clean TLS-level
         // session closure.
         if io_state.peer_has_closed() {
@@ -116,7 +116,6 @@ impl TlsClient {
     }
 
     fn do_write(&mut self) {
-
         self.tcpls_session.send_on_connection(None, None).unwrap();
     }
 
@@ -124,7 +123,16 @@ impl TlsClient {
     fn register(&mut self, registry: &mio::Registry, recv_map: &RecvBufMap) {
         let interest = self.event_set(recv_map);
         registry
-            .register(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket, CLIENT, interest)
+            .register(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&0)
+                    .unwrap()
+                    .socket,
+                CLIENT,
+                interest,
+            )
             .unwrap();
     }
 
@@ -132,15 +140,34 @@ impl TlsClient {
     fn reregister(&mut self, registry: &mio::Registry, recv_map: &RecvBufMap) {
         let interest = self.event_set(recv_map);
         registry
-            .reregister(&mut self.tcpls_session.tcp_connections.get_mut(&0).unwrap().socket, CLIENT, interest)
+            .reregister(
+                &mut self
+                    .tcpls_session
+                    .tcp_connections
+                    .get_mut(&0)
+                    .unwrap()
+                    .socket,
+                CLIENT,
+                interest,
+            )
             .unwrap();
     }
 
     /// Use wants_read/wants_write to register for different mio-level
     /// IO readiness events.
     fn event_set(&mut self, app_buf: &RecvBufMap) -> mio::Interest {
-        let rd = self.tcpls_session.tls_conn.as_mut().unwrap().wants_read(app_buf);
-        let wr = self.tcpls_session.tls_conn.as_mut().unwrap().wants_write(None);
+        let rd = self
+            .tcpls_session
+            .tls_conn
+            .as_mut()
+            .unwrap()
+            .wants_read(app_buf);
+        let wr = self
+            .tcpls_session
+            .tls_conn
+            .as_mut()
+            .unwrap()
+            .wants_write(None);
 
         if rd && wr {
             mio::Interest::READABLE | mio::Interest::WRITABLE
@@ -154,7 +181,6 @@ impl TlsClient {
     fn is_closed(&self) -> bool {
         self.closing
     }
-
 
     fn send_data(&mut self, input: &[u8], stream: u32) -> io::Result<()> {
         let mut data = Vec::new();
@@ -170,20 +196,18 @@ impl TlsClient {
         // Print the hash as a hexadecimal string
         // println!("\n \n File bytes on stream {:?} : \n {:?} \n \n SHA-256 Hash {:?} \n Total length: {:?} \n", stream, file_contents, hash, len);
 
-        self.tcpls_session.stream_send(stream, data.as_ref()).expect("buffering failed");
-
+        self.tcpls_session
+            .stream_send(stream, data.as_ref())
+            .expect("buffering failed");
 
         Ok(())
     }
-
 
     fn calculate_sha256_hash(data: &[u8]) -> digest::Digest {
         let algorithm = &digest::SHA256;
         digest::digest(algorithm, data)
     }
 }
-
-
 
 const USAGE: &str = "
 Connects to the TLS server at hostname:PORT.  The default PORT
@@ -237,9 +261,6 @@ struct Args {
     flag_auth_certs: Option<String>,
     arg_hostname: String,
 }
-
-
-
 
 fn find_suite(name: &str) -> Option<rustls::SupportedCipherSuite> {
     for suite in provider::ALL_CIPHER_SUITES {
@@ -370,9 +391,7 @@ mod danger {
         }
 
         fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-            self.0
-                .signature_verification_algorithms
-                .supported_schemes()
+            self.0.signature_verification_algorithms.supported_schemes()
         }
     }
 }
@@ -390,11 +409,7 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             rustls_pemfile::certs(&mut reader).map(|result| result.unwrap()),
         );
     } else {
-        root_store.extend(
-            webpki_roots::TLS_SERVER_ROOTS
-                .iter()
-                .cloned(),
-        );
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     }
 
     let suites = if !args.flag_suite.is_empty() {
@@ -414,11 +429,11 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
             cipher_suites: suites,
             ..provider::default_provider()
         }
-            .into(),
+        .into(),
     )
-        .with_protocol_versions(&versions)
-        .expect("inconsistent cipher-suite/versions selected")
-        .with_root_certificates(root_store);
+    .with_protocol_versions(&versions)
+    .expect("inconsistent cipher-suite/versions selected")
+    .with_root_certificates(root_store);
 
     let mut config = match (&args.flag_auth_key, &args.flag_auth_certs) {
         (Some(key_file), Some(certs_file)) => {
@@ -454,22 +469,17 @@ fn make_config(args: &Args) -> Arc<rustls::ClientConfig> {
     config.max_fragment_size = args.flag_max_frag_size;
 
     if args.flag_insecure {
-        config
-            .dangerous()
-            .set_certificate_verifier(Arc::new(danger::NoCertificateVerification::new(
-                provider::default_provider(),
-            )));
+        config.dangerous().set_certificate_verifier(Arc::new(
+            danger::NoCertificateVerification::new(provider::default_provider()),
+        ));
     }
 
     Arc::new(config)
 }
 
-
 /// Parse some arguments, then make a TLS client connection
 /// somewhere.
 fn main() {
-
-
     let version = env!("CARGO_PKG_NAME").to_string() + ", version: " + env!("CARGO_PKG_VERSION");
 
     let args: Args = Docopt::new(USAGE)
@@ -480,7 +490,7 @@ fn main() {
 
     if args.flag_verbose {
         env_logger::builder()
-            .filter_level(LevelFilter::Trace)   // Set global log level to Trace
+            .filter_level(LevelFilter::Trace) // Set global log level to Trace
             .filter_module("mio", LevelFilter::Info) // Set specific level for mio
             .init();
     }
@@ -501,26 +511,26 @@ fn main() {
         .expect("invalid DNS name")
         .to_owned();
 
-    client.tcpls_session.tcpls_connect(dest_address, Some(config), Some(server_name), false);
-
-
+    client
+        .tcpls_session
+        .tcpls_connect(dest_address, Some(config), Some(server_name), false);
 
     let mut poll = mio::Poll::new().unwrap();
     let mut events = mio::Events::with_capacity(50);
     client.register(poll.registry(), &recv_map);
 
     loop {
-     match poll.poll(&mut events, Some(client.tcpls_session.timeout)){
-         Ok(()) => {
-             // Timeout occurred (no events triggered)
-             client.tcpls_session.on_timeout();
-         }
-        // Polling can be interrupted (e.g. by a debugger) - retry if so.
-        Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-        Err(e) => {
-            panic!("poll failed: {:?}", e)
+        match poll.poll(&mut events, Some(client.tcpls_session.timeout)) {
+            Ok(()) => {
+                // Timeout occurred (no events triggered)
+                client.tcpls_session.on_timeout();
+            }
+            // Polling can be interrupted (e.g. by a debugger) - retry if so.
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => {
+                panic!("poll failed: {:?}", e)
+            }
         }
-    }
 
         for ev in events.iter() {
             client.handle_event(ev, &mut recv_map);

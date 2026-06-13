@@ -2,8 +2,9 @@ use crate::enums::{ContentType, ProtocolVersion};
 use crate::error::{Error, InvalidMessage, PeerMisbehaved};
 use crate::msgs::codec;
 #[cfg(feature = "std")]
-
-use crate::msgs::message::{InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD};
+use crate::msgs::message::{
+    InboundOpaqueMessage, InboundPlainMessage, MessageError, MAX_DEFRAMER_CAP, MAX_PAYLOAD,
+};
 use crate::record_layer::{Decrypted, RecordLayer};
 use crate::recvbuf::{RecvBuf, RecvBufMap};
 use crate::tcpls::stream::SimpleIdHashMap;
@@ -19,19 +20,16 @@ use super::codec::Codec;
 use crate::msgs::message::{CHUNK_NUM_OFFSET, CHUNK_NUM_SIZE, STREAM_ID_OFFSET, STREAM_ID_SIZE};
 use core::ptr;
 
-
 /// This deframer works to reconstruct TLS messages from a stream of arbitrary-sized reads.
 ///
 /// It buffers incoming data into a `Vec` through `read()`, and returns messages through `pop()`.
 /// QUIC connections will call `push()` to append handshake payload data directly.
 #[derive(Default)]
 pub struct MessageDeframer {
-
     /// Set if the peer is not talking TLS, but some other
     /// protocol.  The caller should abort the connection, because
     /// the deframer cannot recover.
     last_error: Option<Error>,
-
 
     /// If we're in the middle of joining a handshake payload, this is the metadata.
     joining_hs: Option<HandshakePayloadMeta>,
@@ -44,15 +42,13 @@ pub struct MessageDeframer {
     /// Range of dicard area in deframer buffer.
     pub(crate) discard_range: Range<usize>,
 
-   /* ///Range of joined Handshake message in the deframer buffer
+    /* ///Range of joined Handshake message in the deframer buffer
     pub(crate)  joined_messages: Vec<Range<usize>>,*/
-
     pub(crate) current_conn_id: u64,
 
     pub(crate) discard_threshold: usize,
 
     pub(crate) used: usize,
-
 }
 
 impl MessageDeframer {
@@ -122,12 +118,12 @@ impl MessageDeframer {
                 //   expect any plaintext.
                 // * The payload size is indicative of a plaintext alert message.
                 ContentType::Alert
-                if version_is_tls13
-                    && !record_layer.has_decrypted()
-                    && m.payload.len() <= 2 =>
-                    {
-                        true
-                    }
+                    if version_is_tls13
+                        && !record_layer.has_decrypted()
+                        && m.payload.len() <= 2 =>
+                {
+                    true
+                }
                 // In other circumstances, we expect all messages to be encrypted.
                 _ => false,
             };
@@ -159,11 +155,11 @@ impl MessageDeframer {
                     let Decrypted {
                         want_close_before_decrypt,
                         plaintext:
-                        InboundPlainMessage {
-                            typ,
-                            version,
-                            payload,
-                        },
+                            InboundPlainMessage {
+                                typ,
+                                version,
+                                payload,
+                            },
                     } = decrypted;
                     debug_assert!(!want_close_before_decrypt);
                     (typ, version, RawSlice::from(payload))
@@ -279,24 +275,32 @@ impl MessageDeframer {
         let mut stream_id: u32 = 0;
         let conn_id = self.current_conn_id;
 
-
         // We loop over records we've received but not processed yet.
         // For records that decrypt as `Handshake`, we keep the current state of the joined
         // handshake message payload in `self.joining_hs`, appending to it as we see records.
         let expected_len = loop {
-            start = if self.unproc_ranges.get(&conn_id).is_some_and(|unranges| !unranges.is_empty()) {
-
+            start = if self
+                .unproc_ranges
+                .get(&conn_id)
+                .is_some_and(|unranges| !unranges.is_empty())
+            {
                 let mut pos = None;
                 let mut next: usize = 0;
                 for unrange in self.unproc_ranges.get(&conn_id).unwrap() {
-                    if let Some(rev_buf) = app_buffers
-                        .get(u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
+                    if let Some(rev_buf) = app_buffers.get(u32::from_be_bytes(
+                        buffer.get_imut_ref()[unrange.start + STREAM_ID_OFFSET
+                            ..unrange.start + STREAM_ID_OFFSET + STREAM_ID_SIZE]
                             .try_into()
-                            .unwrap()))
-                    {
-                        if rev_buf.next_recv_pkt_num == u32::from_be_bytes(buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
-                            .try_into()
-                            .unwrap()) {
+                            .unwrap(),
+                    )) {
+                        if rev_buf.next_recv_pkt_num
+                            == u32::from_be_bytes(
+                                buffer.get_imut_ref()[unrange.start + CHUNK_NUM_OFFSET
+                                    ..unrange.start + CHUNK_NUM_OFFSET + CHUNK_NUM_SIZE]
+                                    .try_into()
+                                    .unwrap(),
+                            )
+                        {
                             pos = Some(unrange.start);
                             header_decrypted = true;
                             break;
@@ -312,17 +316,16 @@ impl MessageDeframer {
                     .map(|ranges| ranges.iter().map(|range| range.end).max().unwrap_or(0))
                     .unwrap_or(0);
 
-
                 match pos {
                     None => core::cmp::max(next, last_processed_end),
                     Some(p) => p,
                 }
-
-            } else { self
-                .proc_ranges
-                .get(&conn_id)
-                .map(|ranges| ranges.iter().map(|range| range.end).max().unwrap_or(0))
-                .unwrap_or(0) };
+            } else {
+                self.proc_ranges
+                    .get(&conn_id)
+                    .map(|ranges| ranges.iter().map(|range| range.end).max().unwrap_or(0))
+                    .unwrap_or(0)
+            };
 
             // Does our `buf` contain a full message?  It does if it is big enough to
             // contain a header, and that header has a length which falls within `buf`.
@@ -361,12 +364,12 @@ impl MessageDeframer {
                 //   expect any plaintext.
                 // * The payload size is indicative of a plaintext alert message.
                 ContentType::Alert
-                if version_is_tls13
-                    && !record_layer.has_decrypted()
-                    && m.payload.len() <= 2 =>
-                    {
-                        true
-                    }
+                    if version_is_tls13
+                        && !record_layer.has_decrypted()
+                        && m.payload.len() <= 2 =>
+                {
+                    true
+                }
                 // In other circumstances, we expect all messages to be encrypted.
                 _ => false,
             };
@@ -386,7 +389,8 @@ impl MessageDeframer {
                 self.unproc_ranges
                     .get_mut(&conn_id)
                     .map(|ranges| ranges.retain(|r| *r != Range::from(start..end)));
-                self.proc_ranges.entry(conn_id)
+                self.proc_ranges
+                    .entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(start..end);
                 return Ok(Some(Deframed {
@@ -397,74 +401,79 @@ impl MessageDeframer {
                 }));
             }
 
-
             // Decrypt the encrypted message (if necessary).
-            let (typ, version, plain_payload_slice) =
-                match record_layer.decrypt_incoming_tcpls(m, app_buffers, header_decrypted) {
-                    Ok((Some(decrypted), _chunk, strm_id)) => {
-                        header_decrypted = false;
-                       /* if let Some(ch_num) = chunk {
-                            chunk_num = ch_num;
-                        }*/
+            let (typ, version, plain_payload_slice) = match record_layer.decrypt_incoming_tcpls(
+                m,
+                app_buffers,
+                header_decrypted,
+            ) {
+                Ok((Some(decrypted), _chunk, strm_id)) => {
+                    header_decrypted = false;
+                    /* if let Some(ch_num) = chunk {
+                        chunk_num = ch_num;
+                    }*/
 
-                        if let Some(id) = strm_id {
-                            stream_id = id;
-                        }
+                    if let Some(id) = strm_id {
+                        stream_id = id;
+                    }
 
-                        let Decrypted {
-                            want_close_before_decrypt,
-                            plaintext:
+                    let Decrypted {
+                        want_close_before_decrypt,
+                        plaintext:
                             InboundPlainMessage {
                                 typ,
                                 version,
                                 payload,
                             },
-                        } = decrypted;
-                        debug_assert!(!want_close_before_decrypt);
-                        (typ, version, RawSlice::from(payload))
+                    } = decrypted;
+                    debug_assert!(!want_close_before_decrypt);
+                    (typ, version, RawSlice::from(payload))
+                }
+
+                Err(e) => match e {
+                    Error::General(ref msg) if msg == "Buffer too short" => {
+                        continue;
                     }
 
-                    Err(e) => match e {
-                        Error::General(ref msg) if msg == "Buffer too short" => {
-                            continue;
-                        }
+                    Error::General(ref msg) if msg == "Record out of order" => {
+                        self.unproc_ranges
+                            .entry(conn_id)
+                            .or_insert_with(Vec::new)
+                            .push(start..end);
+                        continue;
+                    }
 
-                        Error::General(ref msg) if msg == "Record out of order" => {
-                            self.unproc_ranges.entry(conn_id)
+                    Error::General(ref msg)
+                        if msg == "Dropping undecryptable message after aborted early_data" =>
+                    {
+                        if self.joining_hs.is_some() {
+                            return Err(self.set_err(
+                                PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
+                            ));
+                        } else {
+                            self.unproc_ranges.get_mut(&conn_id).map(|ranges| {
+                                ranges.retain(|r| *r != Range::from(start..end));
+                            });
+
+                            // self.unproc_ranges.get_mut(&conn_id).unwrap().retain(|r| *r != Range::from(start..end));
+                            self.proc_ranges
+                                .entry(conn_id)
                                 .or_insert_with(Vec::new)
                                 .push(start..end);
+
                             continue;
                         }
-
-                        Error::General(ref msg) if msg == "Dropping undecryptable message after aborted early_data" => {
-                            if self.joining_hs.is_some() {
-                                return Err(self.set_err(
-                                    PeerMisbehaved::RejectedEarlyDataInterleavedWithHandshakeMessage,
-                                ));
-                            } else {
-                                self.unproc_ranges.get_mut(&conn_id).map(|ranges| {
-                                    ranges.retain(|r| *r != Range::from(start..end));
-                                });
-
-                                // self.unproc_ranges.get_mut(&conn_id).unwrap().retain(|r| *r != Range::from(start..end));
-                                self.proc_ranges.entry(conn_id)
-                                    .or_insert_with(Vec::new)
-                                    .push(start..end);
-
-                                continue;
-                            }
-
-                        }
-                        _ => {
-                            return Err(e)
-                        }
-                    },
-                    _ => (ContentType::ApplicationData, ProtocolVersion::TLSv1_3, RawSlice::from(vec![0u8;1].as_slice()))
-                };
-
+                    }
+                    _ => return Err(e),
+                },
+                _ => (
+                    ContentType::ApplicationData,
+                    ProtocolVersion::TLSv1_3,
+                    RawSlice::from(vec![0u8; 1].as_slice()),
+                ),
+            };
 
             if self.joining_hs.is_some() && typ != ContentType::Handshake {
-
                 // "Handshake messages MUST NOT be interleaved with other record
                 // types.  That is, if a handshake message is split over two or more
                 // records, there MUST NOT be any other records between them."
@@ -478,7 +487,8 @@ impl MessageDeframer {
                 self.unproc_ranges
                     .get_mut(&conn_id)
                     .map(|ranges| ranges.retain(|r| *r != Range::from(start..end)));
-                self.proc_ranges.entry(conn_id)
+                self.proc_ranges
+                    .entry(conn_id)
                     .or_insert_with(Vec::new)
                     .push(start..end);
 
@@ -490,12 +500,25 @@ impl MessageDeframer {
                     typ,
                     version,
                     payload: match record_layer.has_decrypted() {
-                        true => if app_buffers.get_or_create(stream_id as u64, None)
-                            .last_data_type_decrypted != u8::from(ContentType::ApplicationData) {
-                            core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).get_last_decrypted())
-                        } else {
-                            core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).as_ref_consumed())
-                        },
+                        true => {
+                            if app_buffers
+                                .get_or_create(stream_id as u64, None)
+                                .last_data_type_decrypted
+                                != u8::from(ContentType::ApplicationData)
+                            {
+                                core::mem::take(
+                                    &mut &*app_buffers
+                                        .get_or_create(stream_id as u64, None)
+                                        .get_last_decrypted(),
+                                )
+                            } else {
+                                core::mem::take(
+                                    &mut &*app_buffers
+                                        .get_or_create(stream_id as u64, None)
+                                        .as_ref_consumed(),
+                                )
+                            }
+                        }
                         false => buffer.take(plain_payload_slice),
                     },
                 };
@@ -506,22 +529,35 @@ impl MessageDeframer {
                     trial_decryption_finished: false,
 
                     message,
-
                 }));
             }
 
             // If we don't know the payload size yet or if the payload size is larger
             // than the currently buffered payload, we need to wait for more data.
 
-            let src = match app_buffers.get_or_create(stream_id as u64, None)
-                .last_decrypted > 0 {
-                true => 0..app_buffers.get_or_create(stream_id as u64, None)
-                    .last_decrypted, // 13 bytes of TLS header + 8 bytes of TCPLS header
+            let src = match app_buffers
+                .get_or_create(stream_id as u64, None)
+                .last_decrypted
+                > 0
+            {
+                true => {
+                    0..app_buffers
+                        .get_or_create(stream_id as u64, None)
+                        .last_decrypted
+                } // 13 bytes of TLS header + 8 bytes of TCPLS header
                 false => buffer.raw_slice_to_filled_range(plain_payload_slice),
             };
-            match self.append_hs(version, InternalPayload(src), end,
-                                 start, buffer, match app_buffers.get_or_create(stream_id as u64, None)
-                    .last_decrypted > 0 {
+            match self.append_hs(
+                version,
+                InternalPayload(src),
+                end,
+                start,
+                buffer,
+                match app_buffers
+                    .get_or_create(stream_id as u64, None)
+                    .last_decrypted
+                    > 0
+                {
                     true => Some(app_buffers.get_or_create(stream_id as u64, None)),
                     false => None,
                 },
@@ -531,8 +567,8 @@ impl MessageDeframer {
                         .entry(conn_id)
                         .or_insert_with(Vec::new)
                         .push(start..end);
-                    return Ok(None)
-                },
+                    return Ok(None);
+                }
                 HandshakePayloadState::Complete(len) => break len,
                 HandshakePayloadState::Continue => {
                     self.proc_ranges
@@ -552,9 +588,10 @@ impl MessageDeframer {
         let version = meta.version;
         let raw_payload = match record_layer.has_decrypted() {
             true => RawSlice::from(Vec::new().as_slice()),
-            false => RawSlice::from(buffer.filled_get(meta.payload.start..meta.payload.start + expected_len)),
+            false => RawSlice::from(
+                buffer.filled_get(meta.payload.start..meta.payload.start + expected_len),
+            ),
         };
-
 
         // But before we return, update the `joining_hs` state to skip past this payload.
         if meta.payload.len() > expected_len {
@@ -574,7 +611,6 @@ impl MessageDeframer {
                 .or_insert_with(Vec::new)
                 .push(meta.message.start..meta.message.end);
 
-
             self.joining_hs = None;
 
             //Delete record_info struct of processed records of joined Handshake messages
@@ -585,7 +621,11 @@ impl MessageDeframer {
             typ,
             version,
             payload: match record_layer.has_decrypted() {
-                true => core::mem::take(&mut &*app_buffers.get_or_create(stream_id as u64, None).get_mut_total_decrypted()),
+                true => core::mem::take(
+                    &mut &*app_buffers
+                        .get_or_create(stream_id as u64, None)
+                        .get_mut_total_decrypted(),
+                ),
                 false => buffer.take(raw_payload),
             },
         };
@@ -607,7 +647,6 @@ impl MessageDeframer {
         self.last_error = Some(err.clone());
         err
     }
-
 
     /// Write the handshake message contents into the buffer and update the metadata.
     ///
@@ -633,14 +672,12 @@ impl MessageDeframer {
                     None => buffer.copy(&payload, meta.payload.end),
                 }
 
-
                 meta.message.end = end;
                 meta.payload.end += payload.len();
 
                 // If we haven't parsed the payload size yet, try to do so now.
                 if meta.expected_len.is_none() {
                     meta.expected_len =
-
                         payload_size(buffer.filled_get(meta.payload.start..meta.payload.end))?;
                 }
 
@@ -651,7 +688,10 @@ impl MessageDeframer {
                 // Write it into the buffer and create the metadata.
 
                 let expected_len = match recv_buf {
-                    Some(buf) => payload_size(buf.get_at_index(buf.offset as usize - buf.last_decrypted, buf.last_decrypted))?,
+                    Some(buf) => payload_size(buf.get_at_index(
+                        buf.offset as usize - buf.last_decrypted,
+                        buf.last_decrypted,
+                    ))?,
                     None => payload.size(buffer)?,
                 };
 
@@ -660,22 +700,20 @@ impl MessageDeframer {
                     None => buffer.copy(&payload, 0),
                 };
 
-                self.joining_hs
-                    .insert(HandshakePayloadMeta {
-                        message: Range { start, end },
-                        payload: Range {
-                            start: 0,
-                            end: match recv_buf {
-                                Some(buf) => buf.last_decrypted,
-                                None => payload.len(),
-                            },
+                self.joining_hs.insert(HandshakePayloadMeta {
+                    message: Range { start, end },
+                    payload: Range {
+                        start: 0,
+                        end: match recv_buf {
+                            Some(buf) => buf.last_decrypted,
+                            None => payload.len(),
                         },
-                        version,
-                        expected_len,
+                    },
+                    version,
+                    expected_len,
 
-                        quic: P::QUIC,
-
-                    })
+                    quic: P::QUIC,
+                })
             }
         };
 
@@ -691,7 +729,7 @@ impl MessageDeframer {
                     true => HandshakePayloadState::Continue,
                     false => HandshakePayloadState::Blocked,
                 },
-            }
+            },
         })
     }
 
@@ -706,7 +744,8 @@ impl MessageDeframer {
         if !self.proc_ranges.contains_key(&conn_id) {
             return;
         }
-        let mut initial_discard_range: Range::<usize> = { self.discard_range.start..self.discard_range.end };
+        let mut initial_discard_range: Range<usize> =
+            { self.discard_range.start..self.discard_range.end };
         loop {
             for range in self.proc_ranges.get(&conn_id).unwrap().iter() {
                 let entry_start = range.start;
@@ -729,7 +768,9 @@ impl MessageDeframer {
                     continue;
                 }
             }
-            if initial_discard_range.start == self.discard_range.start && initial_discard_range.end == self.discard_range.end {
+            if initial_discard_range.start == self.discard_range.start
+                && initial_discard_range.end == self.discard_range.end
+            {
                 break;
             } else {
                 initial_discard_range.start = self.discard_range.start;
@@ -744,19 +785,23 @@ impl MessageDeframer {
         let mut unproc_ranges_new: Vec<Range<usize>> = Vec::new();
         let mut processed_ranges_new: Vec<Range<usize>> = Vec::new();
         if let Some(connection_ranges) = self.unproc_ranges.get_mut(&conn_id) {
-            for r in connection_ranges.iter().filter(|&r| r.end <= self.discard_range.start || r.start >= self.discard_range.end) {
+            for r in connection_ranges
+                .iter()
+                .filter(|&r| r.end <= self.discard_range.start || r.start >= self.discard_range.end)
+            {
                 unproc_ranges_new.push(match r.start >= self.discard_range.end {
                     true => Range::from(r.start - discard_len..r.end - discard_len),
-                    false => Range::from(r.start..r.end)
-                }
-                );
+                    false => Range::from(r.start..r.end),
+                });
             }
             *connection_ranges = unproc_ranges_new;
         }
 
-
         if let Some(ranges) = self.proc_ranges.get_mut(&conn_id) {
-            for range in ranges.iter().filter(|&x| x.end <= self.discard_range.start || x.start >= self.discard_range.end) {
+            for range in ranges
+                .iter()
+                .filter(|&x| x.end <= self.discard_range.start || x.start >= self.discard_range.end)
+            {
                 processed_ranges_new.push(match range.end <= self.discard_range.start {
                     true => range.start..range.end,
                     false => range.start - discard_len..range.end - discard_len,
@@ -765,11 +810,9 @@ impl MessageDeframer {
             *ranges = processed_ranges_new
         }
 
-
         self.discard_range.start = 0;
         self.discard_range.end = 0;
     }
-
 
     pub fn currently_joining_hs(&self) -> bool {
         self.joining_hs.is_some()
@@ -779,7 +822,7 @@ impl MessageDeframer {
         self.discard_range.is_empty()
     }
 
-   /* pub fn delete_processed(&mut self) {
+    /* pub fn delete_processed(&mut self) {
         let conn_id = self.current_conn_id;
         if !self.joined_messages.is_empty() {
             for range in self.joined_messages.iter() {
@@ -829,10 +872,12 @@ impl MessageDeframer {
         buffer: &mut DeframerVecBuffer,
     ) -> io::Result<usize> {
         match buffer.prepare_read(self.joining_hs.is_some()) {
-
             Err("message buffer full") => {
                 self.calculate_discard_range();
-                buffer.discard(self.discard_range.start, self.discard_range.end - self.discard_range.start);
+                buffer.discard(
+                    self.discard_range.start,
+                    self.discard_range.end - self.discard_range.start,
+                );
             }
             Err(err) => return Err(io::Error::new(io::ErrorKind::InvalidData, err)),
             _ => {}
@@ -924,7 +969,6 @@ impl DeframerVecBuffer {
 
     /// Discard `taken` bytes from the start of our buffer.
     pub fn discard(&mut self, start: usize, taken: usize) {
-
         #[allow(clippy::comparison_chain)]
         if taken < self.used {
             /* Before:
@@ -943,11 +987,15 @@ impl DeframerVecBuffer {
             if (start + taken) == self.used {
                 self.used = start;
             } else {
-                Self::copy_within(self.buf.as_mut_slice(), start + taken, start, (start + taken..self.used).len());
+                Self::copy_within(
+                    self.buf.as_mut_slice(),
+                    start + taken,
+                    start,
+                    (start + taken..self.used).len(),
+                );
                 // self.buf.copy_within(start + taken..self.used, start);
                 self.used -= taken;
             }
-
         } else if taken == self.used {
             self.used = 0;
         }
@@ -979,13 +1027,11 @@ impl DeframerVecBuffer {
 
     /// Resize the internal `buf` if necessary for reading more bytes.
     fn prepare_read(&mut self, _is_joining_hs: bool) -> Result<(), &'static str> {
-
         let allow_max = self.buf.len();
 
         if self.used >= allow_max {
             return Err("message buffer full");
         }
-
 
         Ok(())
     }
@@ -1069,7 +1115,6 @@ impl<'a> DeframerSliceBuffer<'a> {
         self.discard
     }
 
-
     pub fn get_used(&self) -> usize {
         self.used
     }
@@ -1122,7 +1167,7 @@ impl FilledDeframerBuffer for DeframerSliceBuffer<'_> {
     }
 
     fn get_imut_ref(&self) -> &[u8] {
-            &self.buf
+        &self.buf
     }
 }
 
@@ -1155,9 +1200,7 @@ trait DeframerBuffer<'a, P: AppendPayload<'a>>: FilledDeframerBuffer {
 
 trait FilledDeframerBuffer {
     fn filled_get_mut<I: SliceIndex<[u8]>>(&mut self, index: I) -> &mut I::Output {
-        self.filled_mut()
-            .get_mut(index)
-            .unwrap()
+        self.filled_mut().get_mut(index).unwrap()
     }
 
     fn filled_mut(&mut self) -> &mut [u8];
@@ -1260,7 +1303,6 @@ fn payload_size(buf: &[u8]) -> Result<Option<usize>, Error> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct Deframed<'a> {
     pub(crate) want_close_before_decrypt: bool,
@@ -1270,7 +1312,6 @@ pub struct Deframed<'a> {
 }
 
 const HANDSHAKE_HEADER_SIZE: usize = 1 + 3;
-
 
 /// TLS allows for handshake messages of up to 16MB.  We
 /// restrict that to 64KB to limit potential for denial-of-
@@ -1291,9 +1332,7 @@ impl MessageDeframerMap {
 
     pub(crate) fn get_or_create_def_vec_buff(&mut self, conn_id: u64) -> &mut DeframerVecBuffer {
         match self.deframers.entry(conn_id) {
-            hash_map::Entry::Vacant(v) => {
-                v.insert(DeframerVecBuffer::new(conn_id))
-            }
+            hash_map::Entry::Vacant(v) => v.insert(DeframerVecBuffer::new(conn_id)),
             hash_map::Entry::Occupied(v) => v.into_mut(),
         }
     }
@@ -1309,16 +1348,15 @@ impl MessageDeframerMap {
     }
 }
 
-
 #[cfg(feature = "std")]
 #[cfg(test)]
 mod tests {
     use std::prelude::v1::*;
     use std::vec;
 
+    use super::*;
     use crate::crypto::cipherx::PlainMessage;
     use crate::msgs::message::Message;
-    use super::*;
 
     #[test]
     fn check_incremental() {
@@ -1503,13 +1541,10 @@ mod tests {
         );
     }
 
-
-
     fn input_error(d: &mut BufferedDeframer) {
         let error = io::Error::from(io::ErrorKind::TimedOut);
         let mut rd = ErrorRead::new(error);
-        d.read(&mut rd)
-            .expect_err("error not propagated");
+        d.read(&mut rd).expect_err("error not propagated");
     }
 
     fn input_whole_incremental(d: &mut BufferedDeframer, bytes: &[u8]) {
@@ -1571,7 +1606,12 @@ mod tests {
             let mut binding = RecvBufMap::new();
             let err = self
                 .inner
-                .pop(record_layer, negotiated_version, &mut deframer_buffer, &mut binding)
+                .pop(
+                    record_layer,
+                    negotiated_version,
+                    &mut deframer_buffer,
+                    &mut binding,
+                )
                 .unwrap_err();
             let discard = deframer_buffer.pending_discard();
             self.buffer.discard(0, discard);
@@ -1635,7 +1675,6 @@ mod tests {
             Err(error)
         }
     }
-
 
     fn assert_len(want: usize, got: io::Result<usize>) {
         assert_eq!(Some(want), got.ok())

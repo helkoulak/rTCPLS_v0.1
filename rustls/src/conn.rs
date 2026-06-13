@@ -1,6 +1,5 @@
-
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::fmt::Debug;
 use core::mem;
 use core::ops::{Deref, DerefMut};
@@ -15,7 +14,9 @@ use crate::error::{Error, PeerMisbehaved};
 #[cfg(feature = "logging")]
 use crate::log::trace;
 
-use crate::msgs::deframer::{Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer, MessageDeframerMap};
+use crate::msgs::deframer::{
+    Deframed, DeframerSliceBuffer, DeframerVecBuffer, MessageDeframer, MessageDeframerMap,
+};
 use crate::msgs::handshake::Random;
 use crate::msgs::message::{InboundPlainMessage, Message, MessagePayload, OutboundPlainMessage};
 use crate::suites::{ExtractedSecrets, PartiallyExtractedSecrets};
@@ -32,12 +33,12 @@ mod connection {
     use crate::common_state::{CommonState, IoState};
     use crate::error::Error;
     use crate::msgs::message::OutboundChunks;
-    use crate::suites::ExtractedSecrets;
-    use crate::vecbuf::ChunkVecBuffer;
-    use crate::ConnectionCommon;
     use crate::recvbuf::RecvBufMap;
+    use crate::suites::ExtractedSecrets;
     use crate::tcpls::stream::SimpleIdHashMap;
     use crate::tcpls::TcpConnection;
+    use crate::vecbuf::ChunkVecBuffer;
+    use crate::ConnectionCommon;
 
     /// A client or server connection.
     #[derive(Debug)]
@@ -63,11 +64,21 @@ mod connection {
         ///
         /// See [`ConnectionCommon::write_tls()`] for more information.
         pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<usize, io::Error> {
-            self.record_layer.streams.get_or_create(id).unwrap().send.write_to(wr)
+            self.record_layer
+                .streams
+                .get_or_create(id)
+                .unwrap()
+                .send
+                .write_to(wr)
         }
 
         pub fn write_chunk(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<(), io::Error> {
-            self.record_layer.streams.get_or_create(id).unwrap().send.write_chunk_to(wr)
+            self.record_layer
+                .streams
+                .get_or_create(id)
+                .unwrap()
+                .send
+                .write_chunk_to(wr)
         }
 
         /// Returns an object that allows reading plaintext.
@@ -89,7 +100,11 @@ mod connection {
         /// Processes any new packets read by a previous call to [`Connection::read_tls`].
         ///
         /// See [`ConnectionCommon::process_new_packets()`] for more information.
-        pub fn process_new_packets(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
+        pub fn process_new_packets(
+            &mut self,
+            tcp_conns: &mut SimpleIdHashMap<TcpConnection>,
+            app_buffers: &mut RecvBufMap,
+        ) -> Result<IoState, Error> {
             match self {
                 Self::Client(conn) => conn.process_new_packets(tcp_conns, app_buffers),
                 Self::Server(conn) => conn.process_new_packets(tcp_conns, app_buffers),
@@ -128,7 +143,11 @@ mod connection {
         /// This function uses `io` to complete any outstanding IO for this connection.
         ///
         /// See [`ConnectionCommon::complete_io()`] for more information.
-        pub fn complete_io<T>(&mut self, io: &mut T, recv_map: Option<&mut RecvBufMap>) -> Result<(usize, usize), io::Error>
+        pub fn complete_io<T>(
+            &mut self,
+            io: &mut T,
+            recv_map: Option<&mut RecvBufMap>,
+        ) -> Result<(usize, usize), io::Error>
         where
             Self: Sized,
             T: io::Read + io::Write,
@@ -255,8 +274,7 @@ mod connection {
         #[cfg(read_buf)]
         fn read_buf(&mut self, mut cursor: core::io::BorrowedCursor<'_>) -> io::Result<()> {
             let before = cursor.written();
-            self.received_plaintext
-                .read_buf(cursor.reborrow())?;
+            self.received_plaintext.read_buf(cursor.reborrow())?;
             let len = cursor.written() - before;
 
             if len == 0 && cursor.capacity() > 0 {
@@ -337,10 +355,11 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     impl<T> PlaintextSink for ConnectionCommon<T> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             let stream_id = self.write_to;
-            Ok(self
-                .core
-                .common_state
-                .buffer_plaintext(buf.into(), &mut self.sendable_plaintext, stream_id))
+            Ok(self.core.common_state.buffer_plaintext(
+                buf.into(),
+                &mut self.sendable_plaintext,
+                stream_id,
+            ))
         }
 
         fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
@@ -350,18 +369,16 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
                 0 => return Ok(0),
                 1 => OutboundChunks::Single(bufs[0].deref()),
                 _ => {
-                    payload_owner = bufs
-                        .iter()
-                        .map(|io_slice| io_slice.deref())
-                        .collect();
+                    payload_owner = bufs.iter().map(|io_slice| io_slice.deref()).collect();
 
                     OutboundChunks::new(&payload_owner)
                 }
             };
-            Ok(self
-                .core
-                .common_state
-                .buffer_plaintext(payload, &mut self.sendable_plaintext, stream_id))
+            Ok(self.core.common_state.buffer_plaintext(
+                payload,
+                &mut self.sendable_plaintext,
+                stream_id,
+            ))
         }
 
         fn flush(&mut self) -> io::Result<()> {
@@ -370,16 +387,16 @@ https://docs.rs/rustls/latest/rustls/manual/_03_howto/index.html#unexpected-eof"
     }
 }
 
+use crate::crypto::cipherx::OutboundChunks;
+use crate::ContentType::ApplicationData;
 #[cfg(feature = "std")]
 pub use connection::{Connection, Reader, Writer};
-use crate::ContentType::ApplicationData;
-use crate::crypto::cipherx::OutboundChunks;
 
-use crate::ProtocolVersion::TLSv1_2;
 use crate::recvbuf::{ReaderAppBufs, RecvBufMap};
 use crate::tcpls::frame::{Frame, PROBE_FRAME_SIZE, STREAM_FRAME_HEADER_SIZE};
 use crate::tcpls::stream::{SimpleIdHashMap, DEFAULT_STREAM_ID};
 use crate::tcpls::TcpConnection;
+use crate::ProtocolVersion::TLSv1_2;
 
 #[derive(Debug)]
 pub(crate) struct ConnectionRandoms {
@@ -400,7 +417,6 @@ impl ConnectionRandoms {
         }
     }
 }
-
 
 /// Interface shared by client and server connections.
 pub struct ConnectionCommon<Data> {
@@ -429,10 +445,18 @@ impl<Data> ConnectionCommon<Data> {
     /// [`read_tls`]: Connection::read_tls
     /// [`process_new_packets`]: Connection::process_new_packets
     #[inline]
-    pub fn process_new_packets(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) -> Result<IoState, Error> {
-        self.core
-            .process_new_packets(tcp_conns, self.deframers_map.get_or_create_def_vec_buff(self.conn_in_use as u64),
-                                 &mut self.sendable_plaintext, app_buffers)
+    pub fn process_new_packets(
+        &mut self,
+        tcp_conns: &mut SimpleIdHashMap<TcpConnection>,
+        app_buffers: &mut RecvBufMap,
+    ) -> Result<IoState, Error> {
+        self.core.process_new_packets(
+            tcp_conns,
+            self.deframers_map
+                .get_or_create_def_vec_buff(self.conn_in_use as u64),
+            &mut self.sendable_plaintext,
+            app_buffers,
+        )
     }
     /// Get ids of deframer buffers that have data received from socket
     #[inline]
@@ -464,8 +488,7 @@ impl<Data> ConnectionCommon<Data> {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<T, Error> {
-        self.core
-            .export_keying_material(output, label, context)
+        self.core.export_keying_material(output, label, context)
     }
 
     /// Extract secrets, so they can be used when configuring kTLS, for example.
@@ -529,12 +552,23 @@ impl<Data> ConnectionCommon<Data> {
     /// [`Connection::write_tls`]: crate::Connection::write_tls
     /// [`Connection::process_new_packets`]: crate::Connection::process_new_packets
     pub fn set_buffer_limit(&mut self, limit: Option<usize>, id: u32) {
-        self.sendable_plaintext.get_or_create_plain_buf(id).unwrap().send_plain_buf.set_limit(limit);
-        self.record_layer.streams.get_or_create(id).unwrap().send.set_limit(limit);
+        self.sendable_plaintext
+            .get_or_create_plain_buf(id)
+            .unwrap()
+            .send_plain_buf
+            .set_limit(limit);
+        self.record_layer
+            .streams
+            .get_or_create(id)
+            .unwrap()
+            .send
+            .set_limit(limit);
     }
 
     pub fn set_deframer_cap(&mut self, id: u64, cap: usize) {
-        self.deframers_map.get_or_create_def_vec_buff(id).set_deframer_cap(cap);
+        self.deframers_map
+            .get_or_create_def_vec_buff(id)
+            .set_deframer_cap(cap);
     }
 }
 
@@ -549,8 +583,10 @@ impl<Data> ConnectionCommon<Data> {
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             peer_cleanly_closed: common.has_received_close_notify
-
-                && !self.deframers_map.get_or_create_def_vec_buff(active_conn as u64).has_pending(),
+                && !self
+                    .deframers_map
+                    .get_or_create_def_vec_buff(active_conn as u64)
+                    .has_pending(),
             has_seen_eof: common.has_seen_eof,
         }
     }
@@ -562,7 +598,10 @@ impl<Data> ConnectionCommon<Data> {
             // Are we done? i.e., have we processed all received messages, and received a
             // close_notify to indicate that no new messages will arrive?
             peer_cleanly_closed: common.has_received_close_notify
-                && !self.deframers_map.get_or_create_def_vec_buff(active_conn as u64).has_pending(),
+                && !self
+                    .deframers_map
+                    .get_or_create_def_vec_buff(active_conn as u64)
+                    .has_pending(),
             has_seen_eof: common.has_seen_eof,
         }
     }
@@ -602,12 +641,15 @@ impl<Data> ConnectionCommon<Data> {
     /// [`read_tls`]: ConnectionCommon::read_tls
     /// [`process_new_packets`]: ConnectionCommon::process_new_packets
 
-    pub fn complete_io<T>(&mut self, io: &mut T, recv_map: Option<&mut RecvBufMap>) -> Result<(usize, usize), io::Error>
-        where
-            Self: Sized,
-            T: io::Read + io::Write,
+    pub fn complete_io<T>(
+        &mut self,
+        io: &mut T,
+        recv_map: Option<&mut RecvBufMap>,
+    ) -> Result<(usize, usize), io::Error>
+    where
+        Self: Sized,
+        T: io::Read + io::Write,
     {
-
         let empty_map = &mut RecvBufMap::new();
         let recv = recv_map.unwrap_or(empty_map);
         let mut tcp_conns = SimpleIdHashMap::default();
@@ -618,7 +660,6 @@ impl<Data> ConnectionCommon<Data> {
         let mut rdlen = 0;
 
         loop {
-
             let until_handshaked = self.is_handshaking();
 
             while self.wants_write(None) {
@@ -629,7 +670,6 @@ impl<Data> ConnectionCommon<Data> {
             if !until_handshaked && wrlen > 0 {
                 return Ok((rdlen, wrlen));
             }
-
 
             while !eof && self.wants_read(recv) {
                 let read_size = match self.read_tls(io) {
@@ -649,7 +689,6 @@ impl<Data> ConnectionCommon<Data> {
                 }
             }
 
-
             match self.process_new_packets(&mut tcp_conns, recv) {
                 Ok(_) => {}
                 Err(e) => {
@@ -663,7 +702,6 @@ impl<Data> ConnectionCommon<Data> {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, e));
                 }
             };
-
 
             // if we're doing IO until handshaked, and we believe we've finished handshaking,
             // but process_new_packets() has queued TLS data to send, loop around again to write
@@ -686,14 +724,22 @@ impl<Data> ConnectionCommon<Data> {
     /// This is a shortcut to the `process_new_packets()` -> `process_msg()` ->
     /// `process_handshake_messages()` path, specialized for the first handshake message.
 
-    pub(crate) fn first_handshake_message(&mut self, recv_buf: &mut RecvBufMap) -> Result<Option<Message<'static>>, Error> {
-        let mut deframer_buffer = self.deframers_map.get_or_create_def_vec_buff(DEFAULT_STREAM_ID as u64).borrow();
+    pub(crate) fn first_handshake_message(
+        &mut self,
+        recv_buf: &mut RecvBufMap,
+    ) -> Result<Option<Message<'static>>, Error> {
+        let mut deframer_buffer = self
+            .deframers_map
+            .get_or_create_def_vec_buff(DEFAULT_STREAM_ID as u64)
+            .borrow();
         let res = self
             .core
             .deframe(None, &mut deframer_buffer, Some(recv_buf))
             .map(|opt| opt.map(|pm| Message::try_from(pm).map(|m| m.into_owned())));
         let discard = deframer_buffer.pending_discard();
-        self.deframers_map.get_or_create_def_vec_buff(DEFAULT_STREAM_ID as u64).discard(0, discard);
+        self.deframers_map
+            .get_or_create_def_vec_buff(DEFAULT_STREAM_ID as u64)
+            .discard(0, discard);
 
         match res? {
             Some(Ok(msg)) => Ok(Some(msg)),
@@ -705,7 +751,6 @@ impl<Data> ConnectionCommon<Data> {
     pub(crate) fn replace_state(&mut self, new: Box<dyn State<Data>>) {
         self.core.state = Ok(new);
     }
-
 
     /// Read TLS content from `rd` into the internal buffer.
     ///
@@ -736,10 +781,11 @@ impl<Data> ConnectionCommon<Data> {
             ));
         }
 
-        let res = self
-            .core
-            .message_deframer
-            .read(rd, self.deframers_map.get_or_create_def_vec_buff(active_conn as u64));
+        let res = self.core.message_deframer.read(
+            rd,
+            self.deframers_map
+                .get_or_create_def_vec_buff(active_conn as u64),
+        );
         if let Ok(0) = res {
             self.has_seen_eof = true;
         }
@@ -755,7 +801,12 @@ impl<Data> ConnectionCommon<Data> {
     /// [`CommonState::wants_write`] function can be used to check if the output buffer is empty.
 
     pub fn write_tls(&mut self, wr: &mut dyn io::Write, id: u32) -> Result<usize, io::Error> {
-        self.record_layer.streams.get_or_create(id).unwrap().send.write_to(wr)
+        self.record_layer
+            .streams
+            .get_or_create(id)
+            .unwrap()
+            .send
+            .write_to(wr)
     }
 }
 
@@ -786,7 +837,6 @@ impl<T> DerefMut for ConnectionCommon<T> {
 
 impl<Data> From<ConnectionCore<Data>> for ConnectionCommon<Data> {
     fn from(core: ConnectionCore<Data>) -> Self {
-
         Self {
             core,
             deframers_map: MessageDeframerMap::new(),
@@ -854,9 +904,11 @@ impl<Data> ConnectionCore<Data> {
                 Err(e) => {
                     self.state = Err(e.clone());
                     self.message_deframer.calculate_discard_range();
-                    deframer_buffer
-                        .discard(self.message_deframer.discard_range.start,
-                                 self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
+                    deframer_buffer.discard(
+                        self.message_deframer.discard_range.start,
+                        self.message_deframer.discard_range.end
+                            - self.message_deframer.discard_range.start,
+                    );
                     self.message_deframer.rearrange_record_info();
                     return Err(e);
                 }
@@ -866,11 +918,11 @@ impl<Data> ConnectionCore<Data> {
                 Some(msg) => {
                     self.common_state.received_data_processed |= true;
                     msg
-                },
+                }
                 None => {
                     self.common_state.received_data_processed |= false;
-                    break
-                },
+                    break;
+                }
             };
 
             if msg.typ == ContentType::ApplicationData {
@@ -884,9 +936,11 @@ impl<Data> ConnectionCore<Data> {
                     self.state = Err(e.clone());
                     self.message_deframer.calculate_discard_range();
                     if !self.message_deframer.discard_range_is_empty() {
-                        deframer_buffer
-                            .discard(self.message_deframer.discard_range.start,
-                                     self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
+                        deframer_buffer.discard(
+                            self.message_deframer.discard_range.start,
+                            self.message_deframer.discard_range.end
+                                - self.message_deframer.discard_range.start,
+                        );
                         self.message_deframer.rearrange_record_info();
                     }
 
@@ -897,9 +951,10 @@ impl<Data> ConnectionCore<Data> {
 
         self.message_deframer.calculate_discard_range();
         if !self.message_deframer.discard_range_is_empty() {
-            deframer_buffer
-                .discard(self.message_deframer.discard_range.start,
-                         self.message_deframer.discard_range.end - self.message_deframer.discard_range.start);
+            deframer_buffer.discard(
+                self.message_deframer.discard_range.start,
+                self.message_deframer.discard_range.end - self.message_deframer.discard_range.start,
+            );
             self.message_deframer.rearrange_record_info();
         }
 
@@ -907,34 +962,43 @@ impl<Data> ConnectionCore<Data> {
         Ok(self.common_state.current_io_state(Some(app_buffers)))
     }
 
-
     ///TODO: Add process functionality to other TCPLS control frames
-    fn process_tcpls_payload(&mut self, tcp_conns: &mut SimpleIdHashMap<TcpConnection>, app_buffers: &mut RecvBufMap) {
+    fn process_tcpls_payload(
+        &mut self,
+        tcp_conns: &mut SimpleIdHashMap<TcpConnection>,
+        app_buffers: &mut RecvBufMap,
+    ) {
         let conn_id = self.message_deframer.current_conn_id;
-        let app_buffer = app_buffers.get_mut(self.common_state.record_layer.get_stream_id()).unwrap();
+        let app_buffer = app_buffers
+            .get_mut(self.common_state.record_layer.get_stream_id())
+            .unwrap();
         let offset = app_buffer.get_offset();
 
         let mut b = octets::Octets::with_slice_at_offset(app_buffer.get_ref(), offset as usize);
         loop {
             let decoded_frame = Frame::parse(&mut b).unwrap();
             match decoded_frame {
-                Frame::Padding => {},
-                Frame::Ping => {},
-                Frame::Stream {
-                    length: _,
-                    fin: _,
-                } => {
+                Frame::Padding => {}
+                Frame::Ping => {}
+                Frame::Stream { length: _, fin: _ } => {
                     app_buffer.offset -= STREAM_FRAME_HEADER_SIZE as u64;
                     app_buffer.total_decrypted = 0;
                     if self.common_state.enable_ack {
-                        match self.common_state.send_ack(app_buffer.highest_record_sn_received as u64, app_buffer.id) {
-                            Some(enc_ack) =>
-                                tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_ack.encode()).unwrap(),
-                            None => {0},
+                        match self
+                            .common_state
+                            .send_ack(app_buffer.highest_record_sn_received as u64, app_buffer.id)
+                        {
+                            Some(enc_ack) => tcp_conns
+                                .get_mut(&conn_id)
+                                .unwrap()
+                                .socket
+                                .write(&enc_ack.encode())
+                                .unwrap(),
+                            None => 0,
                         };
                     }
-                    break
-                },
+                    break;
+                }
                 Frame::ACK {
                     highest_record_sn_received,
                     stream_id,
@@ -944,52 +1008,67 @@ impl<Data> ConnectionCore<Data> {
                         .streams
                         .get_mut(stream_id as u32)
                         .unwrap()
-                        .send.remove_ack(highest_record_sn_received as u32);
-                    break
-                },
-                Frame::NewToken { token: _, sequence: _ } => {},
-                Frame::ConnectionReset { connection_id: _ } => {},
+                        .send
+                        .remove_ack(highest_record_sn_received as u32);
+                    break;
+                }
+                Frame::NewToken {
+                    token: _,
+                    sequence: _,
+                } => {}
+                Frame::ConnectionReset { connection_id: _ } => {}
                 Frame::NewAddress {
                     port: _,
                     address: _,
                     address_version: _,
                     address_id: _,
-                } => {},
-                Frame::RemoveAddress { address_id: _ } => {},
+                } => {}
+                Frame::RemoveAddress { address_id: _ } => {}
                 Frame::StreamChange {
                     next_record_stream_id: _,
                     next_offset: _,
-                } => {},
-                Frame::Probe {
-                    random,
-                } => {
+                } => {}
+                Frame::Probe { random } => {
                     if tcp_conns.get(&conn_id).unwrap().probe_initiated {
                         if tcp_conns.get(&conn_id).unwrap().probe_rand.unwrap() == random {
-                            self.common_state.conns_rtts.insert(conn_id, tcp_conns
-                                .get(&conn_id)
-                                .unwrap()
-                                .probe_sent_at
-                                .unwrap()
-                                .elapsed());
+                            self.common_state.conns_rtts.insert(
+                                conn_id,
+                                tcp_conns
+                                    .get(&conn_id)
+                                    .unwrap()
+                                    .probe_sent_at
+                                    .unwrap()
+                                    .elapsed(),
+                            );
                             tcp_conns.get_mut(&conn_id).unwrap().probe_initiated = false;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_sent_at = None;
                             tcp_conns.get_mut(&conn_id).unwrap().probe_rand = None;
-                            println!("Probed latency for conn {:?} is {:?}", conn_id, self.common_state.conns_rtts.get(&conn_id))
+                            println!(
+                                "Probed latency for conn {:?} is {:?}",
+                                conn_id,
+                                self.common_state.conns_rtts.get(&conn_id)
+                            )
                         }
                     } else {
                         app_buffer.offset -= PROBE_FRAME_SIZE as u64;
                         match self.common_state.send_single_probe(OutboundPlainMessage {
                             typ: ApplicationData,
                             version: TLSv1_2,
-                            payload: OutboundChunks::Single(&app_buffer.get_ref()[app_buffer.offset as usize..=(app_buffer.offset+4) as usize])
+                            payload: OutboundChunks::Single(
+                                &app_buffer.get_ref()
+                                    [app_buffer.offset as usize..=(app_buffer.offset + 4) as usize],
+                            ),
                         }) {
-                            Some(enc_probe_reply) =>
-                                tcp_conns.get_mut(&conn_id).unwrap().socket.write(&enc_probe_reply.encode()).unwrap(),
-                            None => {0},
+                            Some(enc_probe_reply) => tcp_conns
+                                .get_mut(&conn_id)
+                                .unwrap()
+                                .socket
+                                .write(&enc_probe_reply.encode())
+                                .unwrap(),
+                            None => 0,
                         };
-
                     }
-                    break
+                    break;
                 }
             }
         }
@@ -1006,19 +1085,17 @@ impl<Data> ConnectionCore<Data> {
             deframer_buffer,
         ) {
             Ok(Some(Deframed {
-                        want_close_before_decrypt,
-                        aligned,
-                        trial_decryption_finished,
-                        message,
-                    })) => {
+                want_close_before_decrypt,
+                aligned,
+                trial_decryption_finished,
+                message,
+            })) => {
                 if want_close_before_decrypt {
                     self.common_state.send_close_notify();
                 }
 
                 if trial_decryption_finished {
-                    self.common_state
-                        .record_layer
-                        .finish_trial_decryption();
+                    self.common_state.record_layer.finish_trial_decryption();
                 }
 
                 self.common_state.aligned_handshake = aligned;
@@ -1076,9 +1153,7 @@ impl<Data> ConnectionCore<Data> {
                 }
 
                 if trial_decryption_finished {
-                    self.common_state
-                        .record_layer
-                        .finish_trial_decryption();
+                    self.common_state.record_layer.finish_trial_decryption();
                 }
 
                 self.common_state.aligned_handshake = aligned;
@@ -1086,11 +1161,9 @@ impl<Data> ConnectionCore<Data> {
             }
             Ok(None) => Ok(None),
             Err(err @ Error::InvalidMessage(_)) => {
-
                 if self.common_state.is_quic() {
                     self.common_state.quic.alert = Some(AlertDescription::DecodeError);
                 }
-
 
                 Err(if !self.common_state.is_quic() {
                     self.common_state
@@ -1122,12 +1195,9 @@ impl<Data> ConnectionCore<Data> {
     ) -> Result<Box<dyn State<Data>>, Error> {
         // Drop CCS messages during handshake in TLS1.3
         if msg.typ == ContentType::ChangeCipherSpec
-            && !self
-                .common_state
-                .may_receive_application_data
+            && !self.common_state.may_receive_application_data
             && self.common_state.is_tls13()
         {
-
             if !msg.is_valid_ccs()
                 || self.common_state.received_middlebox_ccs > TLS13_MAX_DROPPED_CCS
             {
@@ -1150,7 +1220,6 @@ impl<Data> ConnectionCore<Data> {
         let msg = match Message::try_from(msg) {
             Ok(msg) => msg,
             Err(err) => {
-
                 return Err(self
                     .common_state
                     .send_fatal_alert(AlertDescription::DecodeError, err));
@@ -1164,7 +1233,6 @@ impl<Data> ConnectionCore<Data> {
         }
 
         self.common_state
-
             .process_main_protocol(msg, state, &mut self.data, sendable_plaintext)
     }
 
@@ -1174,7 +1242,6 @@ impl<Data> ConnectionCore<Data> {
         label: &[u8],
         context: Option<&[u8]>,
     ) -> Result<T, Error> {
-
         if output.as_mut().is_empty() {
             return Err(Error::General(
                 "export_keying_material with zero-length output".into(),
@@ -1189,7 +1256,7 @@ impl<Data> ConnectionCore<Data> {
         }
     }
 
-   /* pub(crate) fn bytes_to_system_time(bytes: &[u8]) -> SystemTime {
+    /* pub(crate) fn bytes_to_system_time(bytes: &[u8]) -> SystemTime {
         // Deserialize seconds and nanoseconds
         let secs = u64::from_be_bytes(bytes[0..8].try_into().unwrap());
         let nanos = u32::from_be_bytes(bytes[8..12].try_into().unwrap());

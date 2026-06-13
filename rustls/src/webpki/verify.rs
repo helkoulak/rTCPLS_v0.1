@@ -82,10 +82,7 @@ pub struct WebPkiSupportedAlgorithms {
 impl WebPkiSupportedAlgorithms {
     /// Return all the `scheme` items in `mapping`, maintaining order.
     pub fn supported_schemes(&self) -> Vec<SignatureScheme> {
-        self.mapping
-            .iter()
-            .map(|item| item.0)
-            .collect()
+        self.mapping.iter().map(|item| item.0).collect()
     }
 
     /// Return the first item in `mapping` that matches `scheme`.

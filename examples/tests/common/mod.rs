@@ -237,8 +237,7 @@ impl TlsClient {
     }
 
     pub fn expect(&mut self, expect: &str) -> &mut Self {
-        self.expect_output
-            .push(expect.to_string());
+        self.expect_output.push(expect.to_string());
         self
     }
 
@@ -257,6 +256,4 @@ impl TlsClient {
         self.expect_fails = true;
         self
     }
-
-
 }

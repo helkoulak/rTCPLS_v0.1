@@ -337,44 +337,26 @@ pub mod async_io {
             let (mut client_writer, mut server_reader) = async_pipe(capacity);
 
             let client = async {
-                client_writer
-                    .write_all(b"hello")
-                    .await
-                    .unwrap();
+                client_writer.write_all(b"hello").await.unwrap();
 
                 let mut buf = [0; 2];
-                client_reader
-                    .read_exact(&mut buf)
-                    .await
-                    .unwrap();
+                client_reader.read_exact(&mut buf).await.unwrap();
                 assert_eq!(&buf, b"42");
 
-                client_writer
-                    .write_all(b"bye bye")
-                    .await
-                    .unwrap();
+                client_writer.write_all(b"bye bye").await.unwrap();
 
                 Ok(())
             };
 
             let server = async {
                 let mut buf = [0; 5];
-                server_reader
-                    .read_exact(&mut buf)
-                    .await
-                    .unwrap();
+                server_reader.read_exact(&mut buf).await.unwrap();
                 assert_eq!(&buf, b"hello");
 
-                server_writer
-                    .write_all(b"42")
-                    .await
-                    .unwrap();
+                server_writer.write_all(b"42").await.unwrap();
 
                 let mut buf = [0; 7];
-                server_reader
-                    .read_exact(&mut buf)
-                    .await
-                    .unwrap();
+                server_reader.read_exact(&mut buf).await.unwrap();
                 assert_eq!(&buf, b"bye bye");
 
                 Ok(())
@@ -441,9 +423,7 @@ pub mod transport {
         let mut length_buf = Vec::with_capacity(4);
         length_buf.write_u32::<BigEndian>(written as u32)?;
         writer.write_all(&length_buf).await?;
-        writer
-            .write_all(&buf[..written])
-            .await?;
+        writer.write_all(&buf[..written]).await?;
         writer.flush().await?;
 
         Ok(())
@@ -460,9 +440,7 @@ pub mod transport {
     ) -> anyhow::Result<usize> {
         // Read the length of the message to an intermediate buffer and parse it
         let mut length_buf = [0; 4];
-        reader
-            .read_exact(&mut length_buf)
-            .await?;
+        reader.read_exact(&mut length_buf).await?;
         let length = Cursor::new(length_buf).read_u32::<BigEndian>()? as usize;
 
         // Read the rest of the message to an intermediate buffer
@@ -473,9 +451,7 @@ pub mod transport {
             );
         }
 
-        reader
-            .read_exact(&mut buf[..length])
-            .await?;
+        reader.read_exact(&mut buf[..length]).await?;
 
         // Feed the data to rustls
         let in_memory_reader = &mut &buf[..length];
@@ -501,9 +477,7 @@ pub mod transport {
             // Read until the whole chunk is received
             let mut chunk_buf_end = 0;
             while chunk_buf_end != chunk_buf.len() {
-                let read = reader
-                    .read(&mut chunk_buf[chunk_buf_end..])
-                    .await?;
+                let read = reader.read(&mut chunk_buf[chunk_buf_end..]).await?;
                 if read == 0 {
                     // Stream closed
                     break;
@@ -528,9 +502,7 @@ pub mod transport {
                 let available_plaintext_bytes = state.plaintext_bytes_to_read();
                 let mut plaintext_bytes_read = 0;
                 while plaintext_bytes_read < available_plaintext_bytes {
-                    plaintext_bytes_read += client
-                        .reader()
-                        .read(&mut plaintext_buf)?;
+                    plaintext_bytes_read += client.reader().read(&mut plaintext_buf)?;
                 }
 
                 total_plaintext_bytes_read += plaintext_bytes_read;
@@ -556,9 +528,7 @@ pub mod transport {
             // Empty the server's buffer, so we can re-fill it in the next iteration
             while server.wants_write(None) {
                 let written = server.write_tls(&mut send_buf.as_mut())?;
-                writer
-                    .write_all(&send_buf[..written])
-                    .await?;
+                writer.write_all(&send_buf[..written]).await?;
                 writer.flush().await?;
             }
         }
